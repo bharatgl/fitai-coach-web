@@ -5,7 +5,9 @@ import { AiProviderError } from "./provider-error.js";
 const unsupportedSchemaKeys = new Set([
   "$schema",
   "maxLength",
+  "maxItems",
   "minLength",
+  "minItems",
   "pattern",
 ]);
 

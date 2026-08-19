@@ -16,7 +16,10 @@ test("converts Zod schemas to Gemini-supported JSON schema", () => {
   });
 
   const jsonSchema = JSON.stringify(toGeminiJsonSchema(schema));
-  assert.doesNotMatch(jsonSchema, /\$schema|minLength|maxLength/);
+  assert.doesNotMatch(
+    jsonSchema,
+    /\$schema|minLength|maxLength|minItems|maxItems/,
+  );
   assert.match(jsonSchema, /"minimum":1/);
   assert.match(jsonSchema, /"maximum":6/);
   assert.match(jsonSchema, /"type":"null"/);
