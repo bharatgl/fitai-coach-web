@@ -1,5 +1,6 @@
 import helmet from "@fastify/helmet";
 import rateLimit from "@fastify/rate-limit";
+import { AiProviderError } from "@fitai/ai";
 import Fastify from "fastify";
 import { ZodError } from "zod";
 import { getConfig } from "./config.js";
@@ -7,6 +8,7 @@ import { ensureIndexes, getDatabase } from "./db.js";
 import { coachRoutes } from "./routes/coach.js";
 import { dashboardRoutes } from "./routes/dashboard.js";
 import { profileRoutes } from "./routes/profile.js";
+import { planRoutes } from "./routes/plans.js";
 
 export async function buildApp() {
   const config = getConfig();
@@ -27,6 +29,7 @@ export async function buildApp() {
   });
 
   await app.register(profileRoutes);
+  await app.register(planRoutes);
   await app.register(dashboardRoutes);
   await app.register(coachRoutes);
 
@@ -39,6 +42,10 @@ export async function buildApp() {
           message: issue.message,
         })),
       });
+    }
+
+    if (error instanceof AiProviderError) {
+      return reply.code(error.statusCode).send({ error: error.message });
     }
 
     const statusCode =

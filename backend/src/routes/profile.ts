@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { authenticate } from "../auth.js";
 import { getDatabase } from "../db.js";
+import { serializeProfile } from "../domain/profiles.js";
 import { syncAuthenticatedUser } from "../users.js";
 
 const profileInput = z.object({
@@ -22,7 +23,7 @@ export async function profileRoutes(app: FastifyInstance) {
       .collection("profiles")
       .findOne({ userId: user.id }, { projection: { _id: 0 } });
 
-    return { profile };
+    return { profile: profile ? serializeProfile(profile) : null };
   });
 
   app.put("/v1/profile", async (request, reply) => {
@@ -53,6 +54,8 @@ export async function profileRoutes(app: FastifyInstance) {
     const profile = await database
       .collection("profiles")
       .findOne({ userId: user.id }, { projection: { _id: 0 } });
-    return reply.code(200).send({ profile });
+    return reply.code(200).send({
+      profile: profile ? serializeProfile(profile) : null,
+    });
   });
 }

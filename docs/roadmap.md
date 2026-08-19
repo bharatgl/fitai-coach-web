@@ -35,15 +35,18 @@ configured before this milestone is live.
 - Deterministic urgent-symptom and pain checks run before model calls.
 - Requests use a stable pseudonymous safety identifier and disable response storage.
 
-## 5. Adaptive plan engine — next
+## 5. Adaptive plan engine — implemented in code
 
-- Curate and version the exercise library.
-- Generate a plan from goal, level, equipment, schedule, and movement notes.
-- Validate generated plans against deterministic exercise and volume rules.
-- Persist plan versions and make every adaptation explainable and reversible.
-- Add readiness check-ins that can revise the next session, not rewrite history.
+- Curated equipment- and experience-aware exercise catalog.
+- Four-week plan generation from goal, level, equipment, schedule, and movement notes.
+- Structured model output plus deterministic exercise, duration, duplication, and volume validation.
+- Transactional plan versioning: the previous plan is archived only when the new plan and all workouts persist successfully.
+- Duplicate-generation lock, rate limit, provider error handling, and an isolated live E2E test that cleans up its Atlas records.
 
-## 6. Workout execution and history
+Readiness check-ins and automatic next-session revisions will be added after
+workout execution supplies real completion and effort data.
+
+## 6. Workout execution and history — next
 
 - Start, pause, resume, and finish scheduled workouts.
 - Persist sets, reps, load, effort, substitutions, and session reflections.

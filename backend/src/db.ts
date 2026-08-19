@@ -42,8 +42,12 @@ export async function ensureIndexes() {
     database.collection("profiles").createIndex({ userId: 1 }, { unique: true }),
     database.collection("exercises").createIndex({ slug: 1 }, { unique: true }),
     database.collection("workoutPlans").createIndex({ userId: 1, status: 1 }),
+    database.collection("workoutPlans").createIndex({ userId: 1, version: -1 }, { unique: true }),
     database.collection("plannedWorkouts").createIndex({ userId: 1, scheduledFor: 1 }),
+    database.collection("plannedWorkouts").createIndex({ planId: 1, weekNumber: 1, dayOffset: 1 }, { unique: true }),
     database.collection("workoutSessions").createIndex({ userId: 1, startedAt: -1 }),
     database.collection("coachMessages").createIndex({ userId: 1, createdAt: -1 }),
+    database.collection("planGenerationLocks").createIndex({ userId: 1 }, { unique: true }),
+    database.collection("planGenerationLocks").createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
   ]);
 }

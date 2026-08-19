@@ -45,6 +45,18 @@ also avoids cross-origin browser calls and keeps preview deployments simpler.
 4. The model must return the declared structured schema.
 5. The backend persists the validated assistant message and returns it.
 
+### Adaptive plan generation
+
+1. The authenticated profile determines allowed duration, experience, goal,
+   frequency, and equipment.
+2. The backend filters a reviewed exercise catalog before sending it to the AI
+   package, so unavailable exercises are excluded from the prompt.
+3. The Responses API returns a schema-constrained four-week plan draft.
+4. Deterministic code rejects unknown exercises, duplicate days or movements,
+   excessive workout duration or volume, and maximal-effort prescriptions.
+5. A MongoDB transaction archives the previous plan and inserts the new version
+   plus all scheduled workouts atomically.
+
 ## MongoDB ownership
 
 Auth.js owns its account/session collections. The backend owns `appUsers`,
