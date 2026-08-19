@@ -1,0 +1,58 @@
+import type { FastifyInstance } from "fastify";
+import { z } from "zod";
+import { authenticate } from "../auth.js";
+import { getDatabase } from "../db.js";
+import { syncAuthenticatedUser } from "../users.js";
+
+const profileInput = z.object({
+  experienceLevel: z.enum(["beginner", "intermediate", "advanced"]),
+  primaryGoal: z.string().trim().min(2).max(120),
+  equipment: z.array(z.string().trim().min(1).max(60)).max(30),
+  trainingDaysPerWeek: z.number().int().min(1).max(7),
+  preferredSessionMinutes: z.number().int().min(10).max(180),
+  movementNotes: z.string().trim().max(2_000),
+});
+
+export async function profileRoutes(app: FastifyInstance) {
+  app.get("/v1/profile", async (request) => {
+    const user = await authenticate(request);
+    await syncAuthenticatedUser(user);
+    const database = await getDatabase();
+    const profile = await database
+      .collection("profiles")
+      .findOne({ userId: user.id }, { projection: { _id: 0 } });
+
+    return { profile };
+  });
+
+  app.put("/v1/profile", async (request, reply) => {
+    const user = await authenticate(request);
+    const input = profileInput.parse(request.body);
+    await syncAuthenticatedUser(user);
+    const database = await getDatabase();
+    const now = new Date();
+
+    await database.collection("profiles").updateOne(
+      { userId: user.id },
+      {
+        $set: {
+          ...input,
+          email: user.email,
+          displayName: user.name,
+          updatedAt: now,
+        },
+        $setOnInsert: {
+          userId: user.id,
+          createdAt: now,
+          onboardingCompletedAt: now,
+        },
+      },
+      { upsert: true },
+    );
+
+    const profile = await database
+      .collection("profiles")
+      .findOne({ userId: user.id }, { projection: { _id: 0 } });
+    return reply.code(200).send({ profile });
+  });
+}

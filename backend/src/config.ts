@@ -1,0 +1,34 @@
+import { z } from "zod";
+
+const configSchema = z.object({
+  MONGODB_URI: z.string().min(1),
+  MONGODB_DB: z.string().min(1),
+  API_JWT_SECRET: z.string().min(32),
+  OPENAI_API_KEY: z.string().min(1),
+  OPENAI_MODEL: z.string().min(1).default("gpt-5.6-luna"),
+  PORT: z.coerce.number().int().positive().default(4000),
+  NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
+});
+
+export type AppConfig = z.infer<typeof configSchema>;
+
+let cachedConfig: AppConfig | undefined;
+
+export function getConfig(): AppConfig {
+  if (cachedConfig) return cachedConfig;
+
+  const result = configSchema.safeParse(process.env);
+  if (!result.success) {
+    const missing = result.error.issues
+      .map((issue) => issue.path.join("."))
+      .join(", ");
+    throw new Error(`Backend configuration is invalid or missing: ${missing}`);
+  }
+
+  cachedConfig = result.data;
+  return cachedConfig;
+}
+
+export function resetConfigForTests() {
+  cachedConfig = undefined;
+}
