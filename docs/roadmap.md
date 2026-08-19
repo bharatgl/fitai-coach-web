@@ -30,10 +30,10 @@ configured before this milestone is live.
 
 ## 4. AI coach foundation — implemented in code
 
-- OpenAI Responses API runs only in the backend through `ai/`.
+- Gemini API runs only in the backend through `ai/`.
 - Structured output is schema-validated before persistence.
 - Deterministic urgent-symptom and pain checks run before model calls.
-- Requests use a stable pseudonymous safety identifier and disable response storage.
+- Provider credentials and prompts remain server-only; deterministic safety checks run before every eligible model call.
 
 ## 5. Adaptive plan engine — implemented in code
 

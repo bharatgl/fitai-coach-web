@@ -49,9 +49,8 @@ export async function coachRoutes(app: FastifyInstance) {
       ]);
 
       const result = await generateCoachResponse({
-        apiKey: config.OPENAI_API_KEY,
-        model: config.OPENAI_MODEL,
-        userId: user.id,
+        apiKey: config.GEMINI_API_KEY,
+        model: config.GEMINI_MODEL,
         profile,
         message: input.message,
         history: history.reverse().map((message) => ({

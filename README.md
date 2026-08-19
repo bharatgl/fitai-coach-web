@@ -10,13 +10,13 @@ workouts, or coach messages.
 ```text
 frontend/             Next.js UI, Auth.js, and authenticated backend proxy
 backend/              Fastify Node API, MongoDB application data, authorization
-ai/                   OpenAI integration, prompts, structured output, safety rules
+ai/                   Gemini integration, prompts, structured output, safety rules
 packages/contracts/   Types shared by frontend and backend
 docs/                 Architecture and delivery roadmap
 ```
 
 The `ai/` directory is an internal package, not a third public service. Vercel
-bundles it with the backend, keeping one secure server-side OpenAI integration
+bundles it with the backend, keeping one secure server-side Gemini integration
 without an extra network hop.
 
 ## Requirements
@@ -24,7 +24,7 @@ without an extra network hop.
 - Node.js `>=22.13.0`
 - A MongoDB Atlas deployment
 - Google OAuth credentials
-- An OpenAI API key
+- A Gemini API key from Google AI Studio
 
 ## Local setup
 

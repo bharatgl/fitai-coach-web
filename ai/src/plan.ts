@@ -1,9 +1,6 @@
-import { createHash } from "node:crypto";
 import type { UserProfile } from "@fitai/contracts";
-import OpenAI from "openai";
-import { zodTextFormat } from "openai/helpers/zod";
 import { z } from "zod";
-import { translateOpenAIError } from "./provider-error.js";
+import { generateGeminiStructured } from "./gemini.js";
 
 const planExerciseSchema = z.object({
   exerciseId: z.string().min(1).max(80),
@@ -43,7 +40,6 @@ export type PlanCatalogExercise = {
 export type GeneratePlanInput = {
   apiKey: string;
   model: string;
-  userId: string;
   profile: UserProfile;
   exercises: PlanCatalogExercise[];
 };
@@ -59,37 +55,20 @@ Progression must preserve technique and user control. Week 4 should consolidate 
 export async function generateAdaptivePlan(
   input: GeneratePlanInput,
 ): Promise<GeneratedPlanDraft> {
-  const client = new OpenAI({ apiKey: input.apiKey });
-  let response;
-  try {
-    response = await client.responses.parse({
-      model: input.model,
-      store: false,
-      safety_identifier: createHash("sha256").update(input.userId).digest("hex"),
-      reasoning: { effort: "low" },
-      instructions: planInstructions,
-      input: [
-        {
-          role: "user",
-          content: JSON.stringify({
-            requestedTrainingDays: input.profile.trainingDaysPerWeek,
-            preferredSessionMinutes: input.profile.preferredSessionMinutes,
-            experienceLevel: input.profile.experienceLevel,
-            primaryGoal: input.profile.primaryGoal,
-            availableEquipment: input.profile.equipment,
-            movementNotes: input.profile.movementNotes,
-            exerciseCatalog: input.exercises,
-          }),
-        },
-      ],
-      text: { format: zodTextFormat(generatedPlanSchema, "fitai_adaptive_plan") },
-    });
-  } catch (error) {
-    translateOpenAIError(error);
-  }
-
-  if (!response.output_parsed) {
-    throw new Error("The plan model did not return a valid structured plan");
-  }
-  return response.output_parsed;
+  return generateGeminiStructured({
+    apiKey: input.apiKey,
+    model: input.model,
+    schema: generatedPlanSchema,
+    systemInstruction: planInstructions,
+    maxOutputTokens: 8_000,
+    contents: JSON.stringify({
+      requestedTrainingDays: input.profile.trainingDaysPerWeek,
+      preferredSessionMinutes: input.profile.preferredSessionMinutes,
+      experienceLevel: input.profile.experienceLevel,
+      primaryGoal: input.profile.primaryGoal,
+      availableEquipment: input.profile.equipment,
+      movementNotes: input.profile.movementNotes,
+      exerciseCatalog: input.exercises,
+    }),
+  });
 }

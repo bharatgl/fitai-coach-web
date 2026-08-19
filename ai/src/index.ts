@@ -17,5 +17,8 @@ export {
 } from "./plan.js";
 export {
   AiProviderError,
-  translateOpenAIError,
 } from "./provider-error.js";
+export {
+  toGeminiJsonSchema,
+  translateGeminiError,
+} from "./gemini.js";

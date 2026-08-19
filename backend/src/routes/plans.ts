@@ -67,9 +67,8 @@ export async function planRoutes(app: FastifyInstance) {
       try {
         const config = getConfig();
         const draft = await generateAdaptivePlan({
-          apiKey: config.OPENAI_API_KEY,
-          model: config.OPENAI_MODEL,
-          userId: user.id,
+          apiKey: config.GEMINI_API_KEY,
+          model: config.GEMINI_MODEL,
           profile,
           exercises,
         });
@@ -89,7 +88,7 @@ export async function planRoutes(app: FastifyInstance) {
             catalog: exercises,
             userId: user.id,
             version: (latestPlan?.version ?? 0) + 1,
-            model: config.OPENAI_MODEL,
+            model: config.GEMINI_MODEL,
             startDate,
           });
         } catch (error) {

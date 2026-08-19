@@ -305,7 +305,7 @@ function Coach({ initialMessages }: { initialMessages: CoachMessage[] }) {
         <div>
           <p className="label">AI COACH</p>
           <h1>Your account-aware <em>fitness guide.</em></h1>
-          <p>Responses come from the configured OpenAI model and are saved to your account.</p>
+          <p>Responses come from the configured AI model and are saved to your account.</p>
         </div>
       </section>
       <section className="coach-layout single">
