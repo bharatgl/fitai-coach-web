@@ -1,18 +1,24 @@
 # GCP deployment
 
-The production topology uses two public Cloud Run services, two dedicated
-runtime service accounts, a least-privilege build account, Secret Manager,
-Cloud Build, and Artifact Registry. The
-backend's application endpoints still require the short-lived JWT issued by
-the frontend proxy; only health checks are intentionally unauthenticated.
+The GCP adapter supports two backend targets using the same container image:
+
+- Both applications on Cloud Run through `deploy.sh`.
+- Frontend on Cloud Run and backend on an Ubuntu VM through `vm/` and
+  `deploy-frontend.sh`.
+
+Both targets use dedicated runtime service accounts, a least-privilege build
+account, Secret Manager, Cloud Build, and Artifact Registry. Backend application
+endpoints still require the short-lived JWT issued by the frontend proxy; only
+health checks are intentionally unauthenticated. The selected production target
+is documented in [`vm/README.md`](vm/README.md).
 
 Defaults:
 
 - Project: supplied through `FITAI_GCP_PROJECT_ID`
 - Region: `asia-south1`
 - Artifact Registry repository: `fitai`
-- Cloud Run services: `fitai-frontend` and `fitai-backend`
-- Scale-to-zero with a maximum of three instances per service
+- Frontend Cloud Run service: `fitai-frontend`
+- Backend target: `fitai-backend-vm` by default, or `fitai-backend` on Cloud Run
 
 ## First deployment
 
