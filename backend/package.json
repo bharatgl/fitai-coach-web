@@ -4,16 +4,17 @@
   "private": true,
   "scripts": {
     "dev": "node --watch --env-file-if-exists=.env --import tsx src/index.ts",
-    "start": "node --env-file-if-exists=.env --import tsx src/index.ts",
-    "build": "tsc --noEmit",
-    "test": "node --import tsx --test tests/*.test.ts",
+    "start": "node --env-file-if-exists=.env dist/index.js",
+    "build": "tsup",
+    "test": "npm run build && node --import tsx --test tests/*.test.ts tests/*.test.mjs",
+    "test:e2e:plan": "node --env-file-if-exists=.env --import tsx tests/live-plan.e2e.ts",
     "lint": "eslint src tests",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@fitai/ai": "0.1.0",
     "@fastify/helmet": "13.1.1",
     "@fastify/rate-limit": "11.2.0",
+    "@fitai/ai": "0.1.0",
     "@fitai/contracts": "0.1.0",
     "fastify": "5.12.1",
     "jose": "6.2.9",
@@ -23,6 +24,7 @@
   "devDependencies": {
     "@types/node": "22.19.19",
     "eslint": "9.39.4",
+    "tsup": "8.5.1",
     "tsx": "4.22.1",
     "typescript": "5.9.3",
     "typescript-eslint": "8.59.3"

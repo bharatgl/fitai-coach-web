@@ -11,7 +11,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "openai": "7.5.0",
+    "@fitai/contracts": "0.1.0",
+    "@google/genai": "2.17.1",
     "zod": "4.4.3"
   },
   "devDependencies": {

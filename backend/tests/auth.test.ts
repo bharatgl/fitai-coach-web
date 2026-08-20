@@ -11,7 +11,7 @@ function configureTestEnvironment() {
   process.env.MONGODB_URI = "mongodb://127.0.0.1:27017";
   process.env.MONGODB_DB = "fitai_test";
   process.env.API_JWT_SECRET = secretValue;
-  process.env.OPENAI_API_KEY = "test-key";
+  process.env.GEMINI_API_KEY = "test-key";
   process.env.NODE_ENV = "test";
   resetConfigForTests();
 }

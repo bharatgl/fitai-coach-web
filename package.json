@@ -12,14 +12,23 @@
     "node": ">=22.13.0"
   },
   "scripts": {
-    "dev": "concurrently -n frontend,backend -c cyan,green \"npm run dev --workspace frontend\" \"npm run dev --workspace backend\"",
-    "build": "npm run build --workspaces --if-present",
-    "test": "npm run test --workspaces --if-present",
-    "lint": "npm run lint --workspaces --if-present",
-    "typecheck": "npm run typecheck --workspaces --if-present"
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "test": "turbo run test",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "infra:local": "docker compose up --build",
+    "gcp:bootstrap": "./infra/gcp/bootstrap.sh",
+    "gcp:init-app-secrets": "node ./infra/gcp/initialize-app-secrets.mjs",
+    "gcp:secrets": "node ./infra/gcp/sync-secrets.mjs",
+    "gcp:deploy": "./infra/gcp/deploy.sh",
+    "gcp:vm:provision": "./infra/gcp/vm/provision.sh",
+    "gcp:vm:deploy": "./infra/gcp/vm/deploy-backend.sh",
+    "gcp:vm:https": "./infra/gcp/vm/configure-domain.sh",
+    "gcp:frontend:deploy": "./infra/gcp/deploy-frontend.sh"
   },
   "devDependencies": {
-    "concurrently": "10.0.5"
+    "turbo": "2.10.11"
   },
   "packageManager": "npm@10.9.2"
 }

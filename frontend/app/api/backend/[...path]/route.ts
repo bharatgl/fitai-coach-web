@@ -40,7 +40,7 @@ async function proxy(request: NextRequest, context: RouteContext) {
           ? undefined
           : await request.arrayBuffer(),
       cache: "no-store",
-      signal: AbortSignal.timeout(30_000),
+      signal: AbortSignal.timeout(60_000),
     });
 
     return new Response(response.body, {

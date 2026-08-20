@@ -1,7 +1,5 @@
-import { createHash } from "node:crypto";
-import OpenAI from "openai";
-import { zodTextFormat } from "openai/helpers/zod";
 import { z } from "zod";
+import { generateGeminiStructured } from "./gemini.js";
 import { classifySafetyMessage, type CoachSafetyResult } from "./safety.js";
 
 const coachOutput = z.object({
@@ -25,7 +23,6 @@ export type CoachHistoryItem = {
 export type GenerateCoachResponseInput = {
   apiKey: string;
   model: string;
-  userId: string;
   profile: unknown;
   history: CoachHistoryItem[];
   message: string;
@@ -41,28 +38,18 @@ export async function generateCoachResponse(
   const safetyResult = classifySafetyMessage(input.message);
   if (safetyResult) return { ...safetyResult, model: null };
 
-  const client = new OpenAI({ apiKey: input.apiKey });
-  const response = await client.responses.parse({
+  const result = await generateGeminiStructured({
+    apiKey: input.apiKey,
     model: input.model,
-    store: false,
-    safety_identifier: createHash("sha256").update(input.userId).digest("hex"),
-    instructions: systemPrompt,
-    input: [
-      {
-        role: "developer",
-        content: `User profile: ${JSON.stringify(input.profile ?? {})}`,
-      },
-      ...input.history.map((item) => ({
-        role: item.role,
-        content: item.content,
-      })),
-    ],
-    text: { format: zodTextFormat(coachOutput, "fitai_coach_response") },
+    schema: coachOutput,
+    systemInstruction: systemPrompt,
+    maxOutputTokens: 2_000,
+    contents: JSON.stringify({
+      userProfile: input.profile ?? {},
+      recentConversation: input.history,
+      currentMessage: input.message,
+    }),
   });
 
-  if (!response.output_parsed) {
-    throw new Error("The coach model did not return a valid structured response");
-  }
-
-  return { ...response.output_parsed, model: input.model };
+  return { ...result, model: input.model };
 }

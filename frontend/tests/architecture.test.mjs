@@ -17,6 +17,7 @@ test("protects the app and calls the authenticated backend", async () => {
   assert.match(apiClient, /\/api\/backend/);
   assert.match(coach, /\/v1\/dashboard/);
   assert.match(coach, /\/v1\/coach\/messages/);
+  assert.match(coach, /\/v1\/plans\/generate/);
 });
 
 test("contains no obsolete Cloudflare application entry points", async () => {

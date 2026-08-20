@@ -4,16 +4,20 @@
 
 ```mermaid
 flowchart LR
-  U[Browser] -->|HTTPS| F[Next.js frontend<br/>Vercel project 1]
+  U[Browser] -->|HTTPS| N[Nginx<br/>Ubuntu VM]
+  N --> F[Next.js frontend<br/>Docker]
+  N --> B[Fastify backend<br/>Docker]
   F -->|Auth.js| G[Google OAuth]
   F -->|sessions/accounts| M[(MongoDB Atlas)]
-  F -->|server-side proxy + 5-minute JWT| B[Fastify backend<br/>Vercel project 2]
+  F -->|private Docker network<br/>5-minute JWT| B
   B -->|profiles, plans, sessions, messages| M
   B -->|in-process package call| A[AI package]
-  A -->|Responses API| O[OpenAI]
+  A -->|Gemini API| O[Google Gemini]
 ```
 
-`frontend/` and `backend/` are separate deployable roots. `ai/` and
+`frontend/` and `backend/` are separately deployable containers. Production
+runs both on an Ubuntu VM behind Nginx and connects them through a private Docker
+network, with Cloud Run retained as an alternative adapter. `ai/` and
 `packages/contracts/` are private workspace packages bundled into their
 consumers; neither exposes a public endpoint.
 
@@ -41,9 +45,21 @@ also avoids cross-origin browser calls and keeps preview deployments simpler.
 1. The backend validates and persists the user's message.
 2. The AI package checks urgent and pain language before any model call.
 3. For normal coaching, it sends the profile and a bounded recent-history window
-   to the OpenAI Responses API.
+   to the Gemini API.
 4. The model must return the declared structured schema.
 5. The backend persists the validated assistant message and returns it.
+
+### Adaptive plan generation
+
+1. The authenticated profile determines allowed duration, experience, goal,
+   frequency, and equipment.
+2. The backend filters a reviewed exercise catalog before sending it to the AI
+   package, so unavailable exercises are excluded from the prompt.
+3. The Gemini API returns a schema-constrained four-week plan draft.
+4. Deterministic code rejects unknown exercises, duplicate days or movements,
+   excessive workout duration or volume, and maximal-effort prescriptions.
+5. A MongoDB transaction archives the previous plan and inserts the new version
+   plus all scheduled workouts atomically.
 
 ## MongoDB ownership
 
@@ -59,30 +75,53 @@ Use separate Atlas database users in production:
 
 This can be tightened after Auth.js collection names are confirmed in the
 deployed environment. Backups, point-in-time recovery, and an Atlas region near
-the selected Vercel functions should be configured before storing real user data.
+the selected GCP region should be configured before storing real user data.
 
-## Vercel deployment
+## GCP deployment
 
-Create two Vercel projects from the same Git repository:
+Cloud Build creates two images from the same repository and stores them in
+Artifact Registry. The VM pulls both versioned images through its service
+identity and materializes separate root-only environment files from Secret
+Manager:
 
-| Project | Root directory | Required variables |
+| Service | Source | Required runtime configuration |
 | --- | --- | --- |
-| Frontend | `frontend` | `MONGODB_URI`, `MONGODB_DB`, `AUTH_SECRET`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`, `API_JWT_SECRET`, `BACKEND_API_URL` |
-| Backend | `backend` | `MONGODB_URI`, `MONGODB_DB`, `API_JWT_SECRET`, `OPENAI_API_KEY`, `OPENAI_MODEL` |
+| `fitai-frontend-vm` | `frontend` | `MONGODB_URI`, `MONGODB_DB`, `AUTH_SECRET`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`, `API_JWT_SECRET`, `BACKEND_API_URL`, `AUTH_TRUST_HOST` |
+| `fitai-backend-vm` | `backend` + `ai` | `MONGODB_URI`, `MONGODB_DB`, `API_JWT_SECRET`, `GEMINI_API_KEY`, `GEMINI_MODEL` |
 
-`API_JWT_SECRET` must be identical in both projects. `BACKEND_API_URL` must be
-the backend project URL or its custom API domain. Add
-`https://<frontend-domain>/api/auth/callback/google` to the Google OAuth client.
-In both Vercel projects, verify that **Include source files outside of the Root
-Directory** is enabled because the apps import workspace packages from `ai/`
-and `packages/`.
+`API_JWT_SECRET` must be identical in both services. On the VM,
+`BACKEND_API_URL` uses the backend container's private Docker hostname; browsers
+still call only the frontend's same-origin proxy. Add
+`https://forgefit.space/api/auth/callback/google` to the Google OAuth client.
+Both container ports bind only to host loopback and Nginx exposes them on ports
+80/443. SSH is restricted to IAP. The VM does not scale to zero and accrues
+compute and disk charges while running. The checked-in scripts under
+`infra/gcp/` deploy this topology without placing secret values in commands or
+source files.
+
+The current Gemini free tier is intended for development and testing. Google
+states that free-tier content may be used to improve its products, so do not
+send real health or movement notes until the project moves to paid data
+handling or another approved private provider and the user-facing privacy flow
+is complete.
+
+## Hosting portability
+
+Cloud Run and the Compute Engine VM are infrastructure adapters. The
+applications themselves use standard containers, configurable ports, HTTPS
+service URLs, and environment variables. No product module imports a GCP SDK.
+Provider-specific IAM, registry, secret names, and scaling configuration remain
+under `infra/gcp/`, while `compose.yaml` verifies the same two-container contract
+locally. Moving to another container platform therefore changes the deployment
+adapter and secret mappings rather than frontend, backend, database, or AI
+business logic.
 
 ## Recommended additions
 
 Connect these only when their milestone needs them:
 
 - **Sentry:** frontend/backend exceptions and performance traces. Redact auth
-  tokens, coach messages, health notes, and OpenAI payloads before sending data.
+  tokens, coach messages, health notes, and AI payloads before sending data.
 - **Upstash Redis:** distributed API rate limits and short-lived idempotency
   keys once traffic spans multiple serverless instances. The current in-memory
   limiter is adequate only as an initial guardrail.

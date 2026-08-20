@@ -4,6 +4,7 @@ import type {
   CoachMessage,
   CoachResponse,
   DashboardResponse,
+  GeneratePlanResponse,
   UserProfile,
 } from "@fitai/contracts";
 import Link from "next/link";
@@ -118,7 +119,9 @@ export default function FitAICoach({ user }: { user: CurrentUser }) {
         {view === "coach" && (
           <Coach initialMessages={dashboard.recentMessages} />
         )}
-        {view === "plan" && <Plan dashboard={dashboard} />}
+        {view === "plan" && (
+          <Plan dashboard={dashboard} refresh={loadDashboard} />
+        )}
         {view === "history" && <History dashboard={dashboard} />}
       </section>
     </main>
@@ -244,8 +247,8 @@ function Today({ dashboard }: { dashboard: DashboardResponse }) {
         <section className="hero">
           <div>
             <p className="label">NEXT SESSION</p>
-            <h2>{recordText(nextWorkout, "name")}</h2>
-            <p>{recordText(nextWorkout, "focus")}</p>
+            <h2>{nextWorkout.name}</h2>
+            <p>{nextWorkout.focus}</p>
           </div>
         </section>
       ) : (
@@ -302,7 +305,7 @@ function Coach({ initialMessages }: { initialMessages: CoachMessage[] }) {
         <div>
           <p className="label">AI COACH</p>
           <h1>Your account-aware <em>fitness guide.</em></h1>
-          <p>Responses come from the configured OpenAI model and are saved to your account.</p>
+          <p>Responses come from the configured AI model and are saved to your account.</p>
         </div>
       </section>
       <section className="coach-layout single">
@@ -327,20 +330,83 @@ function Coach({ initialMessages }: { initialMessages: CoachMessage[] }) {
   );
 }
 
-function Plan({ dashboard }: { dashboard: DashboardResponse }) {
+function Plan({
+  dashboard,
+  refresh,
+}: {
+  dashboard: DashboardResponse;
+  refresh: () => Promise<void>;
+}) {
+  const [generating, setGenerating] = useState(false);
+  const [error, setError] = useState("");
+
+  async function generate() {
+    setGenerating(true);
+    setError("");
+    try {
+      await apiRequest<GeneratePlanResponse>("/v1/plans/generate", {
+        method: "POST",
+        body: JSON.stringify({}),
+      });
+      await refresh();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Unable to generate your plan");
+    } finally {
+      setGenerating(false);
+    }
+  }
+
   return (
     <div className="wrap">
-      <section className="intro"><div><p className="label">TRAINING PLAN</p><h1>Your adaptive <em>schedule.</em></h1></div></section>
+      <section className="intro">
+        <div>
+          <p className="label">TRAINING PLAN</p>
+          <h1>Your adaptive <em>schedule.</em></h1>
+          <p>Built from your real goal, experience, equipment, and available time.</p>
+        </div>
+        <button className="primary" disabled={generating} onClick={() => void generate()}>
+          {generating
+            ? "Designing your plan…"
+            : dashboard.activePlan
+              ? "Generate a new version"
+              : "Generate my plan"}
+        </button>
+      </section>
+      {error && <p className="form-error plan-error">{error}</p>}
+      {dashboard.activePlan && (
+        <section className="plan-band">
+          <b>v{dashboard.activePlan.version}</b>
+          <span>
+            <strong>{dashboard.activePlan.title}</strong>
+            <small>{dashboard.activePlan.summary}</small>
+          </span>
+        </section>
+      )}
       <section className="days">
-        {dashboard.upcomingWorkouts.map((workout, index) => (
-          <article key={`${recordText(workout, "id")}-${index}`}>
-            <p>{recordText(workout, "scheduledFor")}</p>
-            <h3>{recordText(workout, "name")}</h3>
-            <small>{recordText(workout, "focus")}</small>
+        {dashboard.upcomingWorkouts.map((workout) => (
+          <article key={workout.id}>
+            <p>
+              WEEK {workout.weekNumber} · {new Intl.DateTimeFormat("en", { month: "short", day: "numeric" }).format(new Date(workout.scheduledFor))}
+            </p>
+            <h3>{workout.name}</h3>
+            <small>{workout.focus} · {workout.estimatedMinutes} min</small>
+            <ul className="exercise-list">
+              {workout.exercises.map((exercise) => (
+                <li key={exercise.exerciseId}>
+                  <span>{exercise.name}</span>
+                  <b>{exercise.sets} × {exercise.repRange}</b>
+                </li>
+              ))}
+            </ul>
           </article>
         ))}
       </section>
-      {dashboard.upcomingWorkouts.length === 0 && <section className="card empty-state"><h2>No plan generated yet.</h2></section>}
+      {dashboard.upcomingWorkouts.length === 0 && (
+        <section className="card empty-state">
+          <h2>No plan generated yet.</h2>
+          <p>Generate a four-week plan after reviewing your profile information.</p>
+        </section>
+      )}
     </div>
   );
 }

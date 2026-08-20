@@ -1,0 +1,16 @@
+.git
+.github
+.gcloudignore
+**/.env
+**/.env.*
+!**/.env.example
+**/node_modules
+**/.next
+**/.turbo
+**/dist
+**/coverage
+**/*.log
+docs
+tests
+**/tests
+.DS_Store

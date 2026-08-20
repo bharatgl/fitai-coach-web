@@ -5,9 +5,11 @@ data and can be tested before the next capability depends on it.
 
 ## 1. Production-shaped foundation — implemented
 
-- npm workspace monorepo with separate `frontend/` and `backend/` apps.
+- npm workspace monorepo orchestrated by Turborepo with separate `frontend/`
+  and `backend/` applications.
 - Isolated `ai/` package and shared `packages/contracts/` package.
-- Next.js frontend and Fastify Node API, each deployable as its own Vercel project.
+- Next.js frontend and Fastify Node API, each packaged as its own Cloud Run
+  container and built through Cloud Build.
 - MongoDB clients reuse connection pools and create application indexes.
 - Environment validation, API rate limiting, security headers, and health routes.
 
@@ -30,20 +32,23 @@ configured before this milestone is live.
 
 ## 4. AI coach foundation — implemented in code
 
-- OpenAI Responses API runs only in the backend through `ai/`.
+- Gemini API runs only in the backend through `ai/`.
 - Structured output is schema-validated before persistence.
 - Deterministic urgent-symptom and pain checks run before model calls.
-- Requests use a stable pseudonymous safety identifier and disable response storage.
+- Provider credentials and prompts remain server-only; deterministic safety checks run before every eligible model call.
 
-## 5. Adaptive plan engine — next
+## 5. Adaptive plan engine — implemented in code
 
-- Curate and version the exercise library.
-- Generate a plan from goal, level, equipment, schedule, and movement notes.
-- Validate generated plans against deterministic exercise and volume rules.
-- Persist plan versions and make every adaptation explainable and reversible.
-- Add readiness check-ins that can revise the next session, not rewrite history.
+- Curated equipment- and experience-aware exercise catalog.
+- Four-week plan generation from goal, level, equipment, schedule, and movement notes.
+- Structured model output plus deterministic exercise, duration, duplication, and volume validation.
+- Transactional plan versioning: the previous plan is archived only when the new plan and all workouts persist successfully.
+- Duplicate-generation lock, rate limit, provider error handling, and an isolated live E2E test that cleans up its Atlas records.
 
-## 6. Workout execution and history
+Readiness check-ins and automatic next-session revisions will be added after
+workout execution supplies real completion and effort data.
+
+## 6. Workout execution and history — next
 
 - Start, pause, resume, and finish scheduled workouts.
 - Persist sets, reps, load, effort, substitutions, and session reflections.

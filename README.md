@@ -10,21 +10,23 @@ workouts, or coach messages.
 ```text
 frontend/             Next.js UI, Auth.js, and authenticated backend proxy
 backend/              Fastify Node API, MongoDB application data, authorization
-ai/                   OpenAI integration, prompts, structured output, safety rules
+ai/                   Gemini integration, prompts, structured output, safety rules
 packages/contracts/   Types shared by frontend and backend
+infra/                Portable runtime contract and cloud deployment adapters
 docs/                 Architecture and delivery roadmap
 ```
 
-The `ai/` directory is an internal package, not a third public service. Vercel
-bundles it with the backend, keeping one secure server-side OpenAI integration
-without an extra network hop.
+The `ai/` directory is an internal package, not a third public service. The
+backend build bundles it into the Cloud Run application, keeping one secure
+server-side Gemini integration without an extra network hop. Turborepo runs and
+caches dependency-aware tasks across all workspaces.
 
 ## Requirements
 
 - Node.js `>=22.13.0`
 - A MongoDB Atlas deployment
 - Google OAuth credentials
-- An OpenAI API key
+- A Gemini API key from Google AI Studio
 
 ## Local setup
 
@@ -51,4 +53,7 @@ npm run build
 
 See [`docs/architecture.md`](docs/architecture.md) for request flows, security
 boundaries, deployment setup, and recommended integrations. Delivery status is
-tracked in [`docs/roadmap.md`](docs/roadmap.md).
+tracked in [`docs/roadmap.md`](docs/roadmap.md). The repeatable GCP deployment
+workflow is in [`infra/gcp/README.md`](infra/gcp/README.md).
+The provider-neutral container contract is documented in
+[`infra/README.md`](infra/README.md).
