@@ -17,7 +17,7 @@ docs/                 Architecture and delivery roadmap
 ```
 
 The `ai/` directory is an internal package, not a third public service. The
-backend build bundles it into the Cloud Run application, keeping one secure
+backend build bundles it into the backend container, keeping one secure
 server-side Gemini integration without an extra network hop. Turborepo runs and
 caches dependency-aware tasks across all workspaces.
 
@@ -49,6 +49,13 @@ npm run typecheck
 npm run lint
 npm test
 npm run build
+```
+
+With the local backend running and an isolated Atlas test database configured,
+the real workout lifecycle can also be verified through HTTP:
+
+```bash
+npm run test:e2e:workout --workspace backend
 ```
 
 See [`docs/architecture.md`](docs/architecture.md) for request flows, security

@@ -5,23 +5,22 @@ import type {
   CoachResponse,
   DashboardResponse,
   GeneratePlanResponse,
+  StartWorkoutResponse,
   UserProfile,
+  WorkoutSession,
+  WorkoutSessionResponse,
 } from "@fitai/contracts";
 import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { apiRequest } from "@/lib/api";
 
-type View = "today" | "coach" | "plan" | "history";
+type View = "today" | "coach" | "plan" | "history" | "workout";
 type CurrentUser = { id: string; name: string; email: string };
-
-function recordText(record: Record<string, unknown>, key: string) {
-  const value = record[key];
-  return typeof value === "string" ? value : "";
-}
 
 export default function FitAICoach({ user }: { user: CurrentUser }) {
   const [view, setView] = useState<View>("today");
   const [dashboard, setDashboard] = useState<DashboardResponse | null>(null);
+  const [activeSession, setActiveSession] = useState<WorkoutSession | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
 
@@ -29,7 +28,9 @@ export default function FitAICoach({ user }: { user: CurrentUser }) {
     setLoading(true);
     setError("");
     try {
-      setDashboard(await apiRequest<DashboardResponse>("/v1/dashboard"));
+      const data = await apiRequest<DashboardResponse>("/v1/dashboard");
+      setDashboard(data);
+      setActiveSession(data.activeSession);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Unable to load FitAI");
     } finally {
@@ -41,7 +42,10 @@ export default function FitAICoach({ user }: { user: CurrentUser }) {
     let active = true;
     apiRequest<DashboardResponse>("/v1/dashboard")
       .then((data) => {
-        if (active) setDashboard(data);
+        if (active) {
+          setDashboard(data);
+          setActiveSession(data.activeSession);
+        }
       })
       .catch((cause: unknown) => {
         if (active) {
@@ -74,6 +78,21 @@ export default function FitAICoach({ user }: { user: CurrentUser }) {
     ["plan", "▤", "Plan"],
     ["history", "◴", "History"],
   ];
+
+  async function startWorkout(plannedWorkoutId: string) {
+    const response = await apiRequest<StartWorkoutResponse>(
+      `/v1/workouts/${plannedWorkoutId}/start`,
+      { method: "POST", body: JSON.stringify({}) },
+    );
+    setActiveSession(response.session);
+    setView("workout");
+  }
+
+  async function closeWorkout() {
+    setActiveSession(null);
+    await loadDashboard();
+    setView("history");
+  }
 
   return (
     <main className="app-shell">
@@ -115,14 +134,28 @@ export default function FitAICoach({ user }: { user: CurrentUser }) {
           </span>
           <div>{new Intl.DateTimeFormat("en", { dateStyle: "full" }).format(new Date())}</div>
         </header>
-        {view === "today" && <Today dashboard={dashboard} />}
+        {view === "today" && (
+          <Today
+            dashboard={dashboard}
+            activeSession={activeSession}
+            onStart={startWorkout}
+            onResume={() => setView("workout")}
+          />
+        )}
         {view === "coach" && (
           <Coach initialMessages={dashboard.recentMessages} />
         )}
         {view === "plan" && (
-          <Plan dashboard={dashboard} refresh={loadDashboard} />
+          <Plan dashboard={dashboard} refresh={loadDashboard} onStart={startWorkout} />
         )}
         {view === "history" && <History dashboard={dashboard} />}
+        {view === "workout" && activeSession && (
+          <WorkoutRunner
+            session={activeSession}
+            onSession={setActiveSession}
+            onClose={closeWorkout}
+          />
+        )}
       </section>
     </main>
   );
@@ -230,8 +263,34 @@ function Onboarding({ user, onSaved }: { user: CurrentUser; onSaved: () => Promi
   );
 }
 
-function Today({ dashboard }: { dashboard: DashboardResponse }) {
+function Today({
+  dashboard,
+  activeSession,
+  onStart,
+  onResume,
+}: {
+  dashboard: DashboardResponse;
+  activeSession: WorkoutSession | null;
+  onStart: (workoutId: string) => Promise<void>;
+  onResume: () => void;
+}) {
   const nextWorkout = dashboard.upcomingWorkouts[0];
+  const [starting, setStarting] = useState(false);
+  const [error, setError] = useState("");
+
+  async function start() {
+    if (!nextWorkout) return;
+    setStarting(true);
+    setError("");
+    try {
+      await onStart(nextWorkout.id);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Unable to start this workout");
+    } finally {
+      setStarting(false);
+    }
+  }
+
   return (
     <div className="wrap">
       <section className="intro">
@@ -243,12 +302,20 @@ function Today({ dashboard }: { dashboard: DashboardResponse }) {
           <p>Your dashboard now reads from your authenticated FitAI account.</p>
         </div>
       </section>
-      {nextWorkout ? (
+      {activeSession || nextWorkout ? (
         <section className="hero">
           <div>
-            <p className="label">NEXT SESSION</p>
-            <h2>{nextWorkout.name}</h2>
-            <p>{nextWorkout.focus}</p>
+            <p className="label">{activeSession ? "SESSION IN PROGRESS" : "NEXT SESSION"}</p>
+            <h2>{activeSession?.name ?? nextWorkout?.name}</h2>
+            <p>{activeSession ? `${activeSession.totalSets} sets recorded` : nextWorkout?.focus}</p>
+            <button
+              className="primary"
+              disabled={starting}
+              onClick={activeSession ? onResume : () => void start()}
+            >
+              {activeSession ? "Resume workout →" : starting ? "Starting…" : "Start workout →"}
+            </button>
+            {error && <small className="form-error">{error}</small>}
           </div>
         </section>
       ) : (
@@ -333,11 +400,14 @@ function Coach({ initialMessages }: { initialMessages: CoachMessage[] }) {
 function Plan({
   dashboard,
   refresh,
+  onStart,
 }: {
   dashboard: DashboardResponse;
   refresh: () => Promise<void>;
+  onStart: (workoutId: string) => Promise<void>;
 }) {
   const [generating, setGenerating] = useState(false);
+  const [startingId, setStartingId] = useState("");
   const [error, setError] = useState("");
 
   async function generate() {
@@ -353,6 +423,18 @@ function Plan({
       setError(cause instanceof Error ? cause.message : "Unable to generate your plan");
     } finally {
       setGenerating(false);
+    }
+  }
+
+  async function start(workoutId: string) {
+    setStartingId(workoutId);
+    setError("");
+    try {
+      await onStart(workoutId);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Unable to start this workout");
+    } finally {
+      setStartingId("");
     }
   }
 
@@ -394,10 +476,26 @@ function Plan({
               {workout.exercises.map((exercise) => (
                 <li key={exercise.exerciseId}>
                   <span>{exercise.name}</span>
-                  <b>{exercise.sets} × {exercise.repRange}</b>
+                  <b>
+                    {exercise.sets} × {exercise.repRange}
+                    {exercise.loadAdjustmentPercent
+                      ? ` · ${exercise.loadAdjustmentPercent > 0 ? "+" : ""}${exercise.loadAdjustmentPercent}% load`
+                      : ""}
+                  </b>
                 </li>
               ))}
             </ul>
+            <button
+              className="outline session-start"
+              disabled={Boolean(startingId)}
+              onClick={() => void start(workout.id)}
+            >
+              {startingId === workout.id
+                ? "Starting…"
+                : workout.status === "in_progress"
+                  ? "Resume session"
+                  : "Start session"}
+            </button>
           </article>
         ))}
       </section>
@@ -411,21 +509,249 @@ function Plan({
   );
 }
 
+function formatDuration(totalSeconds: number) {
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${String(seconds).padStart(2, "0")}`;
+}
+
+function WorkoutRunner({
+  session,
+  onSession,
+  onClose,
+}: {
+  session: WorkoutSession;
+  onSession: (session: WorkoutSession) => void;
+  onClose: () => Promise<void>;
+}) {
+  const [working, setWorking] = useState(false);
+  const [error, setError] = useState("");
+  const [reflection, setReflection] = useState(session.reflection);
+  const [perceivedEffort, setPerceivedEffort] = useState(7);
+
+  async function update(path: string, init: RequestInit) {
+    setWorking(true);
+    setError("");
+    try {
+      const response = await apiRequest<WorkoutSessionResponse>(path, init);
+      onSession(response.session);
+      return response.session;
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Workout update failed");
+      return null;
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function changeStatus() {
+    await update(`/v1/workout-sessions/${session.id}/status`, {
+      method: "PATCH",
+      body: JSON.stringify({ action: session.status === "paused" ? "resume" : "pause" }),
+    });
+  }
+
+  async function logSet(
+    exerciseId: string,
+    input: { reps: number; loadKg: number; effortRpe: number },
+  ) {
+    await update(`/v1/workout-sessions/${session.id}/sets`, {
+      method: "POST",
+      body: JSON.stringify({ exerciseId, ...input }),
+    });
+  }
+
+  async function substitute(exerciseId: string) {
+    await update(`/v1/workout-sessions/${session.id}/substitutions`, {
+      method: "POST",
+      body: JSON.stringify({ exerciseId }),
+    });
+  }
+
+  async function finish() {
+    const result = await update(`/v1/workout-sessions/${session.id}/finish`, {
+      method: "POST",
+      body: JSON.stringify({ reflection, perceivedEffort }),
+    });
+    if (result) await onClose();
+  }
+
+  async function abandon() {
+    if (!window.confirm("Abandon this workout? It will be recorded as skipped.")) return;
+    const result = await update(`/v1/workout-sessions/${session.id}/abandon`, {
+      method: "POST",
+      body: JSON.stringify({ reflection }),
+    });
+    if (result) await onClose();
+  }
+
+  return (
+    <div className="wrap workout-runner">
+      <section className="intro workout-heading">
+        <div>
+          <p className="label">LIVE WORKOUT · {session.status.toUpperCase()}</p>
+          <h1>{session.name}</h1>
+          <p>{session.totalSets} sets · {session.totalVolumeKg} kg volume · {formatDuration(session.durationSeconds)}</p>
+        </div>
+        <button className="outline" disabled={working} onClick={() => void changeStatus()}>
+          {session.status === "paused" ? "Resume workout" : "Pause workout"}
+        </button>
+      </section>
+      {session.status === "paused" && (
+        <section className="pause-banner">Workout paused. Resume it before recording another set.</section>
+      )}
+      {error && <p className="form-error plan-error">{error}</p>}
+      <section className="workout-exercises">
+        {session.exercises.map((exercise) => (
+          <ExerciseLogger
+            key={exercise.exerciseId}
+            exercise={exercise}
+            disabled={working || session.status !== "active"}
+            onLog={logSet}
+            onSubstitute={substitute}
+          />
+        ))}
+      </section>
+      <section className="card finish-card">
+        <div>
+          <p className="label">SESSION REFLECTION</p>
+          <h2>Close the loop.</h2>
+          <p>Your effort and completed work update future load recommendations.</p>
+        </div>
+        <label>
+          Overall effort (RPE {perceivedEffort}/10)
+          <input
+            type="range"
+            min="1"
+            max="10"
+            value={perceivedEffort}
+            onChange={(event) => setPerceivedEffort(Number(event.target.value))}
+          />
+        </label>
+        <label>
+          Reflection
+          <textarea
+            rows={3}
+            maxLength={2_000}
+            value={reflection}
+            onChange={(event) => setReflection(event.target.value)}
+            placeholder="What felt strong, difficult, or worth changing next time?"
+          />
+        </label>
+        <div className="finish-actions">
+          <button className="danger-link" disabled={working} onClick={() => void abandon()}>
+            Abandon workout
+          </button>
+          <button className="primary" disabled={working || session.totalSets === 0} onClick={() => void finish()}>
+            {working ? "Saving…" : "Finish workout →"}
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function ExerciseLogger({
+  exercise,
+  disabled,
+  onLog,
+  onSubstitute,
+}: {
+  exercise: WorkoutSession["exercises"][number];
+  disabled: boolean;
+  onLog: (
+    exerciseId: string,
+    input: { reps: number; loadKg: number; effortRpe: number },
+  ) => Promise<void>;
+  onSubstitute: (exerciseId: string) => Promise<void>;
+}) {
+  const [reps, setReps] = useState(8);
+  const [loadKg, setLoadKg] = useState(0);
+  const [effortRpe, setEffortRpe] = useState(7);
+
+  return (
+    <article className="card exercise-logger">
+      <header>
+        <div>
+          <p className="label">
+            {exercise.sets.length}/{exercise.prescribedSets} PRESCRIBED SETS
+          </p>
+          <h3>{exercise.name}</h3>
+          <small>{exercise.repRange} · {exercise.coachingNotes}</small>
+          {exercise.substitutedFor && (
+            <small className="substitution-note">Substituted for {exercise.substitutedFor.name}</small>
+          )}
+        </div>
+        <button
+          className="substitute"
+          disabled={disabled || exercise.sets.length > 0}
+          onClick={() => void onSubstitute(exercise.exerciseId)}
+        >
+          Find substitute
+        </button>
+      </header>
+      <div className="logged-sets">
+        {exercise.sets.map((set) => (
+          <span key={set.id}>
+            <b>Set {set.setNumber}</b>
+            {set.reps} reps · {set.loadKg} kg · RPE {set.effortRpe}
+          </span>
+        ))}
+      </div>
+      <div className="set-entry">
+        <label>
+          Reps
+          <input type="number" min="1" max="100" value={reps} onChange={(event) => setReps(Number(event.target.value))} />
+        </label>
+        <label>
+          Load (kg)
+          <input type="number" min="0" max="1000" step="0.5" value={loadKg} onChange={(event) => setLoadKg(Number(event.target.value))} />
+        </label>
+        <label>
+          Set RPE
+          <input type="number" min="1" max="10" value={effortRpe} onChange={(event) => setEffortRpe(Number(event.target.value))} />
+        </label>
+        <button
+          className="primary"
+          disabled={disabled || exercise.sets.length >= exercise.prescribedSets + 2}
+          onClick={() => void onLog(exercise.exerciseId, { reps, loadKg, effortRpe })}
+        >
+          Log set
+        </button>
+      </div>
+    </article>
+  );
+}
+
 function History({ dashboard }: { dashboard: DashboardResponse }) {
   const completed = useMemo(
-    () => dashboard.recentSessions.filter((session) => recordText(session, "status") === "completed"),
+    () => dashboard.recentSessions.filter((session) => session.status === "completed"),
     [dashboard.recentSessions],
   );
   return (
     <div className="wrap">
       <section className="intro"><div><p className="label">TRAINING HISTORY</p><h1>Your completed <em>work.</em></h1></div></section>
       <section className="history">
-        <div className="card stats"><p className="label">RECORDED SESSIONS</p><div><b>{completed.length}</b><small>completed sessions</small></div></div>
+        <div className="card stats">
+          <p className="label">LIFETIME PROGRESS</p>
+          <div><b>{dashboard.progress.completedSessions}</b><small>completed sessions</small></div>
+          <div><b>{dashboard.progress.completedSets}</b><small>completed sets</small></div>
+          <div><b>{dashboard.progress.totalVolumeKg}</b><small>kilograms of recorded volume</small></div>
+          <div><b>{dashboard.progress.averageEffort ?? "—"}</b><small>average session RPE</small></div>
+        </div>
         <div className="card session-list">
-          {dashboard.recentSessions.map((session, index) => (
-            <article key={`${recordText(session, "id")}-${index}`}><b>{recordText(session, "name") || "Workout session"}</b><small>{recordText(session, "startedAt")}</small></article>
+          {dashboard.recentSessions.map((session) => (
+            <article key={session.id}>
+              <span>
+                <b>{session.name}</b>
+                <small>{new Intl.DateTimeFormat("en", { dateStyle: "medium", timeStyle: "short" }).format(new Date(session.startedAt))}</small>
+              </span>
+              <span className={`session-status ${session.status}`}>{session.status}</span>
+              <small>{session.totalSets} sets · {session.totalVolumeKg} kg · {formatDuration(session.durationSeconds)}</small>
+              {session.reflection && <p>{session.reflection}</p>}
+            </article>
           ))}
-          {dashboard.recentSessions.length === 0 && <p>No sessions recorded yet.</p>}
+          {completed.length === 0 && dashboard.recentSessions.length === 0 && <p>No sessions recorded yet.</p>}
         </div>
       </section>
     </div>

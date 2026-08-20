@@ -13,16 +13,13 @@ data and can be tested before the next capability depends on it.
 - MongoDB clients reuse connection pools and create application indexes.
 - Environment validation, API rate limiting, security headers, and health routes.
 
-## 2. Authentication and profile — implemented in code
+## 2. Authentication and profile — implemented and deployed
 
 - Google sign-in through Auth.js with MongoDB-backed accounts and sessions.
 - A same-origin frontend proxy uses five-minute signed JWTs for backend calls;
   those internal tokens never enter the browser.
 - Backend verifies issuer, audience, signature, subject, and email.
 - Real onboarding/profile reads and writes are scoped to the authenticated user.
-
-Deployment credentials and the MongoDB Atlas network policy still need to be
-configured before this milestone is live.
 
 ## 3. Persisted product shell — implemented in code
 
@@ -48,13 +45,15 @@ configured before this milestone is live.
 Readiness check-ins and automatic next-session revisions will be added after
 workout execution supplies real completion and effort data.
 
-## 6. Workout execution and history — next
+## 6. Workout execution and history — implemented in code
 
 - Start, pause, resume, and finish scheduled workouts.
 - Persist sets, reps, load, effort, substitutions, and session reflections.
 - Recalculate progress and future workload from completed data.
+- Enforce one active workout per user and optimistic concurrency on session updates.
+- Include an isolated HTTP/Atlas E2E test with guaranteed record cleanup.
 
-## 7. Live movement intelligence
+## 7. Live movement intelligence — next
 
 - Run pose estimation on-device so raw camera video is not uploaded.
 - Convert joint landmarks into validated rep and range-of-motion events.

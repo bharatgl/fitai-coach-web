@@ -61,6 +61,18 @@ also avoids cross-origin browser calls and keeps preview deployments simpler.
 5. A MongoDB transaction archives the previous plan and inserts the new version
    plus all scheduled workouts atomically.
 
+### Workout execution and adaptation
+
+1. Starting a scheduled workout creates one user-owned execution session and
+   marks the planned workout in progress in the same MongoDB transaction.
+2. Set logs, pause/resume transitions, and safe catalog substitutions use an
+   optimistic session version so concurrent tabs cannot silently overwrite data.
+3. A partial unique index permits only one active or paused workout per user.
+4. Finishing transactionally closes the session, completes the planned workout,
+   and recalculates future per-exercise load guidance from completion and RPE.
+5. The dashboard serializes typed session history and lifetime progress; the
+   browser never supplies a user ID for any workout operation.
+
 ## MongoDB ownership
 
 Auth.js owns its account/session collections. The backend owns `appUsers`,
@@ -86,7 +98,7 @@ Manager:
 
 | Service | Source | Required runtime configuration |
 | --- | --- | --- |
-| `fitai-frontend-vm` | `frontend` | `MONGODB_URI`, `MONGODB_DB`, `AUTH_SECRET`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`, `API_JWT_SECRET`, `BACKEND_API_URL`, `AUTH_TRUST_HOST` |
+| `fitai-frontend-vm` | `frontend` | `MONGODB_URI`, `MONGODB_DB`, `AUTH_SECRET`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`, `AUTH_URL`, `API_JWT_SECRET`, `BACKEND_API_URL`, `AUTH_TRUST_HOST` |
 | `fitai-backend-vm` | `backend` + `ai` | `MONGODB_URI`, `MONGODB_DB`, `API_JWT_SECRET`, `GEMINI_API_KEY`, `GEMINI_MODEL` |
 
 `API_JWT_SECRET` must be identical in both services. On the VM,

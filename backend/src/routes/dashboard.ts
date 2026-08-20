@@ -9,6 +9,11 @@ import {
   type WorkoutPlanDocument,
 } from "../domain/plans.js";
 import { serializeProfile } from "../domain/profiles.js";
+import {
+  calculateWorkoutProgress,
+  serializeWorkoutSession,
+  type WorkoutSessionDocument,
+} from "../domain/workouts.js";
 import { syncAuthenticatedUser } from "../users.js";
 
 export async function dashboardRoutes(app: FastifyInstance) {
@@ -19,7 +24,15 @@ export async function dashboardRoutes(app: FastifyInstance) {
     const today = new Date();
     today.setUTCHours(0, 0, 0, 0);
 
-    const [profile, activePlan, upcomingWorkouts, recentSessions, messages] =
+    const [
+      profile,
+      activePlan,
+      upcomingWorkouts,
+      activeSession,
+      recentSessions,
+      progressSessions,
+      messages,
+    ] =
       await Promise.all([
         database
           .collection("profiles")
@@ -33,17 +46,31 @@ export async function dashboardRoutes(app: FastifyInstance) {
         database
           .collection<PlannedWorkoutDocument>("plannedWorkouts")
           .find(
-            { userId: user.id, scheduledFor: { $gte: today } },
+            {
+              userId: user.id,
+              status: { $in: ["planned", "in_progress"] },
+              scheduledFor: { $gte: today },
+            },
             { projection: { _id: 0 } },
           )
           .sort({ scheduledFor: 1 })
           .limit(14)
           .toArray(),
+        database.collection<WorkoutSessionDocument>("workoutSessions").findOne(
+          { userId: user.id, status: { $in: ["active", "paused"] } },
+          { projection: { _id: 0 }, sort: { updatedAt: -1 } },
+        ),
         database
-          .collection("workoutSessions")
+          .collection<WorkoutSessionDocument>("workoutSessions")
           .find({ userId: user.id }, { projection: { _id: 0 } })
           .sort({ startedAt: -1 })
           .limit(12)
+          .toArray(),
+        database
+          .collection<WorkoutSessionDocument>("workoutSessions")
+          .find({ userId: user.id, status: "completed" }, { projection: { _id: 0 } })
+          .sort({ completedAt: -1 })
+          .limit(500)
           .toArray(),
         database
           .collection("coachMessages")
@@ -57,7 +84,9 @@ export async function dashboardRoutes(app: FastifyInstance) {
       profile: profile ? serializeProfile(profile) : null,
       activePlan: activePlan ? serializePlan(activePlan) : null,
       upcomingWorkouts: upcomingWorkouts.map(serializeWorkout),
-      recentSessions,
+      activeSession: activeSession ? serializeWorkoutSession(activeSession) : null,
+      recentSessions: recentSessions.map((session) => serializeWorkoutSession(session)),
+      progress: calculateWorkoutProgress(progressSessions),
       recentMessages: messages.reverse().map((message) => ({
         id: String(message.id),
         role: message.role as "user" | "assistant",

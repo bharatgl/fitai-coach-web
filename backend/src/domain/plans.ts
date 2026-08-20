@@ -16,7 +16,6 @@ export type WorkoutPlanDocument = Omit<WorkoutPlan, "startDate" | "createdAt"> &
 
 export type PlannedWorkoutDocument = Omit<PlannedWorkout, "scheduledFor"> & {
   userId: string;
-  status: "planned" | "completed" | "skipped";
   scheduledFor: Date;
   createdAt: Date;
 };
@@ -188,5 +187,6 @@ export function serializeWorkout(workout: PlannedWorkoutDocument): PlannedWorkou
     scheduledFor: workout.scheduledFor.toISOString(),
     estimatedMinutes: workout.estimatedMinutes,
     exercises: workout.exercises,
+    status: workout.status,
   };
 }

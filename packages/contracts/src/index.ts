@@ -40,7 +40,14 @@ export type PlanExercise = {
   restSeconds: number;
   tempo: string | null;
   coachingNotes: string;
+  loadAdjustmentPercent?: number;
 };
+
+export type PlannedWorkoutStatus =
+  | "planned"
+  | "in_progress"
+  | "completed"
+  | "skipped";
 
 export type PlannedWorkout = {
   id: string;
@@ -52,6 +59,81 @@ export type PlannedWorkout = {
   scheduledFor: string;
   estimatedMinutes: number;
   exercises: PlanExercise[];
+  status: PlannedWorkoutStatus;
+};
+
+export type WorkoutSessionStatus =
+  | "active"
+  | "paused"
+  | "completed"
+  | "abandoned";
+
+export type WorkoutSetLog = {
+  id: string;
+  setNumber: number;
+  reps: number;
+  loadKg: number;
+  effortRpe: number;
+  completedAt: string;
+};
+
+export type WorkoutSessionExercise = {
+  exerciseId: string;
+  name: string;
+  prescribedSets: number;
+  repRange: string;
+  coachingNotes: string;
+  substitutedFor: { exerciseId: string; name: string } | null;
+  sets: WorkoutSetLog[];
+};
+
+export type WorkoutSession = {
+  id: string;
+  plannedWorkoutId: string;
+  planId: string;
+  name: string;
+  status: WorkoutSessionStatus;
+  exercises: WorkoutSessionExercise[];
+  startedAt: string;
+  pausedAt: string | null;
+  completedAt: string | null;
+  pausedDurationSeconds: number;
+  durationSeconds: number;
+  reflection: string;
+  perceivedEffort: number | null;
+  totalSets: number;
+  totalVolumeKg: number;
+};
+
+export type WorkoutProgress = {
+  completedSessions: number;
+  completedSets: number;
+  totalVolumeKg: number;
+  averageEffort: number | null;
+  lastCompletedAt: string | null;
+};
+
+export type StartWorkoutResponse = { session: WorkoutSession };
+export type WorkoutSessionResponse = { session: WorkoutSession };
+
+export type LogWorkoutSetRequest = {
+  exerciseId: string;
+  reps: number;
+  loadKg: number;
+  effortRpe: number;
+};
+
+export type ChangeWorkoutStatusRequest = {
+  action: "pause" | "resume";
+};
+
+export type SubstituteExerciseRequest = {
+  exerciseId: string;
+};
+
+export type FinishWorkoutRequest = {
+  reflection: string;
+  perceivedEffort: number;
 };
 
 export type WorkoutPlan = {
@@ -81,6 +163,8 @@ export type DashboardResponse = {
   profile: UserProfile | null;
   activePlan: WorkoutPlan | null;
   upcomingWorkouts: PlannedWorkout[];
-  recentSessions: Record<string, unknown>[];
+  activeSession: WorkoutSession | null;
+  recentSessions: WorkoutSession[];
+  progress: WorkoutProgress;
   recentMessages: CoachMessage[];
 };

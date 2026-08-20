@@ -18,6 +18,10 @@ test("protects the app and calls the authenticated backend", async () => {
   assert.match(coach, /\/v1\/dashboard/);
   assert.match(coach, /\/v1\/coach\/messages/);
   assert.match(coach, /\/v1\/plans\/generate/);
+  assert.match(coach, /\/v1\/workouts\/\$\{plannedWorkoutId\}\/start/);
+  assert.match(coach, /\/v1\/workout-sessions\/\$\{session\.id\}\/sets/);
+  assert.match(coach, /\/v1\/workout-sessions\/\$\{session\.id\}\/finish/);
+  assert.match(coach, /WorkoutRunner/);
 });
 
 test("contains no obsolete Cloudflare application entry points", async () => {
