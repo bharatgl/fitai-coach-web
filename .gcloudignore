@@ -1,0 +1,13 @@
+.gcloudignore
+.git
+.github
+**/.env
+**/.env.*
+!**/.env.example
+**/node_modules
+**/.next
+**/.turbo
+**/dist
+**/coverage
+**/*.log
+.DS_Store

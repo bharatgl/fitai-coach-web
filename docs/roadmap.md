@@ -5,9 +5,11 @@ data and can be tested before the next capability depends on it.
 
 ## 1. Production-shaped foundation — implemented
 
-- npm workspace monorepo with separate `frontend/` and `backend/` apps.
+- npm workspace monorepo orchestrated by Turborepo with separate `frontend/`
+  and `backend/` applications.
 - Isolated `ai/` package and shared `packages/contracts/` package.
-- Next.js frontend and Fastify Node API, each deployable as its own Vercel project.
+- Next.js frontend and Fastify Node API, each packaged as its own Cloud Run
+  container and built through Cloud Build.
 - MongoDB clients reuse connection pools and create application indexes.
 - Environment validation, API rate limiting, security headers, and health routes.
 

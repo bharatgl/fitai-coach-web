@@ -4,16 +4,16 @@
 
 ```mermaid
 flowchart LR
-  U[Browser] -->|HTTPS| F[Next.js frontend<br/>Vercel project 1]
+  U[Browser] -->|HTTPS| F[Next.js frontend<br/>Cloud Run]
   F -->|Auth.js| G[Google OAuth]
   F -->|sessions/accounts| M[(MongoDB Atlas)]
-  F -->|server-side proxy + 5-minute JWT| B[Fastify backend<br/>Vercel project 2]
+  F -->|server-side proxy + 5-minute JWT| B[Fastify backend<br/>Cloud Run]
   B -->|profiles, plans, sessions, messages| M
   B -->|in-process package call| A[AI package]
   A -->|Gemini API| O[Google Gemini]
 ```
 
-`frontend/` and `backend/` are separate deployable roots. `ai/` and
+`frontend/` and `backend/` are separate Cloud Run services. `ai/` and
 `packages/contracts/` are private workspace packages bundled into their
 consumers; neither exposes a public endpoint.
 
@@ -71,29 +71,43 @@ Use separate Atlas database users in production:
 
 This can be tightened after Auth.js collection names are confirmed in the
 deployed environment. Backups, point-in-time recovery, and an Atlas region near
-the selected Vercel functions should be configured before storing real user data.
+the selected Cloud Run region should be configured before storing real user data.
 
-## Vercel deployment
+## GCP deployment
 
-Create two Vercel projects from the same Git repository:
+Cloud Build creates two images from the same repository and stores them in
+Artifact Registry. Cloud Run uses separate service identities and Secret
+Manager grants for each application:
 
-| Project | Root directory | Required variables |
+| Service | Source | Required runtime configuration |
 | --- | --- | --- |
-| Frontend | `frontend` | `MONGODB_URI`, `MONGODB_DB`, `AUTH_SECRET`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`, `API_JWT_SECRET`, `BACKEND_API_URL` |
-| Backend | `backend` | `MONGODB_URI`, `MONGODB_DB`, `API_JWT_SECRET`, `GEMINI_API_KEY`, `GEMINI_MODEL` |
+| `fitai-frontend` | `frontend` | `MONGODB_URI`, `MONGODB_DB`, `AUTH_SECRET`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`, `API_JWT_SECRET`, `BACKEND_API_URL`, `AUTH_TRUST_HOST` |
+| `fitai-backend` | `backend` + `ai` | `MONGODB_URI`, `MONGODB_DB`, `API_JWT_SECRET`, `GEMINI_API_KEY`, `GEMINI_MODEL` |
 
 `API_JWT_SECRET` must be identical in both projects. `BACKEND_API_URL` must be
-the backend project URL or its custom API domain. Add
+the backend Cloud Run URL or its custom API domain. Add
 `https://<frontend-domain>/api/auth/callback/google` to the Google OAuth client.
-In both Vercel projects, verify that **Include source files outside of the Root
-Directory** is enabled because the apps import workspace packages from `ai/`
-and `packages/`.
+Cloud Run injects `PORT`; neither application hard-codes the production port.
+Both services scale to zero and cap their instance count initially to control
+free-trial spend. The checked-in scripts under `infra/gcp/` provision and deploy
+this topology without placing secret values in commands or source files.
 
 The current Gemini free tier is intended for development and testing. Google
 states that free-tier content may be used to improve its products, so do not
 send real health or movement notes until the project moves to paid data
 handling or another approved private provider and the user-facing privacy flow
 is complete.
+
+## Hosting portability
+
+Cloud Run is an infrastructure adapter. The applications themselves use
+standard containers, the platform-provided `PORT`, HTTPS service URLs, and
+environment variables. No product module imports a GCP SDK. Provider-specific
+IAM, registry, secret names, and scaling configuration remain under
+`infra/gcp/`, while `compose.yaml` verifies the same two-container contract
+locally. Moving to another managed container platform therefore changes the
+deployment adapter and secret mappings rather than frontend, backend, database,
+or AI business logic.
 
 ## Recommended additions
 
