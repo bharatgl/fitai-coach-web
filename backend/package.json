@@ -6,7 +6,7 @@
     "dev": "node --watch --env-file-if-exists=.env --import tsx src/index.ts",
     "start": "node --env-file-if-exists=.env dist/index.js",
     "build": "tsup",
-    "test": "node --import tsx --test tests/*.test.ts",
+    "test": "npm run build && node --import tsx --test tests/*.test.ts tests/*.test.mjs",
     "test:e2e:plan": "node --env-file-if-exists=.env --import tsx tests/live-plan.e2e.ts",
     "lint": "eslint src tests",
     "typecheck": "tsc --noEmit"
