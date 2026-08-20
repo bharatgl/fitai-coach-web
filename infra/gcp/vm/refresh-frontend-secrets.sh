@@ -6,6 +6,7 @@ PROJECT_ID="$(curl --fail --silent --show-error \
   http://metadata.google.internal/computeMetadata/v1/project/project-id)"
 MONGODB_DB="${FITAI_MONGODB_DB:-fitai}"
 INTERNAL_BACKEND_URL="${FITAI_INTERNAL_BACKEND_URL:-http://fitai-backend:8080}"
+AUTH_URL="${FITAI_AUTH_URL:-https://forgefit.space}"
 ENV_FILE="$(mktemp /etc/fitai/frontend.env.XXXXXX)"
 trap 'rm -f "${ENV_FILE}"' EXIT
 umask 077
@@ -24,6 +25,7 @@ secret() {
   printf 'AUTH_GOOGLE_SECRET=%s\n' "$(secret fitai-google-oauth-secret)"
   printf 'API_JWT_SECRET=%s\n' "$(secret fitai-api-jwt-secret)"
   printf 'BACKEND_API_URL=%s\n' "${INTERNAL_BACKEND_URL}"
+  printf 'AUTH_URL=%s\n' "${AUTH_URL}"
   printf 'AUTH_TRUST_HOST=true\n'
   printf 'PORT=8080\n'
   printf 'NODE_ENV=production\n'

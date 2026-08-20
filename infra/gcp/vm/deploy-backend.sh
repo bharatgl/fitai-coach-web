@@ -6,6 +6,7 @@ REGION="${FITAI_GCP_REGION:-asia-south1}"
 ZONE="${FITAI_GCP_ZONE:-asia-south1-a}"
 VM_NAME="${FITAI_VM_NAME:-fitai-backend-vm}"
 REPOSITORY="${FITAI_GCP_REPOSITORY:-fitai}"
+FRONTEND_DOMAIN="${FITAI_FRONTEND_DOMAIN:-forgefit.space}"
 IMAGE_TAG="${FITAI_IMAGE_TAG:-$(tr -d '\n' < infra/gcp/image-tag)}"
 REGISTRY="${REGION}-docker.pkg.dev"
 BACKEND_IMAGE="${REGISTRY}/${PROJECT_ID}/${REPOSITORY}/fitai-backend:${IMAGE_TAG}"
@@ -36,7 +37,7 @@ gcloud compute ssh "${VM_NAME}" \
     sudo install -m 0644 ~/nginx-fitai-backend.conf /etc/nginx/conf.d/fitai-backend.conf
     sudo rm -f /etc/nginx/sites-enabled/default
     sudo /usr/local/sbin/fitai-refresh-backend-secrets
-    sudo /usr/local/sbin/fitai-refresh-frontend-secrets
+    sudo env FITAI_AUTH_URL='https://${FRONTEND_DOMAIN}' /usr/local/sbin/fitai-refresh-frontend-secrets
     gcloud auth print-access-token | sudo docker login -u oauth2accesstoken --password-stdin https://${REGISTRY}
     sudo docker pull ${BACKEND_IMAGE}
     sudo docker pull ${FRONTEND_IMAGE}
