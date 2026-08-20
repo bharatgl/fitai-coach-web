@@ -91,6 +91,21 @@ gcloud iam service-accounts add-iam-policy-binding "${BACKEND_ACCOUNT}" \
   --role="roles/iam.serviceAccountUser" \
   --project="${PROJECT_ID}" >/dev/null
 
+VM_SECRETS=(
+  fitai-frontend-mongodb-uri
+  fitai-auth-secret
+  fitai-google-oauth-id
+  fitai-google-oauth-secret
+  fitai-api-jwt-secret
+)
+
+for secret in "${VM_SECRETS[@]}"; do
+  gcloud secrets add-iam-policy-binding "${secret}" \
+    --member="serviceAccount:${BACKEND_ACCOUNT}" \
+    --role="roles/secretmanager.secretAccessor" \
+    --project="${PROJECT_ID}" >/dev/null
+done
+
 if ! gcloud compute instances describe "${VM_NAME}" \
   --zone="${ZONE}" --project="${PROJECT_ID}" >/dev/null 2>&1; then
   gcloud compute instances create "${VM_NAME}" \
@@ -116,4 +131,4 @@ echo "VM: ${VM_NAME} (${MACHINE_TYPE}, ${ZONE})"
 echo "Static public IP: ${STATIC_IP}"
 echo "SSH: gcloud compute ssh ${VM_NAME} --zone=${ZONE} --tunnel-through-iap --project=${PROJECT_ID}"
 echo "Add ${STATIC_IP}/32 to the MongoDB Atlas network access list."
-echo "Next: deploy the backend container, then point an API-domain A record to ${STATIC_IP}."
+echo "Next: deploy both containers, then point the frontend and API domains to ${STATIC_IP}."

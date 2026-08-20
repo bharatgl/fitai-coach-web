@@ -4,18 +4,20 @@
 
 ```mermaid
 flowchart LR
-  U[Browser] -->|HTTPS| F[Next.js frontend<br/>Cloud Run]
+  U[Browser] -->|HTTPS| N[Nginx<br/>Ubuntu VM]
+  N --> F[Next.js frontend<br/>Docker]
+  N --> B[Fastify backend<br/>Docker]
   F -->|Auth.js| G[Google OAuth]
   F -->|sessions/accounts| M[(MongoDB Atlas)]
-  F -->|server-side proxy + 5-minute JWT| B[Fastify backend<br/>Ubuntu VM + Nginx]
+  F -->|private Docker network<br/>5-minute JWT| B
   B -->|profiles, plans, sessions, messages| M
   B -->|in-process package call| A[AI package]
   A -->|Gemini API| O[Google Gemini]
 ```
 
-`frontend/` and `backend/` are separately deployable services. The production
-frontend runs on Cloud Run; the backend container runs on an isolated Ubuntu VM
-behind Nginx, with Cloud Run retained as an alternative adapter. `ai/` and
+`frontend/` and `backend/` are separately deployable containers. Production
+runs both on an Ubuntu VM behind Nginx and connects them through a private Docker
+network, with Cloud Run retained as an alternative adapter. `ai/` and
 `packages/contracts/` are private workspace packages bundled into their
 consumers; neither exposes a public endpoint.
 
@@ -73,29 +75,29 @@ Use separate Atlas database users in production:
 
 This can be tightened after Auth.js collection names are confirmed in the
 deployed environment. Backups, point-in-time recovery, and an Atlas region near
-the selected Cloud Run region should be configured before storing real user data.
+the selected GCP region should be configured before storing real user data.
 
 ## GCP deployment
 
 Cloud Build creates two images from the same repository and stores them in
-Artifact Registry. The frontend uses Cloud Run; the backend VM pulls the same
-versioned image through its service identity. Secret Manager grants are scoped
-separately for each application:
+Artifact Registry. The VM pulls both versioned images through its service
+identity and materializes separate root-only environment files from Secret
+Manager:
 
 | Service | Source | Required runtime configuration |
 | --- | --- | --- |
-| `fitai-frontend` | `frontend` | `MONGODB_URI`, `MONGODB_DB`, `AUTH_SECRET`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`, `API_JWT_SECRET`, `BACKEND_API_URL`, `AUTH_TRUST_HOST` |
+| `fitai-frontend-vm` | `frontend` | `MONGODB_URI`, `MONGODB_DB`, `AUTH_SECRET`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`, `API_JWT_SECRET`, `BACKEND_API_URL`, `AUTH_TRUST_HOST` |
 | `fitai-backend-vm` | `backend` + `ai` | `MONGODB_URI`, `MONGODB_DB`, `API_JWT_SECRET`, `GEMINI_API_KEY`, `GEMINI_MODEL` |
 
-`API_JWT_SECRET` must be identical in both services. `BACKEND_API_URL` is the
-backend VM's HTTPS API domain. Add
-`https://<frontend-domain>/api/auth/callback/google` to the Google OAuth client.
-Cloud Run injects the frontend `PORT`; the VM maps the backend container's port
-only to loopback and exposes it through Nginx on ports 80/443. SSH is restricted
-to IAP. Unlike Cloud Run, the VM does not scale to zero and accrues compute and
-disk charges while running. The checked-in scripts under `infra/gcp/` provision
-and deploy this topology without placing secret values in commands or source
-files.
+`API_JWT_SECRET` must be identical in both services. On the VM,
+`BACKEND_API_URL` uses the backend container's private Docker hostname; browsers
+still call only the frontend's same-origin proxy. Add
+`https://forgefit.space/api/auth/callback/google` to the Google OAuth client.
+Both container ports bind only to host loopback and Nginx exposes them on ports
+80/443. SSH is restricted to IAP. The VM does not scale to zero and accrues
+compute and disk charges while running. The checked-in scripts under
+`infra/gcp/` deploy this topology without placing secret values in commands or
+source files.
 
 The current Gemini free tier is intended for development and testing. Google
 states that free-tier content may be used to improve its products, so do not

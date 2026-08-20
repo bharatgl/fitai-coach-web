@@ -1,12 +1,16 @@
-# Ubuntu VM backend
+# Ubuntu VM application stack
 
-This adapter hosts only the Fastify backend on Compute Engine. The Next.js
-frontend remains on Cloud Run and calls the backend through its HTTPS domain.
+This adapter hosts the Next.js frontend and Fastify backend as separate Docker
+containers on Compute Engine. Nginx serves the frontend at the root host and the
+backend at the API host. The frontend calls the backend over a private Docker
+network, so the internal bearer token and backend origin never enter the browser.
 
 ## Topology
 
 ```text
-Internet -> static IPv4 -> Nginx :80/:443 -> Docker 127.0.0.1:4000 -> Node :8080
+Internet -> static IPv4 -> Nginx :80/:443 -> frontend 127.0.0.1:3000
+                                           -> backend 127.0.0.1:4000
+frontend container -> private Docker DNS -> backend container :8080
 Administrator -> Google IAP -> SSH :22
 VM service identity -> Secret Manager + Artifact Registry
 ```
@@ -27,21 +31,18 @@ npm run gcp:vm:provision
 npm run gcp:vm:deploy
 ```
 
-Create an `A` record such as `api.example.com` pointing to the printed static
-IP. After DNS propagation:
+Point the frontend apex, `www`, and API hostname to the printed static IP. After
+DNS propagation:
 
 ```bash
-export FITAI_DOMAIN="api.example.com"
+export FITAI_FRONTEND_DOMAIN="example.com"
+export FITAI_API_DOMAIN="api.example.com"
 export FITAI_CERTBOT_EMAIL="you@example.com"
 npm run gcp:vm:https
 ```
 
-Deploy the frontend only after backend HTTPS succeeds:
-
-```bash
-export FITAI_BACKEND_URL="https://api.example.com"
-npm run gcp:frontend:deploy
-```
+The default production domains are `forgefit.space`, `www.forgefit.space`, and
+`api.forgefit.space`.
 
 SSH uses IAP instead of exposing port 22 to the internet:
 
@@ -53,5 +54,5 @@ gcloud compute ssh fitai-backend-vm \
 ```
 
 The host installs Docker, Node.js 22, Nginx, the Google Cloud CLI, Certbot, and
-automatic security updates. The backend still runs inside the versioned Docker
-image; the host Node.js installation is available for administration only.
+automatic security updates. Both applications run inside versioned Docker
+images; the host Node.js installation is available for administration only.

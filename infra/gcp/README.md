@@ -1,10 +1,9 @@
 # GCP deployment
 
-The GCP adapter supports two backend targets using the same container image:
+The GCP adapter supports two targets using the same container images:
 
 - Both applications on Cloud Run through `deploy.sh`.
-- Frontend on Cloud Run and backend on an Ubuntu VM through `vm/` and
-  `deploy-frontend.sh`.
+- Both applications on an Ubuntu VM through `vm/`.
 
 Both targets use dedicated runtime service accounts, a least-privilege build
 account, Secret Manager, Cloud Build, and Artifact Registry. Backend application
@@ -17,8 +16,8 @@ Defaults:
 - Project: supplied through `FITAI_GCP_PROJECT_ID`
 - Region: `asia-south1`
 - Artifact Registry repository: `fitai`
-- Frontend Cloud Run service: `fitai-frontend`
-- Backend target: `fitai-backend-vm` by default, or `fitai-backend` on Cloud Run
+- VM target: `fitai-backend-vm` running separate frontend/backend containers
+- Alternative Cloud Run services: `fitai-frontend` and `fitai-backend`
 
 ## First deployment
 

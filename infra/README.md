@@ -15,7 +15,7 @@ the compute provider, so moving the containers does not require a data migration
 The application code imports no GCP SDK and contains no GCP resource names.
 Provider-specific secret names, IAM, image registries, scaling, and deployment
 commands live only under `infra/gcp/`. GCP currently has two interchangeable
-backend adapters: Cloud Run and an Ubuntu Compute Engine VM behind Nginx.
+stack adapters: Cloud Run and an Ubuntu Compute Engine VM behind Nginx.
 
 ## Switching providers
 
