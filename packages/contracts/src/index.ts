@@ -19,14 +19,38 @@ export type CoachMessage = {
   content: string;
   safetyCategory: "none" | "pain" | "medical" | "emergency";
   createdAt: string;
+  editedAt?: string | null;
 };
+
+export type CoachThread = {
+  id: string;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+  lastMessageAt: string | null;
+  messageCount: number;
+};
+
+export type CoachThreadDetail = {
+  thread: CoachThread;
+  messages: CoachMessage[];
+};
+
+export type CoachThreadListResponse = { threads: CoachThread[] };
+export type CreateCoachThreadRequest = { title?: string };
+export type CreateCoachThreadResponse = { thread: CoachThread };
+export type UpdateCoachThreadRequest = { title: string };
+export type UpdateCoachMessageRequest = { content: string };
 
 export type CoachRequest = {
   message: string;
+  threadId?: string;
   sessionId?: string;
 };
 
 export type CoachResponse = {
+  thread: CoachThread;
+  userMessage: CoachMessage;
   message: CoachMessage;
   shouldPauseWorkout: boolean;
   suggestedAdjustment: string | null;

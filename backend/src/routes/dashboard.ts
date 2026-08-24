@@ -27,7 +27,6 @@ export async function dashboardRoutes(app: FastifyInstance) {
     const [
       profile,
       activePlan,
-      upcomingWorkouts,
       activeSession,
       recentSessions,
       progressSessions,
@@ -43,19 +42,6 @@ export async function dashboardRoutes(app: FastifyInstance) {
             { userId: user.id, status: "active" },
             { projection: { _id: 0 }, sort: { createdAt: -1 } },
           ),
-        database
-          .collection<PlannedWorkoutDocument>("plannedWorkouts")
-          .find(
-            {
-              userId: user.id,
-              status: { $in: ["planned", "in_progress"] },
-              scheduledFor: { $gte: today },
-            },
-            { projection: { _id: 0 } },
-          )
-          .sort({ scheduledFor: 1 })
-          .limit(14)
-          .toArray(),
         database.collection<WorkoutSessionDocument>("workoutSessions").findOne(
           { userId: user.id, status: { $in: ["active", "paused"] } },
           { projection: { _id: 0 }, sort: { updatedAt: -1 } },
@@ -79,6 +65,23 @@ export async function dashboardRoutes(app: FastifyInstance) {
           .limit(20)
           .toArray(),
       ]);
+
+    const upcomingWorkouts = activePlan
+      ? await database
+          .collection<PlannedWorkoutDocument>("plannedWorkouts")
+          .find(
+            {
+              userId: user.id,
+              planId: activePlan.id,
+              status: { $in: ["planned", "in_progress"] },
+              scheduledFor: { $gte: today },
+            },
+            { projection: { _id: 0 } },
+          )
+          .sort({ weekNumber: 1, dayOffset: 1 })
+          .limit(28)
+          .toArray()
+      : [];
 
     return {
       profile: profile ? serializeProfile(profile) : null,
