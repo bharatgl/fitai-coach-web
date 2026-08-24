@@ -5,6 +5,8 @@
 ```mermaid
 flowchart LR
   U[Browser] -->|HTTPS| N[Nginx<br/>Ubuntu VM]
+  U -->|local frames only| P[MediaPipe Pose<br/>on device]
+  P -->|rep and ROM summaries| U
   N --> F[Next.js frontend<br/>Docker]
   N --> B[Fastify backend<br/>Docker]
   F -->|Auth.js| G[Google OAuth]
@@ -73,12 +75,39 @@ also avoids cross-origin browser calls and keeps preview deployments simpler.
 5. The dashboard serializes typed session history and lifetime progress; the
    browser never supplies a user ID for any workout operation.
 
+### Live movement tracking
+
+1. The user selects a supported exercise and explicitly consents before the
+   browser requests camera permission.
+2. A pinned MediaPipe Tasks Vision model estimates pose landmarks locally at a
+   throttled frame rate. Video frames and landmark arrays never enter an API
+   request, application database, analytics event, or AI prompt.
+3. Deterministic joint-angle state machines require at least 0.65 landmark
+   confidence and a complete extension-to-flexion-to-extension cycle before
+   producing a rep.
+4. The browser batches only event IDs, exercise IDs, timestamps, rep numbers,
+   duration, confidence, and range-of-motion degrees through the authenticated
+   same-origin API proxy.
+5. The backend strictly rejects unknown fields, events for another exercise,
+   paused or closed sessions, invalid timestamps, and confidence below the
+   supported threshold. A unique event ID makes retries idempotent.
+6. Turning the camera off, pausing, closing, or leaving the workout immediately
+   stops every media track and closes the local pose task. Manual set logging is
+   always available and unsupported exercises never use guessed tracking rules.
+
+The MediaPipe runtime and model are fetched from version-pinned Google/jsDelivr
+assets. MediaPipe may process non-frame performance and usage metrics, so that
+fact is included in the camera consent text. Self-hosting these assets remains
+an option if the production privacy review requires a tighter dependency
+boundary.
+
 ## MongoDB ownership
 
 Auth.js owns its account/session collections. The backend owns `appUsers`,
 `profiles`, `exercises`, `workoutPlans`, `plannedWorkouts`, `workoutSessions`,
-and `coachMessages`. Both apps use the same Atlas database initially, but the
-backend is the only component allowed to read or write fitness records.
+`movementEvents`, `coachThreads`, and `coachMessages`. Both apps use the same
+Atlas database initially, but the backend is the only component allowed to read
+or write fitness records.
 
 Use separate Atlas database users in production:
 
@@ -143,8 +172,8 @@ Connect these only when their milestone needs them:
 - **PostHog:** consent-aware product analytics using event names and coarse
   properties only; never capture camera frames, free-text health notes, or coach
   conversation content.
-- **MediaPipe Tasks Vision:** on-device pose landmarks for the live-session
-  milestone, keeping raw video in the browser.
+- **MediaPipe Tasks Vision:** integrated for consent-gated, on-device pose
+  landmarks. Raw video and landmarks remain in the browser.
 
 The first operational integration should be Sentry, followed by distributed
 rate limiting. A job system becomes valuable when adaptive plan generation is

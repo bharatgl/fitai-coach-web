@@ -140,6 +140,26 @@ export type WorkoutProgress = {
 export type StartWorkoutResponse = { session: WorkoutSession };
 export type WorkoutSessionResponse = { session: WorkoutSession };
 
+export type MovementEventSummary = {
+  clientEventId: string;
+  exerciseId: string;
+  repNumber: number;
+  occurredAt: string;
+  durationMs: number;
+  rangeOfMotionDegrees: number;
+  confidence: number;
+  source: "mediapipe_pose";
+};
+
+export type RecordMovementEventsRequest = {
+  events: MovementEventSummary[];
+};
+
+export type RecordMovementEventsResponse = {
+  accepted: number;
+  duplicates: number;
+};
+
 export type LogWorkoutSetRequest = {
   exerciseId: string;
   reps: number;

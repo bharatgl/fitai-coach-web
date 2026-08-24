@@ -52,6 +52,11 @@ export async function ensureIndexes() {
       { unique: true, partialFilterExpression: { activeSlot: { $type: "string" } } },
     ),
     database.collection("workoutSessions").createIndex({ userId: 1, status: 1, updatedAt: -1 }),
+    database.collection("movementEvents").createIndex(
+      { sessionId: 1, clientEventId: 1 },
+      { unique: true },
+    ),
+    database.collection("movementEvents").createIndex({ userId: 1, sessionId: 1, occurredAt: 1 }),
     database.collection("coachMessages").createIndex({ userId: 1, createdAt: -1 }),
     database.collection("coachMessages").createIndex({ userId: 1, threadId: 1, createdAt: 1 }),
     database.collection("coachThreads").createIndex({ userId: 1, updatedAt: -1 }),

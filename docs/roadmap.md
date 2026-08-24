@@ -53,12 +53,16 @@ workout execution supplies real completion and effort data.
 - Enforce one active workout per user and optimistic concurrency on session updates.
 - Include an isolated HTTP/Atlas E2E test with guaranteed record cleanup.
 
-## 7. Live movement intelligence — next
+## 7. Live movement intelligence — in progress
 
 - Run pose estimation on-device so raw camera video is not uploaded.
 - Convert joint landmarks into validated rep and range-of-motion events.
-- Send only compact event summaries to the API/AI coach.
-- Add consent, camera-off behavior, confidence thresholds, and device testing.
+- Send only compact event summaries to the API.
+- Add consent, camera-off behavior, and confidence thresholds.
+- Complete camera and rep-threshold testing across the supported mobile and
+  desktop device/browser matrix before deployment.
+- Add validated movement summaries to live AI coach context after device
+  thresholds are calibrated.
 
 ## 8. Voice experience
 

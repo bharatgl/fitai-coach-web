@@ -193,3 +193,37 @@
   .plan-day-heading .ui-status-badge{justify-self:start}
   .plan-day .session-start{width:100%}
 }
+
+/* Privacy-first, on-device movement tracking. */
+.movement-tracker{display:grid;gap:1.5rem;grid-template-columns:minmax(0,.85fr) minmax(22rem,1.15fr);margin-top:1.75rem;padding:1.5rem}
+.movement-tracker-copy{align-content:start;display:grid;min-width:0}
+.movement-tracker-copy .ui-eyebrow{margin-bottom:.45rem}
+.movement-tracker-copy h2,.movement-tracker-empty h2{font:1.65rem/1.1 Georgia,serif;margin:0}
+.movement-tracker-copy>p,.movement-tracker-empty>p{color:var(--muted);font-size:.75rem;line-height:1.6;margin:.75rem 0 1.25rem}
+.movement-exercise-select{color:#526668;display:grid;font-size:.6875rem;font-weight:800;gap:.45rem}
+.movement-exercise-select select{background:#fbfdfc;border:1px solid #cfded9;border-radius:.6rem;color:var(--ink);font:inherit;padding:.7rem .75rem;width:100%}
+.camera-consent{align-items:flex-start;background:#f3f8f6;border-radius:.75rem;color:#526668;display:flex;font-size:.6875rem;gap:.65rem;line-height:1.5;margin-top:.85rem;padding:.8rem}
+.camera-consent input{accent-color:var(--teal);flex:none;height:1rem;margin:.1rem 0 0;width:1rem}
+.movement-tracker-actions{align-items:center;display:flex;gap:.75rem;margin-top:1rem}
+.movement-tracker-actions small{color:var(--muted);font-size:.625rem}
+.movement-camera{background:radial-gradient(circle at 50% 40%,#1f6164,#123b40 42%,#0e292e 78%);border-radius:1rem;display:grid;min-height:22rem;overflow:hidden;place-items:center;position:relative}
+.movement-camera video,.movement-camera canvas{height:100%;inset:0;object-fit:cover;position:absolute;transform:scaleX(-1);width:100%}
+.movement-camera canvas{pointer-events:none}
+.movement-camera>span{align-items:center;background:#28686a;border-radius:50%;box-shadow:0 0 0 .75rem rgb(126 231 203 / 12%);color:#b9f4e0;display:flex;font-size:1.5rem;height:3.5rem;justify-content:center;width:3.5rem}
+.movement-camera-status{background:rgb(6 34 38 / 86%);border:1px solid rgb(183 244 225 / 20%);border-radius:.75rem;bottom:.85rem;color:#effbf8;display:grid;gap:.2rem;left:.85rem;padding:.65rem .75rem;position:absolute;right:.85rem}
+.movement-camera-status strong{font-size:.75rem}
+.movement-camera-status small{color:#bed8d2;font-size:.625rem;line-height:1.45}
+.movement-camera-status .movement-sync-error{color:#ffd0b1}
+.movement-tracker-empty{margin-top:1.75rem;padding:1.5rem}
+
+@media(max-width:800px){
+  .movement-tracker{grid-template-columns:1fr}
+  .movement-camera{min-height:20rem;order:-1}
+}
+
+@media(max-width:480px){
+  .movement-tracker{margin-inline:-.25rem;padding:1rem}
+  .movement-camera{min-height:17rem}
+  .movement-tracker-actions{align-items:stretch;display:grid}
+  .movement-tracker-actions .ui-button{width:100%}
+}

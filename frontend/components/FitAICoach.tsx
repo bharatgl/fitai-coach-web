@@ -26,6 +26,7 @@ import {
 import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { apiRequest } from "@/lib/api";
+import { MovementTracker } from "@/components/MovementTracker";
 
 type View = "today" | "coach" | "plan" | "history" | "workout";
 type CurrentUser = { id: string; name: string; email: string };
@@ -909,6 +910,7 @@ function WorkoutRunner({
         <section className="pause-banner">Workout paused. Resume it before recording another set.</section>
       )}
       {error && <p className="form-error plan-error" role="alert">{error}</p>}
+      <MovementTracker key={`${session.id}-${session.status}`} session={session} />
       <section className="workout-exercises">
         {session.exercises.map((exercise) => (
           <ExerciseLogger
