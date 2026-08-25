@@ -2,16 +2,19 @@ import assert from "node:assert/strict";
 import { access, readFile } from "node:fs/promises";
 import test from "node:test";
 
-test("protects the app and calls the authenticated backend", async () => {
-  const [page, tokenFactory, apiClient, coach] = await Promise.all([
+test("shows a public landing page and protects the coaching workspace", async () => {
+  const [page, landing, tokenFactory, apiClient, coach] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/LandingPage.tsx", import.meta.url), "utf8"),
     readFile(new URL("../lib/backend-token.ts", import.meta.url), "utf8"),
     readFile(new URL("../lib/api.ts", import.meta.url), "utf8"),
     readFile(new URL("../components/FitAICoach.tsx", import.meta.url), "utf8"),
   ]);
 
   assert.match(page, /await auth\(\)/);
-  assert.match(page, /redirect\("\/signin"\)/);
+  assert.match(page, /return <LandingPage \/>/);
+  assert.match(landing, /href="\/signin"/);
+  assert.match(landing, /Training that adapts/);
   assert.match(tokenFactory, /setExpirationTime\("5m"\)/);
   assert.match(tokenFactory, /setAudience\("fitai-backend"\)/);
   assert.match(apiClient, /\/api\/backend/);
