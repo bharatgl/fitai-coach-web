@@ -1,12 +1,12 @@
-import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import FitAICoach from "@/components/FitAICoach";
+import LandingPage from "@/components/LandingPage";
 
 export const dynamic = "force-dynamic";
 
 export default async function Home() {
   const session = await auth();
-  if (!session?.user?.id || !session.user.email) redirect("/signin");
+  if (!session?.user?.id || !session.user.email) return <LandingPage />;
 
   return (
     <FitAICoach
