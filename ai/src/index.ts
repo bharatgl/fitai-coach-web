@@ -1,4 +1,5 @@
 export {
+  buildCoachContents,
   generateCoachResponse,
   type CoachHistoryItem,
   type GeneratedCoachResponse,

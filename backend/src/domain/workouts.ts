@@ -5,7 +5,10 @@ import type {
   WorkoutSessionExercise,
   WorkoutSetLog,
 } from "@fitai/contracts";
-import type { ExerciseDefinition } from "./exercise-catalog.js";
+import {
+  exerciseVideoForId,
+  type ExerciseDefinition,
+} from "./exercise-catalog.js";
 import type { PlannedWorkoutDocument } from "./plans.js";
 
 type WorkoutSetLogDocument = Omit<WorkoutSetLog, "completedAt"> & {
@@ -99,6 +102,7 @@ export function createWorkoutSession(
     exercises: workout.exercises.map((exercise) => ({
       exerciseId: exercise.exerciseId,
       name: exercise.name,
+      video: exercise.video ?? exerciseVideoForId(exercise.exerciseId),
       prescribedSets: exercise.sets,
       repRange: exercise.repRange,
       coachingNotes: exercise.coachingNotes,
@@ -211,6 +215,7 @@ export function substituteWorkoutExercise(
           ...item,
           exerciseId: replacement.id,
           name: replacement.name,
+          video: replacement.video,
           coachingNotes: replacement.guidance,
           substitutedFor: {
             exerciseId: item.substitutedFor?.exerciseId ?? item.exerciseId,
@@ -342,6 +347,7 @@ export function serializeWorkoutSession(
     status: session.status,
     exercises: session.exercises.map((exercise) => ({
       ...exercise,
+      video: exercise.video ?? exerciseVideoForId(exercise.exerciseId),
       sets: exercise.sets.map((set) => ({
         ...set,
         completedAt: set.completedAt.toISOString(),

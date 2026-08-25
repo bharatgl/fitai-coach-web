@@ -1,10 +1,12 @@
 export async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
+  const headers = new Headers(init?.headers);
+  if (init?.body != null && !headers.has("content-type")) {
+    headers.set("content-type", "application/json");
+  }
+
   const response = await fetch(`/api/backend${path.replace(/^\/v1/, "")}`, {
     ...init,
-    headers: {
-      "content-type": "application/json",
-      ...init?.headers,
-    },
+    headers,
   });
 
   const body = (await response.json().catch(() => null)) as

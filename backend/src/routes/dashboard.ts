@@ -94,6 +94,18 @@ export async function dashboardRoutes(app: FastifyInstance) {
         id: String(message.id),
         role: message.role as "user" | "assistant",
         content: String(message.content),
+        attachments: Array.isArray(message.attachments)
+          ? message.attachments.map((attachment) => ({
+            id: String(attachment.id),
+            name: String(attachment.name),
+            mimeType: attachment.mimeType as
+              | "image/jpeg"
+              | "image/png"
+              | "image/webp"
+              | "application/pdf",
+            size: Number(attachment.size),
+          }))
+          : [],
         safetyCategory: message.safetyCategory as
           | "none"
           | "pain"

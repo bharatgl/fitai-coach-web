@@ -2,6 +2,8 @@ import type {
   ChangeWorkoutStatusRequest,
   FinishWorkoutRequest,
   LogWorkoutSetRequest,
+  RecordMovementEventsRequest,
+  RecordMovementEventsResponse,
   StartWorkoutResponse,
   SubstituteExerciseRequest,
   WorkoutSessionResponse,
@@ -12,6 +14,10 @@ import { z } from "zod";
 import { authenticate } from "../auth.js";
 import { getDatabase, getMongoClient } from "../db.js";
 import { availableExercises } from "../domain/exercise-catalog.js";
+import {
+  prepareMovementEvents,
+  type MovementEventDocument,
+} from "../domain/movement-events.js";
 import type { PlannedWorkoutDocument } from "../domain/plans.js";
 import { serializeProfile } from "../domain/profiles.js";
 import {
@@ -48,6 +54,18 @@ const finishInput = z.object({
 const abandonInput = z.object({
   reflection: z.string().trim().max(2_000).default(""),
 });
+const movementEventInput = z.object({
+  events: z.array(z.object({
+    clientEventId: z.uuid(),
+    exerciseId: z.string().trim().min(1).max(120),
+    repNumber: z.number().int().min(1).max(500),
+    occurredAt: z.iso.datetime({ offset: true }),
+    durationMs: z.number().int().min(250).max(20_000),
+    rangeOfMotionDegrees: z.number().min(5).max(180),
+    confidence: z.number().min(0.65).max(1),
+    source: z.literal("mediapipe_pose"),
+  }).strict()).min(1).max(25),
+}).strict();
 
 async function findSession(database: Db, id: string, userId: string) {
   const session = await database
@@ -224,6 +242,33 @@ export async function workoutRoutes(app: FastifyInstance) {
       const replacement = chooseSubstitute(current, input.exerciseId, catalog);
       const next = substituteWorkoutExercise(current, input.exerciseId, replacement);
       return { session: serializeWorkoutSession(await replaceSession(database, current, next)) };
+    },
+  );
+
+  app.post<{ Params: { id: string }; Body: RecordMovementEventsRequest }>(
+    "/v1/workout-sessions/:id/movement-events",
+    { config: { rateLimit: { max: 30, timeWindow: "1 minute" } } },
+    async (request): Promise<RecordMovementEventsResponse> => {
+      const user = await authenticate(request);
+      const { id } = idParams.parse(request.params);
+      const input = movementEventInput.parse(request.body);
+      const database = await getDatabase();
+      const session = await findSession(database, id, user.id);
+      const events = prepareMovementEvents(session, user.id, input.events);
+      const result = await database.collection<MovementEventDocument>("movementEvents").bulkWrite(
+        events.map((event) => ({
+          updateOne: {
+            filter: { sessionId: event.sessionId, clientEventId: event.clientEventId },
+            update: { $setOnInsert: event },
+            upsert: true,
+          },
+        })),
+        { ordered: false },
+      );
+      return {
+        accepted: result.upsertedCount,
+        duplicates: events.length - result.upsertedCount,
+      };
     },
   );
 

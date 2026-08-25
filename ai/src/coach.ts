@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { ContentListUnion, Part } from "@google/genai";
 import { generateGeminiStructured } from "./gemini.js";
 import { classifySafetyMessage, type CoachSafetyResult } from "./safety.js";
 
@@ -9,7 +10,7 @@ const coachOutput = z.object({
   suggestedAdjustment: z.string().max(500).nullable(),
 });
 
-const systemPrompt = `You are FitAI Coach, a conservative fitness guidance assistant.
+const systemPrompt = `You are ForgeFit Coach for forgefit.space, a conservative fitness guidance assistant.
 You may explain exercises, adjust training volume, and support adherence.
 You must not diagnose, treat, or claim to replace a qualified clinician.
 If the user reports pain, neurological symptoms, breathing problems, fainting, or a possible injury, tell them to stop the workout and seek appropriate professional or emergency help.
@@ -26,11 +27,42 @@ export type GenerateCoachResponseInput = {
   profile: unknown;
   history: CoachHistoryItem[];
   message: string;
+  attachments?: Array<{
+    name: string;
+    mimeType: string;
+    dataBase64: string;
+  }>;
 };
 
 export type GeneratedCoachResponse = CoachSafetyResult & {
   model: string | null;
 };
+
+export function buildCoachContents(
+  input: Pick<GenerateCoachResponseInput, "profile" | "history" | "message" | "attachments">,
+): ContentListUnion {
+  const context = JSON.stringify({
+    userProfile: input.profile ?? {},
+    recentConversation: input.history,
+    currentMessage: input.message,
+    attachedFiles: input.attachments?.map(({ name, mimeType }) => ({ name, mimeType })) ?? [],
+  });
+  if (!input.attachments?.length) return context;
+
+  const parts: Part[] = [
+    { text: context },
+    ...input.attachments.flatMap((attachment): Part[] => [
+      { text: `Attached file: ${attachment.name}` },
+      {
+        inlineData: {
+          data: attachment.dataBase64,
+          mimeType: attachment.mimeType,
+        },
+      },
+    ]),
+  ];
+  return [{ role: "user", parts }];
+}
 
 export async function generateCoachResponse(
   input: GenerateCoachResponseInput,
@@ -44,11 +76,7 @@ export async function generateCoachResponse(
     schema: coachOutput,
     systemInstruction: systemPrompt,
     maxOutputTokens: 2_000,
-    contents: JSON.stringify({
-      userProfile: input.profile ?? {},
-      recentConversation: input.history,
-      currentMessage: input.message,
-    }),
+    contents: buildCoachContents(input),
   });
 
   return { ...result, model: input.model };

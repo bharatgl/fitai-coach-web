@@ -31,6 +31,7 @@ const workout: PlannedWorkoutDocument = {
     {
       exerciseId: "goblet-squat",
       name: "Goblet Squat",
+      video: null,
       sets: 2,
       repRange: "8-10 reps",
       restSeconds: 90,
@@ -40,6 +41,7 @@ const workout: PlannedWorkoutDocument = {
     {
       exerciseId: "dumbbell-floor-press",
       name: "Dumbbell Floor Press",
+      video: null,
       sets: 2,
       repRange: "8-12 reps",
       restSeconds: 90,
@@ -59,6 +61,7 @@ test("creates a real execution session from a planned workout", () => {
   assert.equal(session.activeSlot, "user-1");
   assert.equal(session.status, "active");
   assert.equal(session.exercises[0]?.prescribedSets, 2);
+  assert.equal(session.exercises[0]?.video?.provider, "youtube");
   assert.equal(session.exercises[0]?.sets.length, 0);
 });
 
@@ -122,6 +125,7 @@ test("selects a compatible same-pattern substitute before sets are logged", () =
   assert.notEqual(replacement.id, "goblet-squat");
   const updated = substituteWorkoutExercise(session, "goblet-squat", replacement);
   assert.equal(updated.exercises[0]?.substitutedFor?.exerciseId, "goblet-squat");
+  assert.equal(updated.exercises[0]?.video?.videoId, replacement.video.videoId);
 
   const logged = logWorkoutSet(
     updated,

@@ -1,22 +1,36 @@
 export type ExperienceLevel = "beginner" | "intermediate" | "advanced";
+export type Gender = "woman" | "man" | "non_binary" | "prefer_not_to_say";
 
 export type UserProfile = {
   userId: string;
   email: string;
   displayName: string;
   experienceLevel: ExperienceLevel;
+  gender: Gender;
+  age: number | null;
+  heightCm: number | null;
+  weightKg: number | null;
   primaryGoal: string;
   equipment: string[];
   trainingDaysPerWeek: number;
   preferredSessionMinutes: number;
   movementNotes: string;
+  bodyConsiderations: string;
   onboardingCompletedAt: string | null;
+};
+
+export type CoachAttachment = {
+  id: string;
+  name: string;
+  mimeType: "image/jpeg" | "image/png" | "image/webp" | "application/pdf";
+  size: number;
 };
 
 export type CoachMessage = {
   id: string;
   role: "user" | "assistant";
   content: string;
+  attachments: CoachAttachment[];
   safetyCategory: "none" | "pain" | "medical" | "emergency";
   createdAt: string;
   editedAt?: string | null;
@@ -25,6 +39,8 @@ export type CoachMessage = {
 export type CoachThread = {
   id: string;
   title: string;
+  pinned: boolean;
+  archived: boolean;
   createdAt: string;
   updatedAt: string;
   lastMessageAt: string | null;
@@ -39,13 +55,28 @@ export type CoachThreadDetail = {
 export type CoachThreadListResponse = { threads: CoachThread[] };
 export type CreateCoachThreadRequest = { title?: string };
 export type CreateCoachThreadResponse = { thread: CoachThread };
-export type UpdateCoachThreadRequest = { title: string };
+export type UpdateCoachThreadRequest = {
+  title?: string;
+  pinned?: boolean;
+  archived?: boolean;
+};
 export type UpdateCoachMessageRequest = { content: string };
 
 export type CoachRequest = {
   message: string;
+  attachmentIds?: string[];
   threadId?: string;
   sessionId?: string;
+};
+
+export type UploadCoachAttachmentRequest = {
+  name: string;
+  mimeType: CoachAttachment["mimeType"];
+  dataBase64: string;
+};
+
+export type UploadCoachAttachmentResponse = {
+  attachment: CoachAttachment;
 };
 
 export type CoachResponse = {
@@ -56,9 +87,17 @@ export type CoachResponse = {
   suggestedAdjustment: string | null;
 };
 
+export type ExerciseVideo = {
+  provider: "youtube";
+  videoId: string;
+  title: string;
+  channel: string;
+};
+
 export type PlanExercise = {
   exerciseId: string;
   name: string;
+  video: ExerciseVideo | null;
   sets: number;
   repRange: string;
   restSeconds: number;
@@ -104,6 +143,7 @@ export type WorkoutSetLog = {
 export type WorkoutSessionExercise = {
   exerciseId: string;
   name: string;
+  video: ExerciseVideo | null;
   prescribedSets: number;
   repRange: string;
   coachingNotes: string;
@@ -139,6 +179,26 @@ export type WorkoutProgress = {
 
 export type StartWorkoutResponse = { session: WorkoutSession };
 export type WorkoutSessionResponse = { session: WorkoutSession };
+
+export type MovementEventSummary = {
+  clientEventId: string;
+  exerciseId: string;
+  repNumber: number;
+  occurredAt: string;
+  durationMs: number;
+  rangeOfMotionDegrees: number;
+  confidence: number;
+  source: "mediapipe_pose";
+};
+
+export type RecordMovementEventsRequest = {
+  events: MovementEventSummary[];
+};
+
+export type RecordMovementEventsResponse = {
+  accepted: number;
+  duplicates: number;
+};
 
 export type LogWorkoutSetRequest = {
   exerciseId: string;

@@ -25,29 +25,35 @@ async function proxy(request: NextRequest, context: RouteContext) {
       email: session.user.email,
       name: session.user.name ?? session.user.email,
     });
+    const canHaveBody = request.method !== "GET" && request.method !== "HEAD";
+    const requestBody = canHaveBody ? await request.arrayBuffer() : undefined;
+    const hasBody = Boolean(requestBody?.byteLength);
 
     const response = await fetch(target, {
       method: request.method,
       headers: {
         authorization: `Bearer ${token}`,
         accept: "application/json",
-        ...(request.headers.get("content-type")
+        ...(hasBody && request.headers.get("content-type")
           ? { "content-type": request.headers.get("content-type")! }
           : {}),
       },
-      body:
-        request.method === "GET" || request.method === "HEAD"
-          ? undefined
-          : await request.arrayBuffer(),
+      body: hasBody ? requestBody : undefined,
       cache: "no-store",
       signal: AbortSignal.timeout(60_000),
     });
 
+    const responseHeaders = new Headers({
+      "content-type": response.headers.get("content-type") ?? "application/json",
+    });
+    for (const header of ["content-disposition", "content-length", "cache-control"]) {
+      const value = response.headers.get(header);
+      if (value) responseHeaders.set(header, value);
+    }
+
     return new Response(response.body, {
       status: response.status,
-      headers: {
-        "content-type": response.headers.get("content-type") ?? "application/json",
-      },
+      headers: responseHeaders,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Backend request failed";
