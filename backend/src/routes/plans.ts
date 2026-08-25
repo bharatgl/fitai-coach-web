@@ -104,7 +104,7 @@ export async function planRoutes(app: FastifyInstance) {
           if (error instanceof PlanValidationError) {
             request.log.warn({ error: error.message }, "Generated plan failed validation");
             return reply.code(502).send({
-              error: "The generated plan did not pass FitAI safety validation. Please retry.",
+              error: "The generated plan did not pass forgefit.space safety validation. Please retry.",
             });
           }
           throw error;

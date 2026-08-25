@@ -1,6 +1,6 @@
-# FitAI UI
+# forgefit.space UI
 
-`@fitai/ui` is the product design system shared by every FitAI web surface.
+`@fitai/ui` is the product design system shared by every forgefit.space web surface.
 
 ## What belongs here
 

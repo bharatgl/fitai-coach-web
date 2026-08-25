@@ -18,6 +18,7 @@ function kneeLandmarks(angleDegrees: number, visibility = 0.95): PosePoint[] {
 test("selects supported movement profiles without guessing unsupported exercises", () => {
   assert.equal(movementProfileForExercise("goblet-squat", "Goblet Squat")?.joint, "knee");
   assert.equal(movementProfileForExercise("push-up", "Push-Up")?.joint, "elbow");
+  assert.equal(movementProfileForExercise("glute-bridge", "Glute Bridge")?.kind, "hinge");
   assert.equal(movementProfileForExercise("bird-dog", "Bird Dog"), null);
 });
 

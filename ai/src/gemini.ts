@@ -1,4 +1,4 @@
-import { ApiError, GoogleGenAI } from "@google/genai";
+import { ApiError, GoogleGenAI, type ContentListUnion } from "@google/genai";
 import { z } from "zod";
 import { AiProviderError } from "./provider-error.js";
 
@@ -33,7 +33,7 @@ type GenerateGeminiStructuredInput<T> = {
   model: string;
   schema: z.ZodType<T>;
   systemInstruction: string;
-  contents: string;
+  contents: ContentListUnion;
   maxOutputTokens: number;
 };
 

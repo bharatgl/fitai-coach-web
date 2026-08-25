@@ -35,6 +35,7 @@ function plannedWorkout(
       {
         exerciseId,
         name: exerciseName,
+        video: null,
         sets: 1,
         repRange: "8-10 reps",
         restSeconds: 60,

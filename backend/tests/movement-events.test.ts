@@ -20,6 +20,7 @@ const workout: PlannedWorkoutDocument = {
   exercises: [{
     exerciseId: "bodyweight-squat",
     name: "Bodyweight Squat",
+    video: null,
     sets: 2,
     repRange: "8-10 reps",
     restSeconds: 60,

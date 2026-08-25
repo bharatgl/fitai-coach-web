@@ -64,6 +64,8 @@ export function movementProfileForExercise(exerciseId: string, name: string) {
   if (
     value.includes("deadlift") ||
     value.includes("hinge") ||
+    value.includes("glute-bridge") ||
+    value.includes("glute bridge") ||
     value.includes("romanian") ||
     value.includes("good-morning")
   ) return PROFILES.hinge;

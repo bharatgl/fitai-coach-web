@@ -1,4 +1,4 @@
-# FitAI Coach architecture
+# forgefit.space architecture
 
 ## Runtime design
 
@@ -112,7 +112,7 @@ or write fitness records.
 Use separate Atlas database users in production:
 
 - Frontend credential: Auth.js collections only.
-- Backend credential: FitAI application collections only.
+- Backend credential: forgefit.space application collections only.
 
 This can be tightened after Auth.js collection names are confirmed in the
 deployed environment. Backups, point-in-time recovery, and an Atlas region near

@@ -15,11 +15,16 @@ const profile: UserProfile = {
   email: "user@example.com",
   displayName: "Test User",
   experienceLevel: "beginner",
+  gender: "prefer_not_to_say",
+  age: 32,
+  heightCm: 172,
+  weightKg: 72,
   primaryGoal: "Build general strength",
   equipment: ["dumbbells"],
   trainingDaysPerWeek: 2,
   preferredSessionMinutes: 35,
   movementNotes: "",
+  bodyConsiderations: "",
   onboardingCompletedAt: "2026-08-20T00:00:00.000Z",
 };
 
@@ -33,30 +38,33 @@ const draft: GeneratedPlanDraft = {
     "Add a small amount of load while preserving technique",
     "Consolidate with the same or slightly lower volume",
   ],
-  days: [
-    {
-      dayOffset: 0,
-      name: "Strength A",
-      focus: "Squat, push, and core",
-      estimatedMinutes: 35,
-      exercises: [
-        { exerciseId: "goblet-squat", sets: 3, repRange: "8-10 reps", restSeconds: 90, tempo: null, coachingNotes: "Use a controlled depth." },
-        { exerciseId: "dumbbell-floor-press", sets: 3, repRange: "8-12 reps", restSeconds: 90, tempo: null, coachingNotes: "Keep wrists stacked." },
-        { exerciseId: "dead-bug", sets: 2, repRange: "6-8 per side", restSeconds: 45, tempo: null, coachingNotes: "Keep the back comfortable." },
-      ],
-    },
-    {
-      dayOffset: 3,
-      name: "Strength B",
-      focus: "Hinge, pull, and carry",
-      estimatedMinutes: 35,
-      exercises: [
-        { exerciseId: "dumbbell-rdl", sets: 3, repRange: "8-10 reps", restSeconds: 90, tempo: null, coachingNotes: "Move through the hips." },
-        { exerciseId: "one-arm-dumbbell-row", sets: 3, repRange: "8-12 per side", restSeconds: 75, tempo: null, coachingNotes: "Keep the torso braced." },
-        { exerciseId: "farmer-carry", sets: 3, repRange: "30 seconds", restSeconds: 60, tempo: null, coachingNotes: "Walk tall." },
-      ],
-    },
-  ],
+  weeks: [1, 2, 3, 4].map((weekNumber) => ({
+    weekNumber,
+    days: [
+      {
+        dayOffset: 0,
+        name: `Strength A${weekNumber}`,
+        focus: "Squat, push, and core",
+        estimatedMinutes: 35,
+        exercises: [
+          { exerciseId: "goblet-squat", sets: 3, repRange: `${7 + weekNumber}-10 reps`, restSeconds: 90, tempo: null, coachingNotes: "Use a controlled depth." },
+          { exerciseId: "dumbbell-floor-press", sets: 3, repRange: "8-12 reps", restSeconds: 90, tempo: null, coachingNotes: "Keep wrists stacked." },
+          { exerciseId: "dead-bug", sets: 2, repRange: "6-8 per side", restSeconds: 45, tempo: null, coachingNotes: "Keep the back comfortable." },
+        ],
+      },
+      {
+        dayOffset: 3,
+        name: `Strength B${weekNumber}`,
+        focus: "Hinge, pull, and carry",
+        estimatedMinutes: 35,
+        exercises: [
+          { exerciseId: "dumbbell-rdl", sets: 3, repRange: "8-10 reps", restSeconds: 90, tempo: null, coachingNotes: "Move through the hips." },
+          { exerciseId: "one-arm-dumbbell-row", sets: 3, repRange: "8-12 per side", restSeconds: 75, tempo: null, coachingNotes: "Keep the torso braced." },
+          { exerciseId: "farmer-carry", sets: 3, repRange: `${25 + weekNumber * 5} seconds`, restSeconds: 60, tempo: null, coachingNotes: "Walk tall." },
+        ],
+      },
+    ],
+  })),
 };
 
 test("filters the exercise catalog by equipment and experience", () => {
@@ -83,11 +91,36 @@ test("materializes four weeks of dated workouts from a validated plan", () => {
   assert.equal(generated.workouts[0]?.scheduledFor.toISOString(), "2026-08-24T00:00:00.000Z");
   assert.equal(generated.workouts[7]?.scheduledFor.toISOString(), "2026-09-17T00:00:00.000Z");
   assert.equal(generated.workouts[0]?.exercises[0]?.name, "Goblet Squat");
+  assert.equal(generated.workouts[0]?.exercises[0]?.video?.provider, "youtube");
+  assert.notEqual(
+    generated.workouts[0]?.exercises[0]?.repRange,
+    generated.workouts[2]?.exercises[0]?.repRange,
+  );
 });
 
 test("rejects plans that reference unavailable exercises", () => {
   const invalid = structuredClone(draft);
-  invalid.days[0]!.exercises[0]!.exerciseId = "invented-exercise";
+  invalid.weeks[0]!.days[0]!.exercises[0]!.exerciseId = "invented-exercise";
+  assert.throws(
+    () => validatePlanDraft(invalid, profile, availableExercises(profile.equipment, profile.experienceLevel)),
+    PlanValidationError,
+  );
+});
+
+test("rejects a copied week with identical prescriptions", () => {
+  const invalid = structuredClone(draft);
+  invalid.weeks[1]!.days = structuredClone(invalid.weeks[0]!.days);
+  assert.throws(
+    () => validatePlanDraft(invalid, profile, availableExercises(profile.equipment, profile.experienceLevel)),
+    PlanValidationError,
+  );
+});
+
+test("rejects identical workouts assigned to different dates", () => {
+  const invalid = structuredClone(draft);
+  invalid.weeks[0]!.days[1]!.exercises = structuredClone(
+    invalid.weeks[0]!.days[0]!.exercises,
+  );
   assert.throws(
     () => validatePlanDraft(invalid, profile, availableExercises(profile.equipment, profile.experienceLevel)),
     PlanValidationError,

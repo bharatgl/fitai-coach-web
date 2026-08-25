@@ -7,6 +7,10 @@ export function serializeProfile(document: Document): UserProfile {
     email: String(document.email),
     displayName: String(document.displayName),
     experienceLevel: document.experienceLevel as UserProfile["experienceLevel"],
+    gender: (document.gender ?? "prefer_not_to_say") as UserProfile["gender"],
+    age: document.age == null ? null : Number(document.age),
+    heightCm: document.heightCm == null ? null : Number(document.heightCm),
+    weightKg: document.weightKg == null ? null : Number(document.weightKg),
     primaryGoal: String(document.primaryGoal),
     equipment: Array.isArray(document.equipment)
       ? document.equipment.map(String)
@@ -14,6 +18,7 @@ export function serializeProfile(document: Document): UserProfile {
     trainingDaysPerWeek: Number(document.trainingDaysPerWeek),
     preferredSessionMinutes: Number(document.preferredSessionMinutes),
     movementNotes: String(document.movementNotes ?? ""),
+    bodyConsiderations: String(document.bodyConsiderations ?? ""),
     onboardingCompletedAt: document.onboardingCompletedAt
       ? new Date(document.onboardingCompletedAt as Date).toISOString()
       : null,

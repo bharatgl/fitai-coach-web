@@ -263,7 +263,7 @@ export function MovementTracker({ session }: { session: WorkoutSession }) {
       <div className="movement-tracker-copy">
         <Eyebrow>On-device movement tracking</Eyebrow>
         <h2>Private rep and range-of-motion feedback.</h2>
-        <p>Camera frames and pose landmarks stay in this browser. FitAI receives only compact rep timing, confidence, and range-of-motion summaries.</p>
+        <p>Camera frames and pose landmarks stay in this browser. forgefit.space receives only compact rep timing, confidence, and range-of-motion summaries.</p>
         <label className="movement-exercise-select">
           Exercise
           <select
