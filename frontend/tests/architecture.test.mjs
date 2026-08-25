@@ -3,9 +3,10 @@ import { access, readFile } from "node:fs/promises";
 import test from "node:test";
 
 test("shows a public landing page and protects the coaching workspace", async () => {
-  const [page, landing, tokenFactory, apiClient, coach] = await Promise.all([
+  const [page, landing, landingStyles, tokenFactory, apiClient, coach] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../components/LandingPage.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/LandingPage.module.css", import.meta.url), "utf8"),
     readFile(new URL("../lib/backend-token.ts", import.meta.url), "utf8"),
     readFile(new URL("../lib/api.ts", import.meta.url), "utf8"),
     readFile(new URL("../components/FitAICoach.tsx", import.meta.url), "utf8"),
@@ -14,7 +15,13 @@ test("shows a public landing page and protects the coaching workspace", async ()
   assert.match(page, /await auth\(\)/);
   assert.match(page, /return <LandingPage \/>/);
   assert.match(landing, /href="\/signin"/);
-  assert.match(landing, /Training that adapts/);
+  assert.match(landing, /Build strength/);
+  assert.match(landing, /BrandLockup/);
+  assert.match(landing, /On-device tracking/);
+  assert.match(landingStyles, /@media \(max-width: 60rem\)/);
+  assert.match(landingStyles, /@media \(max-width: 48rem\)/);
+  assert.match(landingStyles, /@media \(max-width: 36rem\)/);
+  assert.match(landingStyles, /@media \(max-width: 24rem\)/);
   assert.match(tokenFactory, /setExpirationTime\("5m"\)/);
   assert.match(tokenFactory, /setAudience\("fitai-backend"\)/);
   assert.match(apiClient, /\/api\/backend/);

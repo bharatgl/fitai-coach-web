@@ -12,7 +12,7 @@ export async function generateMetadata(): Promise<Metadata> {
     title: "forgefit.space — Adaptive training intelligence",
     description: "Adaptive workout programming, private live movement guidance, and account-aware AI coaching.",
     icons: { icon: "/favicon.svg", shortcut: "/favicon.svg" },
-    openGraph: { title: "forgefit.space", description: "Build strength. Track everything.", images: [{ url: image, width: 1600, height: 900, alt: "forgefit.space adaptive training system" }] },
+    openGraph: { title: "forgefit.space", description: "Build strength. Track everything.", images: [{ url: image, width: 1672, height: 941, alt: "forgefit.space adaptive training system" }] },
     twitter: { card: "summary_large_image", title: "forgefit.space", description: "Build strength. Track everything.", images: [image] },
   };
 }
