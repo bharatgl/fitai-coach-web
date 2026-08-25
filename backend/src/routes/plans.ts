@@ -41,6 +41,15 @@ export async function planRoutes(app: FastifyInstance) {
       }
 
       const profile = serializeProfile(profileDocument);
+      const activeWorkout = await database.collection("workoutSessions").findOne(
+        { userId: user.id, status: { $in: ["active", "paused"] } },
+        { projection: { _id: 1 } },
+      );
+      if (activeWorkout) {
+        return reply.code(409).send({
+          error: "Finish or abandon your active workout before generating a new plan",
+        });
+      }
       const exercises = availableExercises(profile.equipment, profile.experienceLevel);
       if (exercises.length < 6) {
         return reply.code(422).send({
@@ -109,6 +118,13 @@ export async function planRoutes(app: FastifyInstance) {
               .updateMany(
                 { userId: user.id, status: "active" },
                 { $set: { status: "archived" } },
+                { session },
+              );
+            await database
+              .collection<PlannedWorkoutDocument>("plannedWorkouts")
+              .updateMany(
+                { userId: user.id, status: "planned" },
+                { $set: { status: "skipped" } },
                 { session },
               );
             await database

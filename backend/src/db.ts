@@ -46,7 +46,19 @@ export async function ensureIndexes() {
     database.collection("plannedWorkouts").createIndex({ userId: 1, scheduledFor: 1 }),
     database.collection("plannedWorkouts").createIndex({ planId: 1, weekNumber: 1, dayOffset: 1 }, { unique: true }),
     database.collection("workoutSessions").createIndex({ userId: 1, startedAt: -1 }),
+    database.collection("workoutSessions").createIndex({ userId: 1, plannedWorkoutId: 1 }, { unique: true }),
+    database.collection("workoutSessions").createIndex(
+      { activeSlot: 1 },
+      { unique: true, partialFilterExpression: { activeSlot: { $type: "string" } } },
+    ),
+    database.collection("workoutSessions").createIndex({ userId: 1, status: 1, updatedAt: -1 }),
     database.collection("coachMessages").createIndex({ userId: 1, createdAt: -1 }),
+    database.collection("coachMessages").createIndex({ userId: 1, threadId: 1, createdAt: 1 }),
+    database.collection("coachThreads").createIndex({ userId: 1, updatedAt: -1 }),
+    database.collection("coachThreads").createIndex(
+      { legacyUserId: 1 },
+      { unique: true, partialFilterExpression: { legacyUserId: { $type: "string" } } },
+    ),
     database.collection("planGenerationLocks").createIndex({ userId: 1 }, { unique: true }),
     database.collection("planGenerationLocks").createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
   ]);

@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { Button, Card, Eyebrow } from "@fitai/ui";
 import { auth, signIn } from "@/auth";
 
 export default async function SignInPage() {
@@ -7,9 +8,9 @@ export default async function SignInPage() {
 
   return (
     <main className="auth-shell">
-      <section className="auth-card">
+      <Card className="auth-card" padding="lg">
         <span className="auth-mark">F</span>
-        <p className="label">FITAI COACH</p>
+        <Eyebrow>FitAI Coach</Eyebrow>
         <h1>Train with clarity.</h1>
         <p>
           Sign in to keep your profile, plans, sessions, and coaching history
@@ -21,11 +22,9 @@ export default async function SignInPage() {
             await signIn("google", { redirectTo: "/" });
           }}
         >
-          <button className="primary" type="submit">
-            Continue with Google →
-          </button>
+          <Button type="submit" size="lg" fullWidth>Continue with Google</Button>
         </form>
-      </section>
+      </Card>
     </main>
   );
 }
