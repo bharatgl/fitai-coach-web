@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { Button, Card, Eyebrow } from "@fitai/ui";
 import { auth, signIn } from "@/auth";
+import { BrandLockup } from "@/components/BrandLockup";
 
 export default async function SignInPage() {
   const session = await auth();
@@ -9,12 +10,12 @@ export default async function SignInPage() {
   return (
     <main className="auth-shell">
       <Card className="auth-card" padding="lg">
-        <span className="auth-mark">F</span>
-        <Eyebrow>FitAI Coach</Eyebrow>
-        <h1>Train with clarity.</h1>
+        <BrandLockup />
+        <Eyebrow>Adaptive training intelligence</Eyebrow>
+        <h1>Build strength. Track everything.</h1>
         <p>
-          Sign in to keep your profile, plans, sessions, and coaching history
-          private and synchronized.
+          Adaptive programming, live movement guidance, and an AI coach that
+          trains with your real context.
         </p>
         <form
           action={async () => {

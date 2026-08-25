@@ -1,16 +1,18 @@
 import { randomUUID } from "node:crypto";
 import { generateCoachResponse } from "@fitai/ai";
 import type {
+  CoachAttachment,
   CoachMessage,
   CoachResponse,
   CoachThread,
   CoachThreadDetail,
   CoachThreadListResponse,
   CreateCoachThreadResponse,
+  UploadCoachAttachmentResponse,
 } from "@fitai/contracts";
 import type { FastifyInstance } from "fastify";
 import type { Db } from "mongodb";
-import { MongoServerError } from "mongodb";
+import { Binary, MongoServerError } from "mongodb";
 import { z } from "zod";
 import { authenticate, type AuthenticatedUser } from "../auth.js";
 import { getConfig } from "../config.js";
@@ -21,6 +23,8 @@ type CoachThreadDocument = {
   id: string;
   userId: string;
   title: string;
+  pinned?: boolean;
+  archived?: boolean;
   createdAt: Date;
   updatedAt: Date;
   lastMessageAt: Date | null;
@@ -35,28 +39,67 @@ type CoachMessageDocument = {
   sessionId: string | null;
   role: "user" | "assistant";
   content: string;
+  attachments?: CoachAttachment[];
   safetyCategory: "none" | "pain" | "medical" | "emergency";
   model?: string | null;
   createdAt: Date;
   editedAt?: Date | null;
 };
 
-const coachInput = z.object({
-  message: z.string().trim().min(1).max(2_000),
-  threadId: z.string().uuid().optional(),
-  sessionId: z.string().trim().min(1).max(100).optional(),
+type CoachAttachmentDocument = CoachAttachment & {
+  userId: string;
+  messageId: string | null;
+  threadId: string | null;
+  data: Binary;
+  createdAt: Date;
+  expiresAt?: Date;
+};
+
+const attachmentMimeTypes = [
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "application/pdf",
+] as const;
+const maxAttachmentBytes = 5 * 1024 * 1024;
+const maxAttachmentsPerMessage = 3;
+const attachmentLifetimeMs = 60 * 60 * 1000;
+
+const coachInput = z
+  .object({
+    message: z.string().trim().max(2_000).default(""),
+    attachmentIds: z.array(z.string().uuid()).max(maxAttachmentsPerMessage).default([]),
+    threadId: z.string().uuid().optional(),
+    sessionId: z.string().trim().min(1).max(100).optional(),
+  })
+  .refine(({ message, attachmentIds }) => message.length > 0 || attachmentIds.length > 0, {
+    message: "A message or attachment is required",
+  });
+const uploadAttachmentInput = z.object({
+  name: z.string().trim().min(1).max(120),
+  mimeType: z.enum(attachmentMimeTypes),
+  dataBase64: z.string().min(1).max(7_000_000).regex(/^[A-Za-z0-9+/]+={0,2}$/),
 });
 const createThreadInput = z.object({
   title: z.string().trim().min(1).max(80).optional(),
 });
-const renameThreadInput = z.object({
-  title: z.string().trim().min(1).max(80),
-});
+const updateThreadInput = z
+  .object({
+    title: z.string().trim().min(1).max(80).optional(),
+    pinned: z.boolean().optional(),
+    archived: z.boolean().optional(),
+  })
+  .refine(
+    ({ title, pinned, archived }) =>
+      title !== undefined || pinned !== undefined || archived !== undefined,
+    { message: "At least one conversation change is required" },
+  );
 const editMessageInput = z.object({
   content: z.string().trim().min(1).max(2_000),
 });
 const threadParams = z.object({ threadId: z.string().uuid() });
 const messageParams = z.object({ messageId: z.string().uuid() });
+const attachmentParams = z.object({ attachmentId: z.string().uuid() });
 
 function notFound(message: string): never {
   throw Object.assign(new Error(message), { statusCode: 404 });
@@ -66,6 +109,8 @@ function serializeThread(thread: CoachThreadDocument): CoachThread {
   return {
     id: thread.id,
     title: thread.title,
+    pinned: thread.pinned ?? false,
+    archived: thread.archived ?? false,
     createdAt: thread.createdAt.toISOString(),
     updatedAt: thread.updatedAt.toISOString(),
     lastMessageAt: thread.lastMessageAt?.toISOString() ?? null,
@@ -78,10 +123,50 @@ function serializeMessage(message: CoachMessageDocument): CoachMessage {
     id: message.id,
     role: message.role,
     content: message.content,
+    attachments: message.attachments ?? [],
     safetyCategory: message.safetyCategory,
     createdAt: message.createdAt.toISOString(),
     editedAt: message.editedAt?.toISOString() ?? null,
   };
+}
+
+function serializeAttachment(attachment: CoachAttachmentDocument): CoachAttachment {
+  return {
+    id: attachment.id,
+    name: attachment.name,
+    mimeType: attachment.mimeType,
+    size: attachment.size,
+  };
+}
+
+function badRequest(message: string): never {
+  throw Object.assign(new Error(message), { statusCode: 400 });
+}
+
+function safeAttachmentName(name: string) {
+  return name
+    .replace(/[\r\n]/g, " ")
+    .replace(/[^\p{L}\p{N} ._()-]/gu, "_")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 120) || "attachment";
+}
+
+function attachmentSignatureMatches(mimeType: CoachAttachment["mimeType"], data: Buffer) {
+  if (mimeType === "image/jpeg") {
+    return data.length >= 3 && data[0] === 0xff && data[1] === 0xd8 && data[2] === 0xff;
+  }
+  if (mimeType === "image/png") {
+    return data.length >= 8 && data.subarray(0, 8).equals(
+      Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    );
+  }
+  if (mimeType === "image/webp") {
+    return data.length >= 12
+      && data.subarray(0, 4).toString("ascii") === "RIFF"
+      && data.subarray(8, 12).toString("ascii") === "WEBP";
+  }
+  return data.length >= 5 && data.subarray(0, 5).toString("ascii") === "%PDF-";
 }
 
 function createThreadDocument(
@@ -93,6 +178,8 @@ function createThreadDocument(
     id: randomUUID(),
     userId,
     title,
+    pinned: false,
+    archived: false,
     createdAt: now,
     updatedAt: now,
     lastMessageAt: null,
@@ -206,6 +293,7 @@ async function generateReply(
   threadId: string,
   message: string,
   before: Date,
+  attachmentDocuments: CoachAttachmentDocument[] = [],
 ) {
   const config = getConfig();
   const [profile, history] = await Promise.all([
@@ -229,9 +317,49 @@ async function generateReply(
     message,
     history: history.reverse().map((item) => ({
       role: item.role,
-      content: item.content,
+      content: [
+        item.content,
+        item.attachments?.length
+          ? `[Attachments: ${item.attachments.map((attachment) => attachment.name).join(", ")}]`
+          : "",
+      ].filter(Boolean).join("\n"),
+    })),
+    attachments: attachmentDocuments.map((attachment) => ({
+      name: attachment.name,
+      mimeType: attachment.mimeType,
+      dataBase64: Buffer.from(attachment.data.buffer).toString("base64"),
     })),
   });
+}
+
+async function requirePendingAttachments(
+  database: Db,
+  userId: string,
+  attachmentIds: string[],
+) {
+  if (!attachmentIds.length) return [];
+  const uniqueIds = [...new Set(attachmentIds)];
+  if (uniqueIds.length !== attachmentIds.length) badRequest("Duplicate attachments are not allowed");
+  const attachments = await database
+    .collection<CoachAttachmentDocument>("coachAttachments")
+    .find(
+      { id: { $in: uniqueIds }, userId, messageId: null },
+      { projection: { _id: 0 } },
+    )
+    .toArray();
+  if (attachments.length !== uniqueIds.length) {
+    badRequest("One or more attachments are unavailable");
+  }
+  const byId = new Map(attachments.map((attachment) => [attachment.id, attachment]));
+  return attachmentIds.map((attachmentId) => byId.get(attachmentId)!);
+}
+
+async function loadMessageAttachments(database: Db, userId: string, messageId: string) {
+  return database
+    .collection<CoachAttachmentDocument>("coachAttachments")
+    .find({ userId, messageId }, { projection: { _id: 0 } })
+    .sort({ createdAt: 1 })
+    .toArray();
 }
 
 export async function coachRoutes(app: FastifyInstance) {
@@ -243,7 +371,7 @@ export async function coachRoutes(app: FastifyInstance) {
     const threads = await database
       .collection<CoachThreadDocument>("coachThreads")
       .find({ userId: user.id }, { projection: { _id: 0 } })
-      .sort({ updatedAt: -1 })
+      .sort({ archived: 1, pinned: -1, updatedAt: -1 })
       .limit(100)
       .toArray();
     return { threads: threads.map(serializeThread) };
@@ -268,13 +396,19 @@ export async function coachRoutes(app: FastifyInstance) {
   app.patch("/v1/coach/threads/:threadId", async (request): Promise<CreateCoachThreadResponse> => {
     const user = await authenticate(request);
     const { threadId } = threadParams.parse(request.params);
-    const { title } = renameThreadInput.parse(request.body);
+    const input = updateThreadInput.parse(request.body);
     const database = await getDatabase();
     await requireThread(database, user.id, threadId);
     const updatedAt = new Date();
+    const updates: Partial<Pick<CoachThreadDocument, "title" | "pinned" | "archived">> & {
+      updatedAt: Date;
+    } = { updatedAt };
+    if (input.title !== undefined) updates.title = input.title;
+    if (input.pinned !== undefined) updates.pinned = input.pinned;
+    if (input.archived !== undefined) updates.archived = input.archived;
     await database
       .collection<CoachThreadDocument>("coachThreads")
-      .updateOne({ id: threadId, userId: user.id }, { $set: { title, updatedAt } });
+      .updateOne({ id: threadId, userId: user.id }, { $set: updates });
     return { thread: serializeThread(await requireThread(database, user.id, threadId)) };
   });
 
@@ -288,10 +422,67 @@ export async function coachRoutes(app: FastifyInstance) {
         .collection<CoachMessageDocument>("coachMessages")
         .deleteMany({ userId: user.id, threadId }),
       database
+        .collection<CoachAttachmentDocument>("coachAttachments")
+        .deleteMany({ userId: user.id, threadId }),
+      database
         .collection<CoachThreadDocument>("coachThreads")
         .deleteOne({ id: threadId, userId: user.id }),
     ]);
     return reply.code(204).send();
+  });
+
+  app.post(
+    "/v1/coach/attachments",
+    {
+      bodyLimit: 7_500_000,
+      config: { rateLimit: { max: 15, timeWindow: "1 minute" } },
+    },
+    async (request, reply): Promise<UploadCoachAttachmentResponse> => {
+      const user = await authenticate(request);
+      const input = uploadAttachmentInput.parse(request.body);
+      const data = Buffer.from(input.dataBase64, "base64");
+      if (!data.length || data.length > maxAttachmentBytes) {
+        badRequest("Attachments must be 5 MB or smaller");
+      }
+      if (!attachmentSignatureMatches(input.mimeType, data)) {
+        badRequest("The attachment content does not match its file type");
+      }
+
+      await syncAuthenticatedUser(user);
+      const now = new Date();
+      const attachment: CoachAttachmentDocument = {
+        id: randomUUID(),
+        userId: user.id,
+        messageId: null,
+        threadId: null,
+        name: safeAttachmentName(input.name),
+        mimeType: input.mimeType,
+        size: data.length,
+        data: new Binary(data),
+        createdAt: now,
+        expiresAt: new Date(now.getTime() + attachmentLifetimeMs),
+      };
+      await (await getDatabase())
+        .collection<CoachAttachmentDocument>("coachAttachments")
+        .insertOne(attachment);
+      reply.code(201);
+      return { attachment: serializeAttachment(attachment) };
+    },
+  );
+
+  app.get("/v1/coach/attachments/:attachmentId", async (request, reply) => {
+    const user = await authenticate(request);
+    const { attachmentId } = attachmentParams.parse(request.params);
+    const attachment = await (await getDatabase())
+      .collection<CoachAttachmentDocument>("coachAttachments")
+      .findOne({ id: attachmentId, userId: user.id }, { projection: { _id: 0 } });
+    if (!attachment) notFound("Attachment not found");
+    const encodedName = encodeURIComponent(attachment.name);
+    return reply
+      .type(attachment.mimeType)
+      .header("cache-control", "private, max-age=3600")
+      .header("content-disposition", `inline; filename*=UTF-8''${encodedName}`)
+      .send(Buffer.from(attachment.data.buffer));
   });
 
   app.post(
@@ -302,6 +493,11 @@ export async function coachRoutes(app: FastifyInstance) {
       const input = coachInput.parse(request.body);
       await syncAuthenticatedUser(user);
       const database = await getDatabase();
+      const attachmentDocuments = await requirePendingAttachments(
+        database,
+        user.id,
+        input.attachmentIds,
+      );
       const thread = input.threadId
         ? await requireThread(database, user.id, input.threadId)
         : createThreadDocument(user.id);
@@ -317,18 +513,34 @@ export async function coachRoutes(app: FastifyInstance) {
         sessionId: input.sessionId ?? null,
         role: "user",
         content: input.message,
+        attachments: attachmentDocuments.map(serializeAttachment),
         safetyCategory: "none",
         createdAt: now,
         editedAt: null,
       };
       await database.collection<CoachMessageDocument>("coachMessages").insertOne(userMessage);
+      if (attachmentDocuments.length) {
+        await database.collection<CoachAttachmentDocument>("coachAttachments").updateMany(
+          { id: { $in: attachmentDocuments.map((attachment) => attachment.id) }, userId: user.id },
+          {
+            $set: { messageId: userMessage.id, threadId: thread.id },
+            $unset: { expiresAt: "" },
+          },
+        );
+      }
 
       if (thread.messageCount === 0 && thread.title === "New conversation") {
         await database
           .collection<CoachThreadDocument>("coachThreads")
           .updateOne(
             { id: thread.id, userId: user.id },
-            { $set: { title: titleFromMessage(input.message) } },
+            {
+              $set: {
+                title: titleFromMessage(
+                  input.message || `Shared ${attachmentDocuments[0]?.name ?? "attachment"}`,
+                ),
+              },
+            },
           );
       }
       await updateThreadStats(database, user.id, thread.id);
@@ -339,6 +551,7 @@ export async function coachRoutes(app: FastifyInstance) {
         thread.id,
         input.message,
         now,
+        attachmentDocuments,
       );
       const assistantMessage: CoachMessageDocument = {
         id: randomUUID(),
@@ -383,11 +596,28 @@ export async function coachRoutes(app: FastifyInstance) {
       const threadId = existing.threadId;
       await requireThread(database, user.id, threadId);
 
-      await messages.deleteMany({
-        userId: user.id,
-        threadId,
-        createdAt: { $gt: existing.createdAt },
-      });
+      const [laterMessages, attachmentDocuments] = await Promise.all([
+        messages
+          .find(
+            { userId: user.id, threadId, createdAt: { $gt: existing.createdAt } },
+            { projection: { _id: 0, id: 1 } },
+          )
+          .toArray(),
+        loadMessageAttachments(database, user.id, messageId),
+      ]);
+      await Promise.all([
+        messages.deleteMany({
+          userId: user.id,
+          threadId,
+          createdAt: { $gt: existing.createdAt },
+        }),
+        laterMessages.length
+          ? database.collection<CoachAttachmentDocument>("coachAttachments").deleteMany({
+            userId: user.id,
+            messageId: { $in: laterMessages.map((message) => message.id) },
+          })
+          : Promise.resolve(),
+      ]);
       const editedAt = new Date();
       await messages.updateOne(
         { id: messageId, userId: user.id },
@@ -400,6 +630,7 @@ export async function coachRoutes(app: FastifyInstance) {
         threadId,
         content,
         existing.createdAt,
+        attachmentDocuments,
       );
       await messages.insertOne({
         id: randomUUID(),

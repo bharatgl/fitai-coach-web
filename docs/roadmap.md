@@ -1,4 +1,4 @@
-# FitAI Coach delivery roadmap
+# forgefit.space delivery roadmap
 
 The milestones are ordered so that every feature uses authenticated, persisted
 data and can be tested before the next capability depends on it.
@@ -53,7 +53,14 @@ workout execution supplies real completion and effort data.
 - Enforce one active workout per user and optimistic concurrency on session updates.
 - Include an isolated HTTP/Atlas E2E test with guaranteed record cleanup.
 
-## 7. Live movement intelligence — in progress
+## 7. Exercise demonstration videos — implemented in code
+
+- Attach one reviewed YouTube demonstration to every exercise in the curated catalog.
+- Add typed video metadata to plan and live workout API responses without allowing the AI model to invent links.
+- Use a click-to-load, privacy-enhanced player with written coaching notes preserved as the prescribed source of truth.
+- Keep demonstrations correct when exercises are substituted and backfill them in API responses for older stored plans.
+
+## 8. Live movement intelligence — in progress
 
 - Run pose estimation on-device so raw camera video is not uploaded.
 - Convert joint landmarks into validated rep and range-of-motion events.
@@ -64,12 +71,12 @@ workout execution supplies real completion and effort data.
 - Add validated movement summaries to live AI coach context after device
   thresholds are calibrated.
 
-## 8. Voice experience
+## 9. Voice experience
 
 - Add explicit push-to-talk transcription and optional spoken responses.
 - Show recording state, provide text alternatives, and avoid background capture.
 
-## 9. Production operations
+## 10. Production operations
 
 - API integration, authorization, AI safety, and browser end-to-end tests.
 - Error monitoring, product analytics with sensitive-field filtering, backups,

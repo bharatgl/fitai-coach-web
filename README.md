@@ -1,6 +1,6 @@
-# FitAI Coach
+# forgefit.space
 
-FitAI Coach is a monorepo with separately deployable frontend and backend apps,
+forgefit.space is a monorepo with separately deployable frontend and backend apps,
 a shared AI package, and shared API contracts. User-facing data comes from
 authenticated MongoDB records; the app does not fall back to demo users,
 workouts, or coach messages.

@@ -59,7 +59,12 @@ export async function ensureIndexes() {
     database.collection("movementEvents").createIndex({ userId: 1, sessionId: 1, occurredAt: 1 }),
     database.collection("coachMessages").createIndex({ userId: 1, createdAt: -1 }),
     database.collection("coachMessages").createIndex({ userId: 1, threadId: 1, createdAt: 1 }),
+    database.collection("coachAttachments").createIndex({ id: 1 }, { unique: true }),
+    database.collection("coachAttachments").createIndex({ userId: 1, messageId: 1 }),
+    database.collection("coachAttachments").createIndex({ userId: 1, threadId: 1 }),
+    database.collection("coachAttachments").createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
     database.collection("coachThreads").createIndex({ userId: 1, updatedAt: -1 }),
+    database.collection("coachThreads").createIndex({ userId: 1, archived: 1, pinned: -1, updatedAt: -1 }),
     database.collection("coachThreads").createIndex(
       { legacyUserId: 1 },
       { unique: true, partialFilterExpression: { legacyUserId: { $type: "string" } } },

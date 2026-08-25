@@ -5,7 +5,10 @@ import type {
   UserProfile,
   WorkoutPlan,
 } from "@fitai/contracts";
-import type { ExerciseDefinition } from "./exercise-catalog.js";
+import {
+  exerciseVideoForId,
+  type ExerciseDefinition,
+} from "./exercise-catalog.js";
 
 export type WorkoutPlanDocument = Omit<WorkoutPlan, "startDate" | "createdAt"> & {
   userId: string;
@@ -27,52 +30,94 @@ export class PlanValidationError extends Error {
   }
 }
 
+function prescriptionSignature(
+  day: GeneratedPlanDraft["weeks"][number]["days"][number],
+) {
+  return JSON.stringify(
+    day.exercises.map(({ exerciseId, sets, repRange, tempo }) => ({
+      exerciseId,
+      sets,
+      repRange,
+      tempo,
+    })),
+  );
+}
+
 export function validatePlanDraft(
   draft: GeneratedPlanDraft,
   profile: UserProfile,
   catalog: ExerciseDefinition[],
 ) {
-  if (draft.days.length !== profile.trainingDaysPerWeek) {
-    throw new PlanValidationError(
-      `Expected ${profile.trainingDaysPerWeek} training days, received ${draft.days.length}`,
-    );
+  const weekNumbers = draft.weeks.map((week) => week.weekNumber);
+  if (new Set(weekNumbers).size !== 4 || ![1, 2, 3, 4].every((week) => weekNumbers.includes(week))) {
+    throw new PlanValidationError("The plan must contain weeks 1 through 4 exactly once");
   }
 
   const allowed = new Set(catalog.map((exercise) => exercise.id));
-  const offsets = draft.days.map((day) => day.dayOffset);
-  if (new Set(offsets).size !== offsets.length) {
-    throw new PlanValidationError("Training days must use unique day offsets");
-  }
+  let previousWeekSignature = "";
 
-  for (const day of draft.days) {
-    if (day.estimatedMinutes > profile.preferredSessionMinutes) {
+  for (const week of [...draft.weeks].sort((a, b) => a.weekNumber - b.weekNumber)) {
+    if (week.days.length !== profile.trainingDaysPerWeek) {
       throw new PlanValidationError(
-        `${day.name} exceeds the preferred session duration`,
+        `Expected ${profile.trainingDaysPerWeek} training days in week ${week.weekNumber}, received ${week.days.length}`,
       );
     }
 
-    const exerciseIds = day.exercises.map((exercise) => exercise.exerciseId);
-    if (new Set(exerciseIds).size !== exerciseIds.length) {
-      throw new PlanValidationError(`${day.name} contains a duplicate exercise`);
+    const offsets = week.days.map((day) => day.dayOffset);
+    if (new Set(offsets).size !== offsets.length) {
+      throw new PlanValidationError(`Week ${week.weekNumber} must use unique day offsets`);
     }
 
-    const totalSets = day.exercises.reduce((sum, exercise) => sum + exercise.sets, 0);
-    if (totalSets > 30) {
-      throw new PlanValidationError(`${day.name} exceeds the safe volume limit`);
+    for (const day of week.days) {
+      if (day.estimatedMinutes > profile.preferredSessionMinutes) {
+        throw new PlanValidationError(
+          `${day.name} exceeds the preferred session duration`,
+        );
+      }
+
+      const exerciseIds = day.exercises.map((exercise) => exercise.exerciseId);
+      if (new Set(exerciseIds).size !== exerciseIds.length) {
+        throw new PlanValidationError(`${day.name} contains a duplicate exercise`);
+      }
+
+      const totalSets = day.exercises.reduce((sum, exercise) => sum + exercise.sets, 0);
+      if (totalSets > 30) {
+        throw new PlanValidationError(`${day.name} exceeds the safe volume limit`);
+      }
+
+      for (const exercise of day.exercises) {
+        if (!allowed.has(exercise.exerciseId)) {
+          throw new PlanValidationError(
+            `The plan referenced unavailable exercise ${exercise.exerciseId}`,
+          );
+        }
+        if (/\b(1\s*rm|one.rep max|to failure|maximal effort)\b/i.test(exercise.repRange)) {
+          throw new PlanValidationError(
+            `${exercise.exerciseId} uses a disallowed maximal prescription`,
+          );
+        }
+      }
     }
 
-    for (const exercise of day.exercises) {
-      if (!allowed.has(exercise.exerciseId)) {
-        throw new PlanValidationError(
-          `The plan referenced unavailable exercise ${exercise.exerciseId}`,
-        );
-      }
-      if (/\b(1\s*rm|one.rep max|to failure|maximal effort)\b/i.test(exercise.repRange)) {
-        throw new PlanValidationError(
-          `${exercise.exerciseId} uses a disallowed maximal prescription`,
-        );
-      }
+    const daySignatures = week.days.map(prescriptionSignature);
+    if (new Set(daySignatures).size !== daySignatures.length) {
+      throw new PlanValidationError(
+        `Week ${week.weekNumber} contains the same workout on multiple dates`,
+      );
     }
+
+    const weekSignature = JSON.stringify(
+      [...week.days]
+        .sort((a, b) => a.dayOffset - b.dayOffset)
+        .map((day) => ({
+          dayOffset: day.dayOffset,
+          prescription: prescriptionSignature(day),
+        })),
+    );
+    if (previousWeekSignature === weekSignature) {
+      throw new PlanValidationError(`Week ${week.weekNumber} duplicates the previous week's prescriptions`);
+    }
+    previousWeekSignature = weekSignature;
   }
 }
 
@@ -133,15 +178,15 @@ export function materializePlan({
   };
 
   const workouts: PlannedWorkoutDocument[] = [];
-  for (let weekIndex = 0; weekIndex < 4; weekIndex += 1) {
-    for (const day of [...draft.days].sort((a, b) => a.dayOffset - b.dayOffset)) {
+  for (const week of [...draft.weeks].sort((a, b) => a.weekNumber - b.weekNumber)) {
+    for (const day of [...week.days].sort((a, b) => a.dayOffset - b.dayOffset)) {
       const scheduledFor = new Date(startDate);
-      scheduledFor.setUTCDate(startDate.getUTCDate() + weekIndex * 7 + day.dayOffset);
+      scheduledFor.setUTCDate(startDate.getUTCDate() + (week.weekNumber - 1) * 7 + day.dayOffset);
       workouts.push({
         id: randomUUID(),
         planId,
         userId,
-        weekNumber: weekIndex + 1,
+        weekNumber: week.weekNumber,
         dayOffset: day.dayOffset,
         name: day.name,
         focus: day.focus,
@@ -150,6 +195,7 @@ export function materializePlan({
         exercises: day.exercises.map((exercise) => ({
           ...exercise,
           name: exerciseById.get(exercise.exerciseId)!.name,
+          video: exerciseById.get(exercise.exerciseId)!.video,
         })),
         status: "planned",
         createdAt: now,
@@ -186,7 +232,10 @@ export function serializeWorkout(workout: PlannedWorkoutDocument): PlannedWorkou
     focus: workout.focus,
     scheduledFor: workout.scheduledFor.toISOString(),
     estimatedMinutes: workout.estimatedMinutes,
-    exercises: workout.exercises,
+    exercises: workout.exercises.map((exercise) => ({
+      ...exercise,
+      video: exercise.video ?? exerciseVideoForId(exercise.exerciseId),
+    })),
     status: workout.status,
   };
 }
