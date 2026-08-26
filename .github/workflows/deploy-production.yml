@@ -1,0 +1,104 @@
+name: Deploy production
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: forgefit-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22.17.1
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type-check
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+  deploy:
+    name: Deploy
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: production
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+      GCP_REGION: asia-south1
+      GCP_ZONE: asia-south1-a
+      GCP_REPOSITORY: fitai
+      GCP_VM_NAME: fitai-backend-vm
+      GCP_BUILD_SERVICE_ACCOUNT: fitai-builder@${{ vars.GCP_PROJECT_ID }}.iam.gserviceaccount.com
+      FRONTEND_DOMAIN: forgefit.space
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
+
+      - name: Set up Google Cloud CLI
+        uses: google-github-actions/setup-gcloud@v3
+        with:
+          project_id: ${{ env.GCP_PROJECT_ID }}
+
+      - name: Build and publish container images
+        run: |
+          gcloud builds submit . \
+            --project="${GCP_PROJECT_ID}" \
+            --config=infra/gcp/cloudbuild.yaml \
+            --service-account="projects/${GCP_PROJECT_ID}/serviceAccounts/${GCP_BUILD_SERVICE_ACCOUNT}" \
+            --substitutions="_REGION=${GCP_REGION},_REPOSITORY=${GCP_REPOSITORY},_IMAGE_TAG=${GITHUB_SHA}"
+
+      - name: Deploy images to production VM
+        env:
+          FITAI_GCP_PROJECT_ID: ${{ env.GCP_PROJECT_ID }}
+          FITAI_GCP_REGION: ${{ env.GCP_REGION }}
+          FITAI_GCP_ZONE: ${{ env.GCP_ZONE }}
+          FITAI_GCP_REPOSITORY: ${{ env.GCP_REPOSITORY }}
+          FITAI_VM_NAME: ${{ env.GCP_VM_NAME }}
+          FITAI_FRONTEND_DOMAIN: ${{ env.FRONTEND_DOMAIN }}
+          FITAI_IMAGE_TAG: ${{ github.sha }}
+        run: npm run gcp:vm:deploy
+
+      - name: Verify production
+        run: |
+          curl --fail --silent --show-error --retry 5 --retry-delay 5 \
+            "https://${FRONTEND_DOMAIN}/signin" >/dev/null
+          curl --fail --silent --show-error --retry 5 --retry-delay 5 \
+            "https://${FRONTEND_DOMAIN}/health/backend/live" >/dev/null
