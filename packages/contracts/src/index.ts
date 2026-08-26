@@ -1,5 +1,11 @@
 export type ExperienceLevel = "beginner" | "intermediate" | "advanced";
 export type Gender = "woman" | "man" | "non_binary" | "prefer_not_to_say";
+export type DietaryPreference =
+  | "vegetarian"
+  | "non_vegetarian"
+  | "vegan"
+  | "eggetarian"
+  | "no_preference";
 
 export type UserProfile = {
   userId: string;
@@ -10,6 +16,7 @@ export type UserProfile = {
   age: number | null;
   heightCm: number | null;
   weightKg: number | null;
+  dietaryPreference: DietaryPreference;
   primaryGoal: string;
   equipment: string[];
   trainingDaysPerWeek: number;

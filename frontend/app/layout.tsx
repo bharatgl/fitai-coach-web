@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import "@fitai/ui/styles.css";
+import "@fontsource-variable/manrope";
 import "./globals.css";
 
 export async function generateMetadata(): Promise<Metadata> {

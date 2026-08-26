@@ -20,6 +20,7 @@ test("provides safe personalization defaults for existing profiles", () => {
   assert.equal(profile.age, null);
   assert.equal(profile.heightCm, null);
   assert.equal(profile.weightKg, null);
+  assert.equal(profile.dietaryPreference, "no_preference");
   assert.equal(profile.bodyConsiderations, "");
 });
 
@@ -33,6 +34,7 @@ test("serializes user-provided body context without inference", () => {
     age: 31,
     heightCm: 168.5,
     weightKg: 64.2,
+    dietaryPreference: "vegetarian",
     primaryGoal: "Build lower-body strength",
     equipment: [],
     trainingDaysPerWeek: 3,
@@ -45,5 +47,6 @@ test("serializes user-provided body context without inference", () => {
   assert.equal(profile.gender, "woman");
   assert.equal(profile.heightCm, 168.5);
   assert.equal(profile.weightKg, 64.2);
+  assert.equal(profile.dietaryPreference, "vegetarian");
   assert.equal(profile.bodyConsiderations, "Prefer low-impact training");
 });

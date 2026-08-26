@@ -6,30 +6,22 @@ const features = [
   {
     number: "01",
     kind: "plan",
-    eyebrow: "Adaptive programming",
-    title: "A plan built around real life",
-    copy: "Your goal, schedule, experience, equipment, and recovery shape a four-week plan that progresses without pretending every week is perfect.",
+    title: "Adaptive plans",
   },
   {
     number: "02",
     kind: "coach",
-    eyebrow: "Account-aware coaching",
-    title: "Context that stays in the conversation",
-    copy: "Ask about today’s session, share an image or PDF, adjust your plan, and keep separate training conversations organized in one place.",
+    title: "One coach",
   },
   {
     number: "03",
     kind: "track",
-    eyebrow: "Private movement intelligence",
-    title: "Live guidance, processed on device",
-    copy: "For supported movements, camera-based rep tracking runs in your browser. Only compact workout summaries reach forgefit.space.",
+    title: "Private tracking",
   },
   {
     number: "04",
     kind: "history",
-    eyebrow: "Workout execution",
-    title: "Every set becomes useful history",
-    copy: "Log sets, substitutions, effort, and reflections. Your completed work becomes the signal for smarter recommendations next time.",
+    title: "Useful history",
   },
 ] as const;
 
@@ -41,6 +33,14 @@ function ProductPreview() {
   return (
     <div className={styles.productStage} aria-label="Preview of the forgefit.space training workspace">
       <div className={styles.stageGlow} aria-hidden="true" />
+      <div className={styles.stageSculpture} aria-hidden="true">
+        <span className={styles.sculptureCore} />
+        <span className={`${styles.sculptureRing} ${styles.ringOne}`} />
+        <span className={`${styles.sculptureRing} ${styles.ringTwo}`} />
+        <span className={`${styles.sculptureRing} ${styles.ringThree}`} />
+        <i className={`${styles.sculptureSatellite} ${styles.satelliteOne}`} />
+        <i className={`${styles.sculptureSatellite} ${styles.satelliteTwo}`} />
+      </div>
       <div className={styles.orbitOne} aria-hidden="true" />
       <div className={styles.orbitTwo} aria-hidden="true" />
       <article className={styles.dashboardCard}>
@@ -110,8 +110,8 @@ function FeatureVisual({ kind }: { kind: (typeof features)[number]["kind"] }) {
   if (kind === "coach") {
     return (
       <div className={`${styles.featureVisual} ${styles.coachVisual}`} aria-hidden="true">
-        <p>Can we adjust today around my recovery?</p>
-        <p>Yes. We’ll keep the pattern, lower the load, and protect the habit.</p>
+        <p>Can we adjust for recovery?</p>
+        <p>Yes—lower load, same pattern.</p>
       </div>
     );
   }
@@ -156,84 +156,65 @@ export default function LandingPage() {
 
       <section className={styles.hero} aria-labelledby="landing-heading">
         <div className={styles.heroCopy}>
-          <p className={styles.eyebrow}><span aria-hidden="true">✦</span> Adaptive training intelligence</p>
-          <h1 id="landing-heading">Build strength.<br />Track everything.<br /><em>Adapt as you go.</em></h1>
+          <p className={styles.eyebrow}><span aria-hidden="true">✦</span> Built around you</p>
+          <h1 id="landing-heading">Build strength.<br /><em>Stay on track.</em></h1>
           <p className={styles.heroText}>
-            Account-aware coaching, practical programming, private movement guidance, and progress that compounds—inside one focused training system.
+            One focused training system. One clear next move.
           </p>
           <div className={styles.heroActions}>
             <Link className={styles.primaryCta} href="/signin">Build my plan <Arrow /></Link>
             <a className={styles.secondaryCta} href="#how-it-works">Explore the system <span aria-hidden="true">↓</span></a>
           </div>
-          <div className={styles.promiseRow} aria-label="Product highlights">
-            <span><i aria-hidden="true" /> Personalized programming</span>
-            <span><i aria-hidden="true" /> Private by design</span>
-            <span><i aria-hidden="true" /> Built for real schedules</span>
-          </div>
         </div>
         <ProductPreview />
-      </section>
-
-      <section className={styles.valueStrip} aria-label="forgefit.space capabilities">
-        <p>One performance system</p>
-        <div><span>Adaptive plans</span><i>•</i><span>AI coach</span><i>•</i><span>Live movement</span><i>•</i><span>Workout history</span></div>
       </section>
 
       <section className={styles.how} id="how-it-works" aria-labelledby="how-heading">
         <div className={styles.sectionIntro}>
           <div>
-            <p className={styles.sectionEyebrow}>How forgefit.space works</p>
-            <h2 id="how-heading">Your context in.<br /><em>A clear plan out.</em></h2>
+            <p className={styles.sectionEyebrow}>How it works</p>
+            <h2 id="how-heading">Three steps. <em>One plan.</em></h2>
           </div>
-          <p>Training should respond to the person doing it. forgefit.space turns the reality of your week into specific, useful work.</p>
         </div>
         <div className={styles.steps}>
-          <article><span>01</span><h3>Set your training context</h3><p>Share your goal, experience, schedule, available equipment, and the constraints that actually shape your week.</p></article>
-          <article><span>02</span><h3>Follow a structured plan</h3><p>Get dated sessions with clear movements, sets, reps, progression, substitutions, and video guidance where it helps.</p></article>
-          <article><span>03</span><h3>Log, reflect, and adapt</h3><p>Complete the work, capture effort and movement summaries, then use your coach to make the next decision better.</p></article>
+          <article><span>01</span><h3>Share context</h3></article>
+          <article><span>02</span><h3>Follow the plan</h3></article>
+          <article><span>03</span><h3>Log and adapt</h3></article>
         </div>
       </section>
 
       <section className={styles.features} id="features" aria-labelledby="features-heading">
         <header className={styles.featuresHeader}>
           <div>
-            <p className={styles.sectionEyebrow}>The complete training loop</p>
-            <h2 id="features-heading">Plan. Execute.<br /><em>Learn. Repeat.</em></h2>
+            <p className={styles.sectionEyebrow}>The system</p>
+            <h2 id="features-heading">Everything <em>connected.</em></h2>
           </div>
-          <p>Every surface shares the same context, so planning, coaching, movement feedback, and progress history reinforce each other.</p>
         </header>
         <div className={styles.featureGrid}>
           {features.map((feature) => (
             <article className={styles.featureCard} key={feature.number}>
-              <div className={styles.featureTop}><span>{feature.number}</span><p>{feature.eyebrow}</p></div>
+              <div className={styles.featureTop}><span>{feature.number}</span></div>
               <FeatureVisual kind={feature.kind} />
               <h3>{feature.title}</h3>
-              <p>{feature.copy}</p>
             </article>
           ))}
         </div>
       </section>
 
       <section className={styles.privacy} id="privacy" aria-labelledby="privacy-heading">
-        <div className={styles.privacyMark} aria-hidden="true"><span>◎</span><i /></div>
-        <div>
-          <p className={styles.sectionEyebrow}>Privacy is part of the architecture</p>
-          <h2 id="privacy-heading">Your camera is for your workout.<br /><em>Not our servers.</em></h2>
+        <div className={styles.privacyMark} aria-hidden="true"><span /><b /><i /></div>
+        <div className={styles.privacyCopy}>
+          <p className={styles.sectionEyebrow}>Private by design</p>
+          <h2 id="privacy-heading">Your workout.<br /><em>Your data.</em></h2>
+          <p>Movement tracking stays on your device.</p>
         </div>
-        <p>Camera access is always opt-in. Supported movement tracking is processed in your browser, and forgefit.space receives only compact rep timing and workout summaries—not raw video.</p>
-      </section>
-
-      <section className={styles.finalCta} aria-labelledby="cta-heading">
-        <div className={styles.ctaGrid} aria-hidden="true" />
-        <p className={styles.sectionEyebrow}>Your strongest system starts with one session</p>
-        <h2 id="cta-heading">Stop guessing.<br /><em>Start building.</em></h2>
-        <p>Give your training the context it deserves. forgefit.space will turn it into the next clear move.</p>
-        <Link className={styles.lightCta} href="/signin">Start training <Arrow /></Link>
+        <div className={styles.finalCta}>
+          <Link className={styles.lightCta} href="/signin">Build my plan <Arrow /></Link>
+        </div>
       </section>
 
       <footer className={styles.footer}>
         <BrandLockup />
-        <p>Adaptive training intelligence for real life.</p>
         <div><a href="#how-it-works">How it works</a><a href="#features">Product</a><a href="#privacy">Privacy</a><Link href="/signin">Sign in</Link></div>
         <small>© {new Date().getFullYear()} forgefit.space · Fitness guidance, not medical care.</small>
       </footer>

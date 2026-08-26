@@ -36,3 +36,14 @@ test("keeps text-only coach requests simple", () => {
   assert.equal(typeof contents, "string");
   assert.match(contents as string, /How should I warm up/);
 });
+
+test("includes dietary preference in coach context", () => {
+  const contents = buildCoachContents({
+    profile: { primaryGoal: "strength", dietaryPreference: "vegetarian" },
+    history: [],
+    message: "What should I eat after training?",
+  });
+
+  assert.equal(typeof contents, "string");
+  assert.match(contents as string, /"dietaryPreference":"vegetarian"/);
+});

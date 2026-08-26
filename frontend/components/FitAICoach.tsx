@@ -12,7 +12,6 @@ import type {
   GeneratePlanResponse,
   PlannedWorkout,
   StartWorkoutResponse,
-  UpdateCoachThreadRequest,
   UploadCoachAttachmentResponse,
   UserProfile,
   WorkoutSession,
@@ -37,7 +36,6 @@ import { MovementTracker } from "@/components/MovementTracker";
 type View = "today" | "coach" | "plan" | "history" | "profile" | "workout";
 type CurrentUser = { id: string; name: string; email: string };
 type NavIconName = "today" | "coach" | "plan" | "history";
-type ThreadActionIconName = "more" | "share" | "rename" | "pin" | "archive" | "delete";
 type PendingCoachAttachment = {
   key: string;
   file: File;
@@ -134,62 +132,6 @@ function NavIcon({ name }: { name: NavIconName }) {
     <svg className="nav-icon" viewBox="0 0 24 24" aria-hidden="true">
       {paths[name]}
     </svg>
-  );
-}
-
-function ThreadActionIcon({ name }: { name: ThreadActionIconName }) {
-  return (
-    <svg
-      className="thread-action-icon"
-      viewBox="0 0 24 24"
-      width="16"
-      height="16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      {name === "more" ? (
-        <>
-          <circle cx="12" cy="5" r="1.15" fill="currentColor" stroke="none" />
-          <circle cx="12" cy="12" r="1.15" fill="currentColor" stroke="none" />
-          <circle cx="12" cy="19" r="1.15" fill="currentColor" stroke="none" />
-        </>
-      ) : name === "share" ? (
-        <>
-          <path d="M12 3v12M8 7l4-4 4 4" />
-          <path d="M5 11v8a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-8" />
-        </>
-      ) : name === "rename" ? (
-        <>
-          <path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16v4Z" />
-          <path d="m13.5 6.5 4 4" />
-        </>
-      ) : name === "pin" ? (
-        <>
-          <path d="m15 4 5 5-3 1-4 4-1 5-2-2-3 3-1-1 3-3-2-2 5-1 4-4Z" />
-        </>
-      ) : name === "archive" ? (
-        <>
-          <path d="M4 8h16v12H4Z" />
-          <path d="M3 4h18v4H3ZM9 12h6" />
-        </>
-      ) : (
-        <>
-          <path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13" />
-          <path d="M10 11v5M14 11v5" />
-        </>
-      )}
-    </svg>
-  );
-}
-
-function sortCoachThreads(threads: CoachThread[]) {
-  return [...threads].sort((left, right) =>
-    Number(right.pinned) - Number(left.pinned)
-    || right.updatedAt.localeCompare(left.updatedAt),
   );
 }
 
@@ -415,6 +357,7 @@ function Onboarding({ user, onSaved }: { user: CurrentUser; onSaved: () => Promi
           age: optionalNumber(form.get("age")),
           heightCm: optionalNumber(form.get("heightCm")),
           weightKg: optionalNumber(form.get("weightKg")),
+          dietaryPreference: form.get("dietaryPreference"),
           primaryGoal: form.get("primaryGoal"),
           equipment: String(form.get("equipment") ?? "")
             .split(",")
@@ -489,6 +432,18 @@ function ProfileFields({ profile }: { profile?: UserProfile }) {
           <input name="weightKg" type="number" min="30" max="350" step="0.1" defaultValue={profile?.weightKg ?? ""} />
         </Field>
       </div>
+      <Field
+        label="Food preference"
+        hint="Used only to personalize nutrition suggestions. You can change this anytime."
+      >
+        <select name="dietaryPreference" defaultValue={profile?.dietaryPreference ?? "no_preference"}>
+          <option value="no_preference">No preference / not specified</option>
+          <option value="vegetarian">Vegetarian</option>
+          <option value="non_vegetarian">Non-vegetarian</option>
+          <option value="eggetarian">Eggetarian</option>
+          <option value="vegan">Vegan</option>
+        </select>
+      </Field>
       <Field label="Primary goal">
         <input
           name="primaryGoal"
@@ -574,6 +529,7 @@ function ProfileSettings({
           age: optionalNumber(form.get("age")),
           heightCm: optionalNumber(form.get("heightCm")),
           weightKg: optionalNumber(form.get("weightKg")),
+          dietaryPreference: form.get("dietaryPreference"),
           primaryGoal: form.get("primaryGoal"),
           equipment: String(form.get("equipment") ?? "")
             .split(",")
@@ -696,33 +652,17 @@ function Today({
 }
 
 function Coach({ initialMessages }: { initialMessages: CoachMessage[] }) {
-  const [threads, setThreads] = useState<CoachThread[]>([]);
-  const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
+  const [activeThread, setActiveThread] = useState<CoachThread | null>(null);
   const [messages, setMessages] = useState(initialMessages);
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const [loadingThreads, setLoadingThreads] = useState(true);
   const [error, setError] = useState("");
-  const [renamingId, setRenamingId] = useState<string | null>(null);
-  const [renameDraft, setRenameDraft] = useState("");
-  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
-  const [threadDrawerOpen, setThreadDrawerOpen] = useState(false);
-  const [threadNotice, setThreadNotice] = useState("");
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState("");
   const [pendingAttachments, setPendingAttachments] = useState<PendingCoachAttachment[]>([]);
   const attachmentInputRef = useRef<HTMLInputElement>(null);
   const pendingAttachmentsRef = useRef<PendingCoachAttachment[]>([]);
-
-  const activeThread = threads.find((thread) => thread.id === activeThreadId) ?? null;
-  const visibleThreads = useMemo(
-    () => sortCoachThreads(threads.filter((thread) => !thread.archived)),
-    [threads],
-  );
-  const archivedThreads = useMemo(
-    () => sortCoachThreads(threads.filter((thread) => thread.archived)),
-    [threads],
-  );
   const templates = [
     {
       tag: "PREP",
@@ -762,17 +702,23 @@ function Coach({ initialMessages }: { initialMessages: CoachMessage[] }) {
       try {
         const response = await apiRequest<CoachThreadListResponse>("/v1/coach/threads");
         if (!active) return;
-        setThreads(response.threads);
-        const first = response.threads[0];
-        if (first) {
-          setActiveThreadId(first.id);
-          const detail = await apiRequest<CoachThreadDetail>(`/v1/coach/threads/${first.id}`);
-          if (active) setMessages(detail.messages);
-        } else {
-          setMessages([]);
+        const existing = response.threads.find((thread) => !thread.archived);
+        if (existing) {
+          const detail = await apiRequest<CoachThreadDetail>(`/v1/coach/threads/${existing.id}`);
+          if (!active) return;
+          setActiveThread(detail.thread);
+          setMessages(detail.messages);
+          return;
         }
+        const created = await apiRequest<CreateCoachThreadResponse>("/v1/coach/threads", {
+          method: "POST",
+          body: JSON.stringify({ title: "Coach" }),
+        });
+        if (!active) return;
+        setActiveThread(created.thread);
+        setMessages([]);
       } catch (cause) {
-        if (active) setError(cause instanceof Error ? cause.message : "Unable to load conversations");
+        if (active) setError(cause instanceof Error ? cause.message : "Unable to load your coach");
       } finally {
         if (active) setLoadingThreads(false);
       }
@@ -782,69 +728,6 @@ function Coach({ initialMessages }: { initialMessages: CoachMessage[] }) {
       active = false;
     };
   }, []);
-
-  useEffect(() => {
-    if (!openMenuId) return;
-    function closeMenu(event: PointerEvent) {
-      const target = event.target;
-      if (!(target instanceof Element) || !target.closest(`[data-thread-menu="${openMenuId}"]`)) {
-        setOpenMenuId(null);
-      }
-    }
-    function closeOnEscape(event: KeyboardEvent) {
-      if (event.key === "Escape") setOpenMenuId(null);
-    }
-    document.addEventListener("pointerdown", closeMenu);
-    document.addEventListener("keydown", closeOnEscape);
-    return () => {
-      document.removeEventListener("pointerdown", closeMenu);
-      document.removeEventListener("keydown", closeOnEscape);
-    };
-  }, [openMenuId]);
-
-  useEffect(() => {
-    if (!threadDrawerOpen) return;
-    function closeDrawer(event: KeyboardEvent) {
-      if (event.key === "Escape") setThreadDrawerOpen(false);
-    }
-    document.addEventListener("keydown", closeDrawer);
-    return () => document.removeEventListener("keydown", closeDrawer);
-  }, [threadDrawerOpen]);
-
-  function promoteThread(thread: CoachThread) {
-    setThreads((current) => sortCoachThreads([
-      thread,
-      ...current.filter((item) => item.id !== thread.id),
-    ]));
-  }
-
-  async function openThread(threadId: string) {
-    setThreadDrawerOpen(false);
-    if (threadId === activeThreadId) return;
-    setError("");
-    setActiveThreadId(threadId);
-    setMessages([]);
-    try {
-      const detail = await apiRequest<CoachThreadDetail>(`/v1/coach/threads/${threadId}`);
-      setMessages(detail.messages);
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Unable to open this conversation");
-    }
-  }
-
-  function newChat() {
-    setThreadDrawerOpen(false);
-    setActiveThreadId(null);
-    setMessages([]);
-    setDraft("");
-    setError("");
-    setEditingMessageId(null);
-    setOpenMenuId(null);
-    pendingAttachments.forEach((attachment) => {
-      if (attachment.previewUrl) URL.revokeObjectURL(attachment.previewUrl);
-    });
-    setPendingAttachments([]);
-  }
 
   function selectAttachments(files: FileList | null) {
     const selected = Array.from(files ?? []);
@@ -919,7 +802,7 @@ function Coach({ initialMessages }: { initialMessages: CoachMessage[] }) {
         body: JSON.stringify({
           message,
           attachmentIds: attachments.map((attachment) => attachment.id),
-          threadId: activeThreadId ?? undefined,
+          threadId: activeThread?.id,
         }),
       });
       setMessages((current) => [
@@ -927,8 +810,7 @@ function Coach({ initialMessages }: { initialMessages: CoachMessage[] }) {
         response.userMessage,
         response.message,
       ]);
-      setActiveThreadId(response.thread.id);
-      promoteThread(response.thread);
+      setActiveThread(response.thread);
       setDraft("");
       pendingAttachments.forEach((attachment) => {
         if (attachment.previewUrl) URL.revokeObjectURL(attachment.previewUrl);
@@ -944,181 +826,6 @@ function Coach({ initialMessages }: { initialMessages: CoachMessage[] }) {
     }
   }
 
-  async function renameThread(event: FormEvent, threadId: string) {
-    event.preventDefault();
-    const title = renameDraft.trim();
-    if (!title) return;
-    try {
-      const response = await apiRequest<CreateCoachThreadResponse>(`/v1/coach/threads/${threadId}`, {
-        method: "PATCH",
-        body: JSON.stringify({ title }),
-      });
-      setThreads((current) => current.map((thread) => thread.id === threadId ? response.thread : thread));
-      setRenamingId(null);
-      setOpenMenuId(null);
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Unable to rename this conversation");
-    }
-  }
-
-  async function updateThread(
-    thread: CoachThread,
-    changes: UpdateCoachThreadRequest,
-  ) {
-    setError("");
-    setOpenMenuId(null);
-    try {
-      const response = await apiRequest<CreateCoachThreadResponse>(
-        `/v1/coach/threads/${thread.id}`,
-        { method: "PATCH", body: JSON.stringify(changes) },
-      );
-      setThreads((current) => sortCoachThreads(
-        current.map((item) => item.id === thread.id ? response.thread : item),
-      ));
-      return response.thread;
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Unable to update this conversation");
-      return null;
-    }
-  }
-
-  async function toggleThreadPin(thread: CoachThread) {
-    await updateThread(thread, { pinned: !thread.pinned });
-  }
-
-  async function toggleThreadArchive(thread: CoachThread) {
-    const updated = await updateThread(thread, {
-      archived: !thread.archived,
-      ...(thread.archived ? {} : { pinned: false }),
-    });
-    if (!updated?.archived || activeThreadId !== thread.id) return;
-    const next = visibleThreads.find((item) => item.id !== thread.id);
-    if (next) await openThread(next.id);
-    else newChat();
-  }
-
-  async function shareThread(thread: CoachThread) {
-    setOpenMenuId(null);
-    setError("");
-    try {
-      const threadMessages = activeThreadId === thread.id
-        ? messages
-        : (await apiRequest<CoachThreadDetail>(`/v1/coach/threads/${thread.id}`)).messages;
-      const transcript = [
-        thread.title,
-        "",
-        ...threadMessages.map((message) =>
-          `${message.role === "user" ? "You" : "forgefit.space Coach"}: ${message.content}`,
-        ),
-      ].join("\n");
-      if (navigator.share) {
-        await navigator.share({ title: thread.title, text: transcript });
-        setThreadNotice("Conversation shared.");
-      } else {
-        await navigator.clipboard.writeText(transcript);
-        setThreadNotice("Conversation copied to your clipboard.");
-      }
-      window.setTimeout(() => setThreadNotice(""), 3_000);
-    } catch (cause) {
-      if (cause instanceof DOMException && cause.name === "AbortError") return;
-      setError(cause instanceof Error ? cause.message : "Unable to share this conversation");
-    }
-  }
-
-  async function deleteThread(threadId: string) {
-    if (!window.confirm("Delete this conversation and all of its messages?")) return;
-    setOpenMenuId(null);
-    try {
-      await apiRequest<void>(`/v1/coach/threads/${threadId}`, { method: "DELETE" });
-      const remaining = threads.filter((thread) => thread.id !== threadId);
-      setThreads(remaining);
-      if (activeThreadId === threadId) {
-        const next = remaining.find((thread) => !thread.archived);
-        if (next) await openThread(next.id);
-        else newChat();
-      }
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Unable to delete this conversation");
-    }
-  }
-
-  function renderThread(thread: CoachThread) {
-    const menuOpen = openMenuId === thread.id;
-    return (
-      <div
-        className={thread.id === activeThreadId ? "thread-item active" : "thread-item"}
-        key={thread.id}
-      >
-        {renamingId === thread.id ? (
-          <form className="thread-rename" onSubmit={(event) => void renameThread(event, thread.id)}>
-            <label className="ui-visually-hidden" htmlFor={`rename-${thread.id}`}>Conversation title</label>
-            <input id={`rename-${thread.id}`} value={renameDraft} maxLength={80} onChange={(event) => setRenameDraft(event.target.value)} />
-            <button type="submit" aria-label="Save conversation title">✓</button>
-            <button type="button" aria-label="Cancel rename" onClick={() => setRenamingId(null)}>×</button>
-          </form>
-        ) : (
-          <>
-            <button className="thread-open" type="button" onClick={() => void openThread(thread.id)}>
-              <span className="thread-title">
-                <span>{thread.title}</span>
-                {thread.pinned && <ThreadActionIcon name="pin" />}
-              </span>
-              <small>{thread.messageCount} messages</small>
-            </button>
-            <div className="thread-actions" data-thread-menu={thread.id}>
-              <button
-                className="thread-menu-trigger"
-                type="button"
-                title="Conversation options"
-                aria-label={`Options for ${thread.title}`}
-                aria-haspopup="menu"
-                aria-expanded={menuOpen}
-                onClick={() => setOpenMenuId(menuOpen ? null : thread.id)}
-              >
-                <ThreadActionIcon name="more" />
-              </button>
-              {menuOpen && (
-                <div className="thread-menu" role="menu" aria-label={`Actions for ${thread.title}`}>
-                  <button type="button" role="menuitem" onClick={() => void shareThread(thread)}>
-                    <ThreadActionIcon name="share" />
-                    <span>Share</span>
-                  </button>
-                  <button
-                    type="button"
-                    role="menuitem"
-                    onClick={() => {
-                      setOpenMenuId(null);
-                      setRenamingId(thread.id);
-                      setRenameDraft(thread.title);
-                    }}
-                  >
-                    <ThreadActionIcon name="rename" />
-                    <span>Rename</span>
-                  </button>
-                  {!thread.archived && (
-                    <button type="button" role="menuitem" onClick={() => void toggleThreadPin(thread)}>
-                      <ThreadActionIcon name="pin" />
-                      <span>{thread.pinned ? "Unpin" : "Pin conversation"}</span>
-                    </button>
-                  )}
-                  <button type="button" role="menuitem" onClick={() => void toggleThreadArchive(thread)}>
-                    <ThreadActionIcon name="archive" />
-                    <span>{thread.archived ? "Restore conversation" : "Archive"}</span>
-                  </button>
-                  <div className="thread-menu-divider" role="separator" />
-                  <button className="danger" type="button" role="menuitem" onClick={() => void deleteThread(thread.id)}>
-                    <ThreadActionIcon name="delete" />
-                    <span>Delete</span>
-                  </button>
-                </div>
-              )}
-            </div>
-          </>
-        )}
-      </div>
-    );
-  }
-
   async function saveMessageEdit(event: FormEvent, messageId: string) {
     event.preventDefault();
     const content = editDraft.trim();
@@ -1131,7 +838,7 @@ function Coach({ initialMessages }: { initialMessages: CoachMessage[] }) {
         body: JSON.stringify({ content }),
       });
       setMessages(detail.messages);
-      promoteThread(detail.thread);
+      setActiveThread(detail.thread);
       setEditingMessageId(null);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Unable to edit this message");
@@ -1143,101 +850,25 @@ function Coach({ initialMessages }: { initialMessages: CoachMessage[] }) {
   return (
     <div className="wrap coach-page">
       <section className="coach-workspace">
-        <button
-          className={threadDrawerOpen ? "thread-drawer-backdrop open" : "thread-drawer-backdrop"}
-          type="button"
-          aria-label="Close conversation history"
-          tabIndex={threadDrawerOpen ? 0 : -1}
-          onClick={() => setThreadDrawerOpen(false)}
-        />
-        <aside
-          className={threadDrawerOpen ? "thread-panel open" : "thread-panel"}
-          id="coach-thread-panel"
-          aria-label="Coach conversations"
-        >
-          <div className="thread-panel-head">
-            <div>
-              <Eyebrow>Coach log</Eyebrow>
-              <strong>Your training conversations</strong>
-            </div>
-            <div className="thread-panel-controls">
-              <Button className="new-chat-button" size="sm" onClick={newChat}>
-                <span className="new-chat-icon" aria-hidden="true">+</span>
-                New chat
-              </Button>
-              <button
-                className="thread-drawer-close"
-                type="button"
-                aria-label="Close conversation history"
-                onClick={() => setThreadDrawerOpen(false)}
-              >
-                ×
-              </button>
-            </div>
-          </div>
-          {threadNotice && <p className="thread-notice" aria-live="polite">{threadNotice}</p>}
-          <div className="thread-list">
-            {loadingThreads && <p className="thread-empty">Loading conversations…</p>}
-            {!loadingThreads && threads.length === 0 && (
-              <p className="thread-empty">Your conversations will appear here.</p>
-            )}
-            {visibleThreads.map(renderThread)}
-            {archivedThreads.length > 0 && (
-              <details className="thread-archive">
-                <summary>
-                  <span>Archived</span>
-                  <small>{archivedThreads.length}</small>
-                </summary>
-                <div className="thread-archive-list">
-                  {archivedThreads.map(renderThread)}
-                </div>
-              </details>
-            )}
-          </div>
-        </aside>
         <Card className="chat" padding="md">
           <header className="chat-header">
-            <button
-              className="thread-drawer-trigger"
-              type="button"
-              aria-label="Open conversation history"
-              aria-controls="coach-thread-panel"
-              aria-expanded={threadDrawerOpen}
-              onClick={() => setThreadDrawerOpen(true)}
-            >
-              <span /><span /><span />
-            </button>
             <div className="chat-header-copy">
-              <Eyebrow>AI coach · {activeThread ? "Conversation" : "New conversation"}</Eyebrow>
-              <strong>{activeThread?.title ?? "What can I help with?"}</strong>
-              <span>Account-aware guidance for your training, recovery, and plan.</span>
+              <strong>Coach</strong>
+              <span>Your profile and conversation stay in context.</span>
             </div>
             <div className="chat-header-actions">
               {activeThread && <small>{activeThread.messageCount} messages</small>}
-              <button className="chat-new-button" type="button" aria-label="Start a new chat" onClick={newChat}>
-                <span aria-hidden="true">＋</span>
-              </button>
             </div>
           </header>
           <div className="messages">
+            {loadingThreads && <p className="coach-loading" role="status">Loading your coach…</p>}
             {messages.length === 0 && !loadingThreads && (
               <div className="chat-starter">
                 <div className="coach-starter-mark" aria-hidden="true">
                   <span /><span /><b>AI</b>
                 </div>
-                <Eyebrow>Performance command center</Eyebrow>
-                <h2>Build today&apos;s game plan.</h2>
-                <p>Choose a training lane or ask your coach anything.</p>
-                <div className="prompt-templates">
-                  {templates.map((template) => (
-                    <button type="button" key={template.title} onClick={() => setDraft(template.prompt)}>
-                      <i>{template.tag}</i>
-                      <strong>{template.title}</strong>
-                      <span>{template.prompt}</span>
-                      <b aria-hidden="true">↗</b>
-                    </button>
-                  ))}
-                </div>
+                <h2>What can I help with?</h2>
+                <p>Ask about your training, recovery, plan, or nutrition.</p>
               </div>
             )}
             {messages.map((message) => (
@@ -1268,6 +899,13 @@ function Coach({ initialMessages }: { initialMessages: CoachMessage[] }) {
                   )}
                 </div>
               </article>
+            ))}
+          </div>
+          <div className="coach-suggestions" aria-label="Suggested coach prompts">
+            {templates.map((template) => (
+              <button type="button" key={template.title} onClick={() => setDraft(template.prompt)}>
+                {template.title}
+              </button>
             ))}
           </div>
           <form className="chat-composer" onSubmit={send}>

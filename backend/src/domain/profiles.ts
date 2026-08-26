@@ -11,6 +11,7 @@ export function serializeProfile(document: Document): UserProfile {
     age: document.age == null ? null : Number(document.age),
     heightCm: document.heightCm == null ? null : Number(document.heightCm),
     weightKg: document.weightKg == null ? null : Number(document.weightKg),
+    dietaryPreference: (document.dietaryPreference ?? "no_preference") as UserProfile["dietaryPreference"],
     primaryGoal: String(document.primaryGoal),
     equipment: Array.isArray(document.equipment)
       ? document.equipment.map(String)

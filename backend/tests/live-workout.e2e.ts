@@ -68,6 +68,7 @@ try {
     email: `${userId}@example.invalid`,
     displayName: "FitAI Workout E2E",
     experienceLevel: "beginner",
+    dietaryPreference: "no_preference",
     primaryGoal: "Build general strength safely",
     equipment: ["dumbbells"],
     trainingDaysPerWeek: 2,

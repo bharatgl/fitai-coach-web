@@ -19,6 +19,7 @@ const profile: UserProfile = {
   age: 32,
   heightCm: 172,
   weightKg: 72,
+  dietaryPreference: "no_preference",
   primaryGoal: "Build general strength",
   equipment: ["dumbbells"],
   trainingDaysPerWeek: 2,
