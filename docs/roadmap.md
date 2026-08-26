@@ -78,6 +78,9 @@ workout execution supplies real completion and effort data.
 - Keep microphone capture browser-managed and stop recognition on release or
   navigation; no audio is uploaded to or stored by forgefit.space.
 - Degrade to the existing text composer when browser speech APIs are unavailable.
+- Plan the gated Gemini Live upgrade in
+  [`realtime-voice-coach.md`](realtime-voice-coach.md) before enabling continuous
+  audio or read-only live workout tools.
 
 ## 10. Production operations
 
