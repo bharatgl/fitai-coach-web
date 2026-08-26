@@ -11,12 +11,17 @@ import type {
   UploadCoachAttachmentResponse,
 } from "@fitai/contracts";
 import type { FastifyInstance } from "fastify";
-import type { Db } from "mongodb";
+import type { Db, Filter } from "mongodb";
 import { Binary, MongoServerError } from "mongodb";
 import { z } from "zod";
 import { authenticate, type AuthenticatedUser } from "../auth.js";
 import { getConfig } from "../config.js";
 import { getDatabase } from "../db.js";
+import {
+  summarizeMovementEventsForCoach,
+  type MovementEventDocument,
+} from "../domain/movement-events.js";
+import type { WorkoutSessionDocument } from "../domain/workouts.js";
 import { syncAuthenticatedUser } from "../users.js";
 
 type CoachThreadDocument = {
@@ -293,10 +298,11 @@ async function generateReply(
   threadId: string,
   message: string,
   before: Date,
+  sessionId?: string | null,
   attachmentDocuments: CoachAttachmentDocument[] = [],
 ) {
   const config = getConfig();
-  const [profile, history] = await Promise.all([
+  const [profile, history, movementContext] = await Promise.all([
     database
       .collection("profiles")
       .findOne({ userId: user.id }, { projection: { _id: 0 } }),
@@ -309,12 +315,14 @@ async function generateReply(
       .sort({ createdAt: -1 })
       .limit(12)
       .toArray(),
+    loadCoachMovementContext(database, user.id, sessionId),
   ]);
   return generateCoachResponse({
     apiKey: config.GEMINI_API_KEY,
     model: config.GEMINI_MODEL,
     profile,
     message,
+    movementContext,
     history: history.reverse().map((item) => ({
       role: item.role,
       content: [
@@ -330,6 +338,31 @@ async function generateReply(
       dataBase64: Buffer.from(attachment.data.buffer).toString("base64"),
     })),
   });
+}
+
+async function loadCoachMovementContext(
+  database: Db,
+  userId: string,
+  requestedSessionId?: string | null,
+) {
+  const sessionFilter: Filter<WorkoutSessionDocument> = requestedSessionId
+    ? { id: requestedSessionId, userId }
+    : { userId, status: { $in: ["active", "paused"] } };
+  const session = await database
+    .collection<WorkoutSessionDocument>("workoutSessions")
+    .findOne(sessionFilter, { projection: { _id: 0 }, sort: { updatedAt: -1 } });
+  if (!session) return null;
+
+  const events = await database
+    .collection<MovementEventDocument>("movementEvents")
+    .find(
+      { userId, sessionId: session.id },
+      { projection: { _id: 0 } },
+    )
+    .sort({ occurredAt: -1 })
+    .limit(500)
+    .toArray();
+  return summarizeMovementEventsForCoach(session, events);
 }
 
 async function requirePendingAttachments(
@@ -551,6 +584,7 @@ export async function coachRoutes(app: FastifyInstance) {
         thread.id,
         input.message,
         now,
+        input.sessionId,
         attachmentDocuments,
       );
       const assistantMessage: CoachMessageDocument = {
@@ -630,6 +664,7 @@ export async function coachRoutes(app: FastifyInstance) {
         threadId,
         content,
         existing.createdAt,
+        existing.sessionId,
         attachmentDocuments,
       );
       await messages.insertOne({

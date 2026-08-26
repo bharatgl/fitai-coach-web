@@ -47,3 +47,31 @@ test("includes dietary preference in coach context", () => {
   assert.equal(typeof contents, "string");
   assert.match(contents as string, /"dietaryPreference":"vegetarian"/);
 });
+
+test("includes only compact validated movement aggregates in coach context", () => {
+  const contents = buildCoachContents({
+    profile: {},
+    history: [],
+    message: "How did those reps look?",
+    movementContext: {
+      sessionId: "session-1",
+      sessionName: "Strength A",
+      sessionStatus: "active",
+      capturedReps: 2,
+      exercises: [{
+        exerciseId: "bodyweight-squat",
+        exerciseName: "Bodyweight Squat",
+        capturedReps: 2,
+        averageDurationMs: 1_350,
+        averageRangeOfMotionDegrees: 64.5,
+        averageConfidence: 0.91,
+        lastCapturedAt: "2026-08-24T10:00:05.000Z",
+      }],
+    },
+  });
+
+  assert.equal(typeof contents, "string");
+  assert.match(contents as string, /"activeMovementSummary"/);
+  assert.match(contents as string, /"capturedReps":2/);
+  assert.doesNotMatch(contents as string, /landmarks|cameraFrame/);
+});

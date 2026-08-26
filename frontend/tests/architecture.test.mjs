@@ -29,6 +29,7 @@ test("shows a public landing page and protects the coaching workspace", async ()
   assert.match(apiClient, /\/api\/backend/);
   assert.match(coach, /\/v1\/dashboard/);
   assert.match(coach, /\/v1\/coach\/messages/);
+  assert.match(coach, /sessionId: activeSessionId/);
   assert.match(coach, /\/v1\/coach\/threads/);
   assert.doesNotMatch(coach, /New chat/);
   assert.doesNotMatch(coach, /new-chat-button/);

@@ -274,7 +274,10 @@ export default function FitAICoach({ user }: { user: CurrentUser }) {
           />
         )}
         {view === "coach" && (
-          <Coach initialMessages={dashboard.recentMessages} />
+          <Coach
+            initialMessages={dashboard.recentMessages}
+            activeSessionId={activeSession?.id ?? null}
+          />
         )}
         {view === "plan" && (
           <Plan dashboard={dashboard} refresh={loadDashboard} onStart={startWorkout} />
@@ -651,7 +654,13 @@ function Today({
   );
 }
 
-function Coach({ initialMessages }: { initialMessages: CoachMessage[] }) {
+function Coach({
+  initialMessages,
+  activeSessionId,
+}: {
+  initialMessages: CoachMessage[];
+  activeSessionId: string | null;
+}) {
   const [activeThread, setActiveThread] = useState<CoachThread | null>(null);
   const [messages, setMessages] = useState(initialMessages);
   const [draft, setDraft] = useState("");
@@ -803,6 +812,7 @@ function Coach({ initialMessages }: { initialMessages: CoachMessage[] }) {
           message,
           attachmentIds: attachments.map((attachment) => attachment.id),
           threadId: activeThread?.id,
+          sessionId: activeSessionId ?? undefined,
         }),
       });
       setMessages((current) => [

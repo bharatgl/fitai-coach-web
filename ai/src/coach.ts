@@ -15,11 +15,28 @@ You may explain exercises, adjust training volume, and support adherence.
 You must not diagnose, treat, or claim to replace a qualified clinician.
 If the user reports pain, neurological symptoms, breathing problems, fainting, or a possible injury, tell them to stop the workout and seek appropriate professional or emergency help.
 Never encourage training through pain. Keep answers concise, practical, and specific to the supplied profile and recent context.
+Treat activeMovementSummary as a limited sensor estimate, not a clinical assessment. Use it only when it is present, distinguish captured reps from manually logged sets, and never claim to have seen camera footage or raw pose landmarks.
 Never infer dietary choices. When giving food or nutrition suggestions, honor the supplied dietaryPreference and do not recommend foods that conflict with it. If dietaryPreference is absent or no_preference and the answer depends on it, ask one short clarifying question.`;
 
 export type CoachHistoryItem = {
   role: "user" | "assistant";
   content: string;
+};
+
+export type CoachMovementContext = {
+  sessionId: string;
+  sessionName: string;
+  sessionStatus: string;
+  capturedReps: number;
+  exercises: Array<{
+    exerciseId: string;
+    exerciseName: string;
+    capturedReps: number;
+    averageDurationMs: number;
+    averageRangeOfMotionDegrees: number;
+    averageConfidence: number;
+    lastCapturedAt: string;
+  }>;
 };
 
 export type GenerateCoachResponseInput = {
@@ -28,6 +45,7 @@ export type GenerateCoachResponseInput = {
   profile: unknown;
   history: CoachHistoryItem[];
   message: string;
+  movementContext?: CoachMovementContext | null;
   attachments?: Array<{
     name: string;
     mimeType: string;
@@ -40,12 +58,16 @@ export type GeneratedCoachResponse = CoachSafetyResult & {
 };
 
 export function buildCoachContents(
-  input: Pick<GenerateCoachResponseInput, "profile" | "history" | "message" | "attachments">,
+  input: Pick<
+    GenerateCoachResponseInput,
+    "profile" | "history" | "message" | "movementContext" | "attachments"
+  >,
 ): ContentListUnion {
   const context = JSON.stringify({
     userProfile: input.profile ?? {},
     recentConversation: input.history,
     currentMessage: input.message,
+    activeMovementSummary: input.movementContext ?? null,
     attachedFiles: input.attachments?.map(({ name, mimeType }) => ({ name, mimeType })) ?? [],
   });
   if (!input.attachments?.length) return context;
