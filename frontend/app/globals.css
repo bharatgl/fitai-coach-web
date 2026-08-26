@@ -1083,3 +1083,28 @@ select option{background:#111426;color:#f7f8ff}
   .coach-suggestions{margin-bottom:.4rem;width:calc(100% - 1rem)}
   .coach-active .chat .chat-composer{margin-bottom:.6rem;width:calc(100% - 1rem)}
 }
+
+/* Explicit, browser-managed voice controls. */
+.spoken-replies-toggle{align-items:center;background:rgb(255 255 255 / 4%);border:1px solid rgb(255 255 255 / 9%);border-radius:999px;color:#aeb7ca;display:flex;font:inherit;font-size:.62rem;font-weight:750;gap:.4rem;padding:.42rem .65rem;transition:background .15s ease,border-color .15s ease,color .15s ease}
+.spoken-replies-toggle svg{height:.95rem;width:.95rem}
+.spoken-replies-toggle[aria-pressed="true"]{background:rgb(200 255 75 / 9%);border-color:rgb(200 255 75 / 25%);color:#d7ff78}
+.spoken-replies-toggle:hover:not(:disabled),.spoken-replies-toggle:focus-visible{border-color:rgb(91 230 210 / 32%);color:#e8fff9}
+.spoken-replies-toggle:disabled{cursor:not-allowed;opacity:.45}
+.chat .chat-composer .voice-input-button{align-items:center;background:transparent;border:1px solid rgb(255 255 255 / 9%);box-shadow:none;color:#aeb8ca;display:flex;height:2.65rem;justify-content:center;transform:none;width:2.65rem}
+.chat .chat-composer .voice-input-button svg{height:1.2rem;width:1.2rem}
+.chat .chat-composer .voice-input-button:hover:not(:disabled),.chat .chat-composer .voice-input-button:focus-visible{background:rgb(91 230 210 / 9%);border-color:rgb(91 230 210 / 28%);box-shadow:none;color:#83f1df;transform:none}
+.chat .chat-composer .voice-input-button[aria-pressed="true"]{animation:voice-listening-pulse 1.2s ease-in-out infinite;background:rgb(255 91 120 / 13%);border-color:rgb(255 91 120 / 40%);color:#ff9bad}
+@keyframes voice-listening-pulse{50%{box-shadow:0 0 0 .35rem rgb(255 91 120 / 8%)}}
+.coach-active .chat .chat-composer{margin-bottom:.35rem}
+.voice-experience-status{color:#8791a8;margin:0 auto .75rem;max-width:52rem;padding-inline:.25rem;width:calc(100% - 2rem)}
+.voice-experience-status small{align-items:center;display:flex;font-size:.58rem;gap:.38rem;line-height:1.4}
+.voice-experience-status i{animation:voice-status-blink 1s ease-in-out infinite;background:#ff6d87;border-radius:50%;height:.42rem;width:.42rem}
+@keyframes voice-status-blink{50%{opacity:.35}}
+.coach-active .chat>.voice-error{margin:0 auto .5rem;max-width:52rem;padding-inline:.25rem;width:calc(100% - 2rem)}
+
+@media(max-width:600px){
+  .spoken-replies-toggle span{display:none}
+  .spoken-replies-toggle{border-radius:.65rem;padding:.5rem}
+  .spoken-replies-toggle svg{height:1.05rem;width:1.05rem}
+  .voice-experience-status,.coach-active .chat>.voice-error{width:calc(100% - 1rem)}
+}

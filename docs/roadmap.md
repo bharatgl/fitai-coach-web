@@ -71,10 +71,13 @@ workout execution supplies real completion and effort data.
 - Add validated movement summaries to live AI coach context after device
   thresholds are calibrated.
 
-## 9. Voice experience
+## 9. Voice experience — implemented in code
 
 - Add explicit push-to-talk transcription and optional spoken responses.
 - Show recording state, provide text alternatives, and avoid background capture.
+- Keep microphone capture browser-managed and stop recognition on release or
+  navigation; no audio is uploaded to or stored by forgefit.space.
+- Degrade to the existing text composer when browser speech APIs are unavailable.
 
 ## 10. Production operations
 

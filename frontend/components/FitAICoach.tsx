@@ -27,8 +27,22 @@ import {
 } from "@fitai/ui";
 import Link from "next/link";
 import Image from "next/image";
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import {
+  FormEvent,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { apiRequest } from "@/lib/api";
+import {
+  collectSpeechTranscript,
+  speechRecognitionConstructor,
+  speechRecognitionErrorMessage,
+  type BrowserSpeechRecognition,
+  type SpeechRecognitionConstructor,
+} from "@/lib/voice";
 import { BrandLockup } from "@/components/BrandLockup";
 import { ExerciseVideoButton } from "@/components/ExerciseVideo";
 import { MovementTracker } from "@/components/MovementTracker";
@@ -45,6 +59,23 @@ type PendingCoachAttachment = {
 const coachAttachmentTypes = new Set(["image/jpeg", "image/png", "image/webp", "application/pdf"]);
 const maxCoachAttachmentBytes = 5 * 1024 * 1024;
 const maxCoachAttachments = 3;
+type SpeechWindow = typeof window & {
+  SpeechRecognition?: SpeechRecognitionConstructor;
+  webkitSpeechRecognition?: SpeechRecognitionConstructor;
+};
+
+const subscribeToStaticBrowserCapability = () => () => {};
+
+function browserSpeechRecognitionConstructor() {
+  if (typeof window === "undefined") return null;
+  return speechRecognitionConstructor(window as SpeechWindow);
+}
+
+function browserSpeechOutputSupported() {
+  return typeof window !== "undefined" &&
+    "speechSynthesis" in window &&
+    "SpeechSynthesisUtterance" in window;
+}
 
 function AttachmentIcon({ kind = "attach" }: { kind?: "attach" | "file" | "remove" }) {
   return (
@@ -55,6 +86,24 @@ function AttachmentIcon({ kind = "attach" }: { kind?: "attach" | "file" | "remov
         <><path d="M6 2.75h8l4 4V21H6Z" /><path d="M14 2.75V7h4M9 12h6M9 16h4" /></>
       ) : (
         <path d="m7 7 10 10M17 7 7 17" />
+      )}
+    </svg>
+  );
+}
+
+function VoiceIcon({ kind = "microphone" }: { kind?: "microphone" | "speaker" }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      {kind === "microphone" ? (
+        <>
+          <rect x="8" y="3" width="8" height="12" rx="4" />
+          <path d="M5 11a7 7 0 0 0 14 0M12 18v3M9 21h6" />
+        </>
+      ) : (
+        <>
+          <path d="M5 9H2v6h3l5 4V5L5 9Z" />
+          <path d="M14 9a4 4 0 0 1 0 6M17 6a8 8 0 0 1 0 12" />
+        </>
       )}
     </svg>
   );
@@ -661,8 +710,25 @@ function Coach({ initialMessages }: { initialMessages: CoachMessage[] }) {
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState("");
   const [pendingAttachments, setPendingAttachments] = useState<PendingCoachAttachment[]>([]);
+  const [voiceStatus, setVoiceStatus] = useState<
+    "idle" | "starting" | "listening" | "processing"
+  >("idle");
+  const [spokenReplies, setSpokenReplies] = useState(false);
+  const [voiceError, setVoiceError] = useState("");
   const attachmentInputRef = useRef<HTMLInputElement>(null);
   const pendingAttachmentsRef = useRef<PendingCoachAttachment[]>([]);
+  const recognitionRef = useRef<BrowserSpeechRecognition | null>(null);
+  const voiceBaseDraftRef = useRef("");
+  const voiceSupported = useSyncExternalStore(
+    subscribeToStaticBrowserCapability,
+    () => Boolean(browserSpeechRecognitionConstructor()),
+    () => false,
+  );
+  const speechOutputSupported = useSyncExternalStore(
+    subscribeToStaticBrowserCapability,
+    browserSpeechOutputSupported,
+    () => false,
+  );
   const templates = [
     {
       tag: "PREP",
@@ -695,6 +761,89 @@ function Coach({ initialMessages }: { initialMessages: CoachMessage[] }) {
       if (attachment.previewUrl) URL.revokeObjectURL(attachment.previewUrl);
     });
   }, []);
+
+  useEffect(() => {
+    const stopForBackground = () => {
+      recognitionRef.current?.abort();
+      recognitionRef.current = null;
+      setVoiceStatus("idle");
+    };
+    const stopWhenHidden = () => {
+      if (document.visibilityState === "hidden") stopForBackground();
+    };
+    window.addEventListener("blur", stopForBackground);
+    document.addEventListener("visibilitychange", stopWhenHidden);
+    return () => {
+      window.removeEventListener("blur", stopForBackground);
+      document.removeEventListener("visibilitychange", stopWhenHidden);
+      stopForBackground();
+      window.speechSynthesis?.cancel();
+    };
+  }, []);
+
+  function startVoiceInput() {
+    if (sending || recognitionRef.current) return;
+    const Recognition = browserSpeechRecognitionConstructor();
+    if (!Recognition) {
+      setVoiceError("Voice input is not supported in this browser. You can keep typing instead.");
+      return;
+    }
+
+    setVoiceError("");
+    window.speechSynthesis?.cancel();
+    voiceBaseDraftRef.current = draft.trim();
+    const recognition = new Recognition();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = navigator.language || "en-US";
+    recognition.onstart = () => setVoiceStatus("listening");
+    recognition.onresult = (event) => {
+      const { combinedTranscript } = collectSpeechTranscript(event);
+      setDraft(
+        [voiceBaseDraftRef.current, combinedTranscript]
+          .filter(Boolean)
+          .join(" "),
+      );
+    };
+    recognition.onerror = (event) => {
+      setVoiceError(speechRecognitionErrorMessage(event.error));
+    };
+    recognition.onend = () => {
+      if (recognitionRef.current === recognition) recognitionRef.current = null;
+      setVoiceStatus("idle");
+    };
+    recognitionRef.current = recognition;
+    setVoiceStatus("starting");
+    try {
+      recognition.start();
+    } catch {
+      recognitionRef.current = null;
+      setVoiceStatus("idle");
+      setVoiceError("Voice input could not start. Try again or type your message.");
+    }
+  }
+
+  function stopVoiceInput() {
+    const recognition = recognitionRef.current;
+    if (!recognition) return;
+    setVoiceStatus("processing");
+    try {
+      recognition.stop();
+    } catch {
+      recognition.abort();
+      recognitionRef.current = null;
+      setVoiceStatus("idle");
+    }
+  }
+
+  function speakCoachReply(content: string) {
+    if (!spokenReplies || !speechOutputSupported || !content.trim()) return;
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(content);
+    utterance.lang = navigator.language || "en-US";
+    utterance.rate = 0.95;
+    window.speechSynthesis.speak(utterance);
+  }
 
   useEffect(() => {
     let active = true;
@@ -779,6 +928,7 @@ function Coach({ initialMessages }: { initialMessages: CoachMessage[] }) {
     event.preventDefault();
     const message = draft.trim();
     if ((!message && !pendingAttachments.length) || sending) return;
+    stopVoiceInput();
     setSending(true);
     setError("");
     let optimisticId: string | null = null;
@@ -810,6 +960,7 @@ function Coach({ initialMessages }: { initialMessages: CoachMessage[] }) {
         response.userMessage,
         response.message,
       ]);
+      speakCoachReply(response.message.content);
       setActiveThread(response.thread);
       setDraft("");
       pendingAttachments.forEach((attachment) => {
@@ -840,6 +991,10 @@ function Coach({ initialMessages }: { initialMessages: CoachMessage[] }) {
       setMessages(detail.messages);
       setActiveThread(detail.thread);
       setEditingMessageId(null);
+      const regeneratedReply = [...detail.messages]
+        .reverse()
+        .find((message) => message.role === "assistant");
+      if (regeneratedReply) speakCoachReply(regeneratedReply.content);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Unable to edit this message");
     } finally {
@@ -858,6 +1013,20 @@ function Coach({ initialMessages }: { initialMessages: CoachMessage[] }) {
             </div>
             <div className="chat-header-actions">
               {activeThread && <small>{activeThread.messageCount} messages</small>}
+              <button
+                className="spoken-replies-toggle"
+                type="button"
+                aria-pressed={spokenReplies}
+                disabled={!speechOutputSupported}
+                title={speechOutputSupported ? "Read new coach replies aloud" : "Spoken replies are not supported in this browser"}
+                onClick={() => {
+                  if (spokenReplies) window.speechSynthesis.cancel();
+                  setSpokenReplies((enabled) => !enabled);
+                }}
+              >
+                <VoiceIcon kind="speaker" />
+                <span>{spokenReplies ? "Voice replies on" : "Voice replies off"}</span>
+              </button>
             </div>
           </header>
           <div className="messages">
@@ -955,6 +1124,50 @@ function Coach({ initialMessages }: { initialMessages: CoachMessage[] }) {
             >
               <AttachmentIcon />
             </button>
+            <button
+              className="voice-input-button"
+              type="button"
+              disabled={sending || !voiceSupported}
+              aria-label={
+                voiceSupported
+                  ? voiceStatus !== "idle"
+                    ? "Release to stop voice input"
+                    : "Hold to talk"
+                  : "Voice input is not supported in this browser"
+              }
+              aria-pressed={voiceStatus !== "idle"}
+              title={voiceSupported ? "Hold to talk" : "Voice input is not supported in this browser"}
+              onPointerDown={(event) => {
+                if (event.button !== 0) return;
+                event.preventDefault();
+                event.currentTarget.setPointerCapture(event.pointerId);
+                startVoiceInput();
+              }}
+              onPointerUp={(event) => {
+                event.preventDefault();
+                if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+                  event.currentTarget.releasePointerCapture(event.pointerId);
+                }
+                stopVoiceInput();
+              }}
+              onPointerCancel={() => stopVoiceInput()}
+              onKeyDown={(event) => {
+                if ((event.key === " " || event.key === "Enter") && !event.repeat) {
+                  event.preventDefault();
+                  startVoiceInput();
+                }
+              }}
+              onKeyUp={(event) => {
+                if (event.key === " " || event.key === "Enter") {
+                  event.preventDefault();
+                  stopVoiceInput();
+                }
+              }}
+              onClick={(event) => event.preventDefault()}
+            >
+              <VoiceIcon />
+              <span className="ui-visually-hidden">Hold to talk</span>
+            </button>
             <label className="ui-visually-hidden" htmlFor="coach-message">Message your AI coach</label>
             <textarea
               id="coach-message"
@@ -978,6 +1191,18 @@ function Coach({ initialMessages }: { initialMessages: CoachMessage[] }) {
               {sending ? <span className="send-spinner" /> : <span aria-hidden="true">↑</span>}
             </button>
           </form>
+          <div className="voice-experience-status" aria-live="polite">
+            {voiceStatus === "starting" ? (
+              <small>Waiting for microphone permission…</small>
+            ) : voiceStatus === "listening" ? (
+              <small><i /> Listening only while you hold the microphone button…</small>
+            ) : voiceStatus === "processing" ? (
+              <small>Finishing transcription…</small>
+            ) : (
+              <small>Voice input uses your browser&apos;s speech service. Text input is always available.</small>
+            )}
+          </div>
+          {voiceError && <small className="form-error voice-error" role="alert">{voiceError}</small>}
           {error && <small className="form-error" role="alert">{error}</small>}
         </Card>
       </section>
