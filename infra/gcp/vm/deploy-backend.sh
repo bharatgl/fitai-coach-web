@@ -36,6 +36,9 @@ gcloud compute ssh "${VM_NAME}" \
     sudo install -m 0755 ~/refresh-frontend-secrets.sh /usr/local/sbin/fitai-refresh-frontend-secrets
     sudo install -m 0644 ~/nginx-fitai-backend.conf /etc/nginx/conf.d/fitai-backend.conf
     sudo rm -f /etc/nginx/sites-enabled/default
+    if sudo test -f '/etc/letsencrypt/live/${FRONTEND_DOMAIN}/fullchain.pem'; then
+      sudo certbot install --cert-name '${FRONTEND_DOMAIN}' --nginx --non-interactive
+    fi
     sudo /usr/local/sbin/fitai-refresh-backend-secrets
     sudo env FITAI_AUTH_URL='https://${FRONTEND_DOMAIN}' /usr/local/sbin/fitai-refresh-frontend-secrets
     gcloud auth print-access-token | sudo docker login -u oauth2accesstoken --password-stdin https://${REGISTRY}
