@@ -276,6 +276,7 @@ textarea {
 }
 
 @media (max-width: 47.9375rem) {
+  .ui-card { -webkit-backdrop-filter: none; backdrop-filter: none; }
   .ui-card--padding-md,
   .ui-card--padding-lg { padding: var(--ui-space-5); }
   .ui-page-header { align-items: stretch; flex-direction: column; gap: var(--ui-space-5); }
