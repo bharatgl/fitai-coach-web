@@ -44,6 +44,9 @@ npm run gcp:vm:https
 The default production domains are `forgefit.space`, `www.forgefit.space`, and
 `api.forgefit.space`.
 
+After the certificate has been issued once, later VM deployments reinstall it
+after refreshing the Nginx proxy configuration so that port 443 remains active.
+
 The frontend container receives `AUTH_URL=https://<frontend-domain>` so Auth.js
 always generates the public Google OAuth callback instead of using the private
 container address. Override the domain with `FITAI_FRONTEND_DOMAIN` when
