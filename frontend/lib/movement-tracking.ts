@@ -27,6 +27,44 @@ export type RepDetection = {
   confidence: number;
 };
 
+export type MovementRuntimeSettings = {
+  captureWidth: number;
+  captureHeight: number;
+  captureFrameRate: number;
+  inferenceIntervalMs: number;
+};
+
+export function movementRuntimeSettings({
+  compactDevice = false,
+  saveData = false,
+}: {
+  compactDevice?: boolean;
+  saveData?: boolean;
+} = {}): MovementRuntimeSettings {
+  if (saveData) {
+    return {
+      captureWidth: 480,
+      captureHeight: 360,
+      captureFrameRate: 10,
+      inferenceIntervalMs: 160,
+    };
+  }
+  if (compactDevice) {
+    return {
+      captureWidth: 640,
+      captureHeight: 480,
+      captureFrameRate: 12,
+      inferenceIntervalMs: 125,
+    };
+  }
+  return {
+    captureWidth: 960,
+    captureHeight: 540,
+    captureFrameRate: 15,
+    inferenceIntervalMs: 100,
+  };
+}
+
 const PROFILES: Record<MovementProfile["kind"], MovementProfile> = {
   squat: {
     kind: "squat",

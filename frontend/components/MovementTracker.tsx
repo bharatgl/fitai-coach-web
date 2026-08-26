@@ -13,6 +13,7 @@ import {
   createRepDetector,
   measureMovement,
   movementProfileForExercise,
+  movementRuntimeSettings,
 } from "@/lib/movement-tracking";
 
 const WASM_PATH = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/wasm";
@@ -113,7 +114,12 @@ export function MovementTracker({ session }: { session: WorkoutSession }) {
 
   useEffect(() => {
     disposedRef.current = false;
+    const stopWhenHidden = () => {
+      if (document.visibilityState === "hidden" && streamRef.current) stopCamera();
+    };
+    document.addEventListener("visibilitychange", stopWhenHidden);
     return () => {
+      document.removeEventListener("visibilitychange", stopWhenHidden);
       disposedRef.current = true;
       if (flushTimerRef.current !== null) clearTimeout(flushTimerRef.current);
       flushTimerRef.current = null;
@@ -135,9 +141,27 @@ export function MovementTracker({ session }: { session: WorkoutSession }) {
       if (!navigator.mediaDevices?.getUserMedia) {
         throw new Error("Camera access is not supported by this browser");
       }
+      const compactDevice = window.matchMedia(
+        "(max-width: 800px), (pointer: coarse)",
+      ).matches;
+      const connection = (navigator as Navigator & {
+        connection?: { saveData?: boolean };
+      }).connection;
+      const runtime = movementRuntimeSettings({
+        compactDevice,
+        saveData: connection?.saveData === true,
+      });
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: false,
-        video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } },
+        video: {
+          facingMode: "user",
+          width: { ideal: runtime.captureWidth },
+          height: { ideal: runtime.captureHeight },
+          frameRate: {
+            ideal: runtime.captureFrameRate,
+            max: runtime.captureFrameRate,
+          },
+        },
       });
       if (runId !== runIdRef.current) {
         stream.getTracks().forEach((track) => track.stop());
@@ -186,7 +210,7 @@ export function MovementTracker({ session }: { session: WorkoutSession }) {
         if (
           video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA ||
           video.currentTime === lastVideoTime ||
-          timestamp - lastInferenceAt < 100
+          timestamp - lastInferenceAt < runtime.inferenceIntervalMs
         ) return;
         lastInferenceAt = timestamp;
         lastVideoTime = video.currentTime;

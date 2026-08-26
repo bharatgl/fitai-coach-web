@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   createRepDetector,
   movementProfileForExercise,
+  movementRuntimeSettings,
   type MovementProfile,
   type PosePoint,
 } from "../lib/movement-tracking.js";
@@ -102,4 +103,25 @@ test("ignores low-confidence landmarks", () => {
   detector.ingest(kneeLandmarks(170), 0);
   detector.ingest(kneeLandmarks(100, 0.4), 500);
   assert.equal(detector.ingest(kneeLandmarks(170), 1_000), null);
+});
+
+test("uses lower-cost camera settings on compact and data-saving devices", () => {
+  assert.deepEqual(movementRuntimeSettings(), {
+    captureWidth: 960,
+    captureHeight: 540,
+    captureFrameRate: 15,
+    inferenceIntervalMs: 100,
+  });
+  assert.deepEqual(movementRuntimeSettings({ compactDevice: true }), {
+    captureWidth: 640,
+    captureHeight: 480,
+    captureFrameRate: 12,
+    inferenceIntervalMs: 125,
+  });
+  assert.deepEqual(movementRuntimeSettings({ compactDevice: true, saveData: true }), {
+    captureWidth: 480,
+    captureHeight: 360,
+    captureFrameRate: 10,
+    inferenceIntervalMs: 160,
+  });
 });
