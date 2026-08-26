@@ -93,7 +93,7 @@ function AttachmentIcon({ kind = "attach" }: { kind?: "attach" | "file" | "remov
 
 function VoiceIcon({ kind = "microphone" }: { kind?: "microphone" | "speaker" }) {
   return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       {kind === "microphone" ? (
         <>
           <rect x="8" y="3" width="8" height="12" rx="4" />
@@ -1018,6 +1018,7 @@ function Coach({ initialMessages }: { initialMessages: CoachMessage[] }) {
                 type="button"
                 aria-pressed={spokenReplies}
                 disabled={!speechOutputSupported}
+                aria-label={spokenReplies ? "Turn spoken coach replies off" : "Turn spoken coach replies on"}
                 title={speechOutputSupported ? "Read new coach replies aloud" : "Spoken replies are not supported in this browser"}
                 onClick={() => {
                   if (spokenReplies) window.speechSynthesis.cancel();
@@ -1025,7 +1026,9 @@ function Coach({ initialMessages }: { initialMessages: CoachMessage[] }) {
                 }}
               >
                 <VoiceIcon kind="speaker" />
-                <span>{spokenReplies ? "Voice replies on" : "Voice replies off"}</span>
+                <span className="ui-visually-hidden">
+                  {spokenReplies ? "Voice replies on" : "Voice replies off"}
+                </span>
               </button>
             </div>
           </header>
@@ -1125,7 +1128,7 @@ function Coach({ initialMessages }: { initialMessages: CoachMessage[] }) {
               <AttachmentIcon />
             </button>
             <button
-              className="voice-input-button"
+              className="attachment-button voice-input-button"
               type="button"
               disabled={sending || !voiceSupported}
               aria-label={
@@ -1191,7 +1194,10 @@ function Coach({ initialMessages }: { initialMessages: CoachMessage[] }) {
               {sending ? <span className="send-spinner" /> : <span aria-hidden="true">↑</span>}
             </button>
           </form>
-          <div className="voice-experience-status" aria-live="polite">
+          <div
+            className={`voice-experience-status${voiceStatus === "idle" ? "" : " is-active"}`}
+            aria-live="polite"
+          >
             {voiceStatus === "starting" ? (
               <small>Waiting for microphone permission…</small>
             ) : voiceStatus === "listening" ? (
@@ -1199,7 +1205,9 @@ function Coach({ initialMessages }: { initialMessages: CoachMessage[] }) {
             ) : voiceStatus === "processing" ? (
               <small>Finishing transcription…</small>
             ) : (
-              <small>Voice input uses your browser&apos;s speech service. Text input is always available.</small>
+              <small className="ui-visually-hidden">
+                Voice input uses your browser&apos;s speech service. Text input is always available.
+              </small>
             )}
           </div>
           {voiceError && <small className="form-error voice-error" role="alert">{voiceError}</small>}

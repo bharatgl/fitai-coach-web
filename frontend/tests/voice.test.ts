@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { readFile } from "node:fs/promises";
 import {
   collectSpeechTranscript,
   speechRecognitionConstructor,
@@ -57,4 +58,12 @@ test("turns browser speech failures into actionable text fallbacks", () => {
   assert.match(speechRecognitionErrorMessage("no-speech"), /No speech was detected/);
   assert.match(speechRecognitionErrorMessage("audio-capture"), /No microphone/);
   assert.match(speechRecognitionErrorMessage("network"), /speech service is unavailable/);
+});
+
+test("keeps the implemented voice fallback out of the client dependency graph", async () => {
+  const packageJson = JSON.parse(await readFile(
+    new URL("../package.json", import.meta.url),
+    "utf8",
+  )) as { dependencies: Record<string, string> };
+  assert.equal(packageJson.dependencies["@google/genai"], undefined);
 });
