@@ -96,8 +96,17 @@ gcloud compute ssh "${VM_NAME}" \
 STATIC_IP="$(gcloud compute instances describe "${VM_NAME}" \
   --zone="${ZONE}" --project="${PROJECT_ID}" \
   --format='value(networkInterfaces[0].accessConfigs[0].natIP)')"
-curl --fail --silent --show-error "http://${STATIC_IP}/signin" >/dev/null
-curl --fail --silent --show-error "http://${STATIC_IP}/health/backend/live" >/dev/null
-echo "Frontend is available over HTTP at http://${STATIC_IP}"
-echo "Backend is healthy through http://${STATIC_IP}/health/backend/live"
+
+curl_vm() {
+  local path="$1"
+  curl --fail --location --silent --show-error \
+    --resolve "${FRONTEND_DOMAIN}:80:${STATIC_IP}" \
+    --resolve "${FRONTEND_DOMAIN}:443:${STATIC_IP}" \
+    "http://${FRONTEND_DOMAIN}${path}" >/dev/null
+}
+
+curl_vm /signin
+curl_vm /health/backend/live
+echo "Frontend is available on the VM at ${STATIC_IP} for ${FRONTEND_DOMAIN}"
+echo "Backend is healthy through ${FRONTEND_DOMAIN}/health/backend/live"
 echo "Point your frontend and API domains to ${STATIC_IP}, then run npm run gcp:vm:https."
