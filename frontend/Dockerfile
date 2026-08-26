@@ -8,10 +8,12 @@ COPY backend/package.json backend/package.json
 COPY frontend/package.json frontend/package.json
 COPY ai/package.json ai/package.json
 COPY packages/contracts/package.json packages/contracts/package.json
+COPY packages/ui/package.json packages/ui/package.json
 RUN npm ci
 
 COPY frontend frontend
 COPY packages/contracts packages/contracts
+COPY packages/ui packages/ui
 RUN npm run build --workspace @fitai/frontend
 
 FROM node:22.17.1-bookworm-slim AS runner
