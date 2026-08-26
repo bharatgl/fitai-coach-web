@@ -79,11 +79,12 @@ jobs:
 
       - name: Build and publish container images
         run: |
-          gcloud builds submit . \
+          gcloud builds submit \
+            --no-source \
             --project="${GCP_PROJECT_ID}" \
-            --config=infra/gcp/cloudbuild.yaml \
+            --config=infra/gcp/cloudbuild-github.yaml \
             --service-account="projects/${GCP_PROJECT_ID}/serviceAccounts/${GCP_BUILD_SERVICE_ACCOUNT}" \
-            --substitutions="_REGION=${GCP_REGION},_REPOSITORY=${GCP_REPOSITORY},_IMAGE_TAG=${GITHUB_SHA}"
+            --substitutions="_REGION=${GCP_REGION},_REPOSITORY=${GCP_REPOSITORY},_IMAGE_TAG=${GITHUB_SHA},_SOURCE_REVISION=${GITHUB_SHA}"
 
       - name: Deploy images to production VM
         env:
