@@ -42,9 +42,6 @@ data and can be tested before the next capability depends on it.
 - Transactional plan versioning: the previous plan is archived only when the new plan and all workouts persist successfully.
 - Duplicate-generation lock, rate limit, provider error handling, and an isolated live E2E test that cleans up its Atlas records.
 
-Readiness check-ins and automatic next-session revisions will be added after
-workout execution supplies real completion and effort data.
-
 ## 6. Workout execution and history — implemented in code
 
 - Start, pause, resume, and finish scheduled workouts.
@@ -52,6 +49,13 @@ workout execution supplies real completion and effort data.
 - Recalculate progress and future workload from completed data.
 - Enforce one active workout per user and optimistic concurrency on session updates.
 - Include an isolated HTTP/Atlas E2E test with guaranteed record cleanup.
+- Persist one self-reported readiness check-in per user and local date, including
+  sleep, energy, soreness, stress, motivation, optional weight, and notes.
+- Ground every coach response in a compact snapshot of the active plan, exact
+  next-workout prescriptions, active session progress, recent completed work,
+  and the latest dated readiness signal.
+- Require detailed, auditable coaching answers with an explicit
+  "Personalized from your data" evidence section and readable structured output.
 
 ## 7. Exercise demonstration videos — implemented in code
 

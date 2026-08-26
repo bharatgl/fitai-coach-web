@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildCoachContents } from "../src/coach.js";
+import {
+  appendPersonalizationEvidence,
+  buildCoachContents,
+  coachSystemPrompt,
+} from "../src/coach.js";
 
 test("builds multimodal coach content when attachments are present", () => {
   const contents = buildCoachContents({
@@ -46,4 +50,39 @@ test("includes dietary preference in coach context", () => {
 
   assert.equal(typeof contents, "string");
   assert.match(contents as string, /"dietaryPreference":"vegetarian"/);
+});
+
+test("includes exact training context and enforces personalized response detail", () => {
+  const contents = buildCoachContents({
+    profile: { primaryGoal: "bodybuilding" },
+    trainingContext: {
+      readiness: { score: 54, status: "steady", source: "self_reported" },
+      nextWorkout: {
+        name: "Upper hypertrophy",
+        exercises: [{ name: "Bench press", sets: 4, repRange: "6-8 reps" }],
+      },
+    },
+    history: [],
+    message: "Review my next workout",
+  });
+
+  assert.equal(typeof contents, "string");
+  assert.match(contents as string, /Upper hypertrophy/);
+  assert.match(contents as string, /Bench press/);
+  assert.match(contents as string, /"source":"self_reported"/);
+  assert.match(coachSystemPrompt, /name the actual workout/);
+  assert.match(coachSystemPrompt, /sets, rep ranges, rest, tempo/);
+  assert.match(coachSystemPrompt, /Never invent exercises/);
+  assert.match(coachSystemPrompt, /Avoid vague filler/);
+  assert.match(coachSystemPrompt, /personalizationEvidence/);
+});
+
+test("renders an auditable personalization evidence section", () => {
+  const reply = appendPersonalizationEvidence(
+    "Start with bench press and keep one to two reps in reserve.",
+    ["Your next workout prescribes bench press for 4 sets of 6-8 reps."],
+  );
+
+  assert.match(reply, /## Personalized from your data/);
+  assert.match(reply, /4 sets of 6-8 reps/);
 });

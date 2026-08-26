@@ -40,6 +40,8 @@ export async function ensureIndexes() {
   await Promise.all([
     database.collection("appUsers").createIndex({ externalId: 1 }, { unique: true }),
     database.collection("profiles").createIndex({ userId: 1 }, { unique: true }),
+    database.collection("readinessCheckIns").createIndex({ userId: 1, date: 1 }, { unique: true }),
+    database.collection("readinessCheckIns").createIndex({ userId: 1, date: -1 }),
     database.collection("exercises").createIndex({ slug: 1 }, { unique: true }),
     database.collection("workoutPlans").createIndex({ userId: 1, status: 1 }),
     database.collection("workoutPlans").createIndex({ userId: 1, version: -1 }, { unique: true }),

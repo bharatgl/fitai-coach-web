@@ -30,8 +30,10 @@ import Image from "next/image";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { apiRequest } from "@/lib/api";
 import { BrandLockup } from "@/components/BrandLockup";
+import { CoachMessageContent } from "@/components/CoachMessageContent";
 import { ExerciseVideoButton } from "@/components/ExerciseVideo";
 import { MovementTracker } from "@/components/MovementTracker";
+import { ReadinessCheckIn } from "@/components/ReadinessCheckIn";
 
 type View = "today" | "coach" | "plan" | "history" | "profile" | "workout";
 type CurrentUser = { id: string; name: string; email: string };
@@ -271,6 +273,11 @@ export default function FitAICoach({ user }: { user: CurrentUser }) {
             activeSession={activeSession}
             onStart={startWorkout}
             onResume={() => setView("workout")}
+            onReadinessSaved={(checkIn) => {
+              setDashboard((current) => current
+                ? { ...current, latestReadiness: checkIn }
+                : current);
+            }}
           />
         )}
         {view === "coach" && (
@@ -572,11 +579,13 @@ function Today({
   activeSession,
   onStart,
   onResume,
+  onReadinessSaved,
 }: {
   dashboard: DashboardResponse;
   activeSession: WorkoutSession | null;
   onStart: (workoutId: string) => Promise<void>;
   onResume: () => void;
+  onReadinessSaved: (checkIn: NonNullable<DashboardResponse["latestReadiness"]>) => void;
 }) {
   const nextWorkout = dashboard.upcomingWorkouts[0];
   const [starting, setStarting] = useState(false);
@@ -602,6 +611,7 @@ function Today({
         title={<>Build momentum. <em>Own the session.</em></>}
         description="Your adaptive workout, live movement guidance, and performance history in one training system."
       />
+      <ReadinessCheckIn latest={dashboard.latestReadiness} onSaved={onReadinessSaved} />
       {activeSession || nextWorkout ? (
         <Card className="hero" tone="dark" padding="lg">
           <div className="hero-copy">
@@ -888,7 +898,7 @@ function Coach({ initialMessages }: { initialMessages: CoachMessage[] }) {
                     </form>
                   ) : (
                     <>
-                      {message.content && <p>{message.content}</p>}
+                      {message.content && <CoachMessageContent content={message.content} />}
                       <footer>
                         {message.editedAt && <small>Edited</small>}
                         {message.role === "user" && message.content && !message.id.startsWith("pending-") && (

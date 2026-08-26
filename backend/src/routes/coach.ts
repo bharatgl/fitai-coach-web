@@ -17,6 +17,13 @@ import { z } from "zod";
 import { authenticate, type AuthenticatedUser } from "../auth.js";
 import { getConfig } from "../config.js";
 import { getDatabase } from "../db.js";
+import {
+  buildCoachProfileContext,
+  buildCoachTrainingContext,
+} from "../domain/coach-context.js";
+import type { PlannedWorkoutDocument, WorkoutPlanDocument } from "../domain/plans.js";
+import type { ReadinessDocument } from "../domain/readiness.js";
+import type { WorkoutSessionDocument } from "../domain/workouts.js";
 import { syncAuthenticatedUser } from "../users.js";
 
 type CoachThreadDocument = {
@@ -294,9 +301,11 @@ async function generateReply(
   message: string,
   before: Date,
   attachmentDocuments: CoachAttachmentDocument[] = [],
+  sessionId?: string | null,
 ) {
   const config = getConfig();
-  const [profile, history] = await Promise.all([
+  const now = new Date();
+  const [profile, history, readiness, activePlan, activeSession, recentSessions] = await Promise.all([
     database
       .collection("profiles")
       .findOne({ userId: user.id }, { projection: { _id: 0 } }),
@@ -309,12 +318,58 @@ async function generateReply(
       .sort({ createdAt: -1 })
       .limit(12)
       .toArray(),
+    database
+      .collection<ReadinessDocument>("readinessCheckIns")
+      .findOne(
+        { userId: user.id },
+        { projection: { _id: 0 }, sort: { date: -1, updatedAt: -1 } },
+      ),
+    database
+      .collection<WorkoutPlanDocument>("workoutPlans")
+      .findOne(
+        { userId: user.id, status: "active" },
+        { projection: { _id: 0 }, sort: { createdAt: -1 } },
+      ),
+    database
+      .collection<WorkoutSessionDocument>("workoutSessions")
+      .findOne(
+        sessionId
+          ? { id: sessionId, userId: user.id }
+          : { userId: user.id, status: { $in: ["active", "paused"] } },
+        { projection: { _id: 0 }, sort: { updatedAt: -1 } },
+      ),
+    database
+      .collection<WorkoutSessionDocument>("workoutSessions")
+      .find({ userId: user.id, status: "completed" }, { projection: { _id: 0 } })
+      .sort({ completedAt: -1 })
+      .limit(5)
+      .toArray(),
   ]);
+  const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  const nextWorkout = activePlan
+    ? await database.collection<PlannedWorkoutDocument>("plannedWorkouts").findOne(
+      {
+        userId: user.id,
+        planId: activePlan.id,
+        status: { $in: ["planned", "in_progress"] },
+        scheduledFor: { $gte: today },
+      },
+      { projection: { _id: 0 }, sort: { scheduledFor: 1 } },
+    )
+    : null;
   return generateCoachResponse({
     apiKey: config.GEMINI_API_KEY,
     model: config.GEMINI_MODEL,
-    profile,
+    profile: buildCoachProfileContext(profile),
     message,
+    trainingContext: buildCoachTrainingContext({
+      readiness,
+      activePlan,
+      nextWorkout,
+      activeSession,
+      recentSessions,
+      now,
+    }),
     history: history.reverse().map((item) => ({
       role: item.role,
       content: [
@@ -552,6 +607,7 @@ export async function coachRoutes(app: FastifyInstance) {
         input.message,
         now,
         attachmentDocuments,
+        input.sessionId,
       );
       const assistantMessage: CoachMessageDocument = {
         id: randomUUID(),
@@ -631,6 +687,7 @@ export async function coachRoutes(app: FastifyInstance) {
         content,
         existing.createdAt,
         attachmentDocuments,
+        existing.sessionId,
       );
       await messages.insertOne({
         id: randomUUID(),
