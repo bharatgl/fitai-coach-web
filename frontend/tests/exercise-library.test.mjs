@@ -35,3 +35,34 @@ test("vendors the complete RepDB free tier as attributed in-app exercise visuals
   assert.match(landing, /Exercise data by/);
   assert.match(landing, /href="\/exercises"/);
 });
+
+test("presents the complete reference and RepDB libraries as one deduplicated catalogue", async () => {
+  const [rawReference, rawRepdb, component, page] = await Promise.all([
+    readFile(new URL("../../backend/src/data/exercises.json", import.meta.url), "utf8"),
+    readFile(new URL("../data/repdb-exercises.json", import.meta.url), "utf8"),
+    readFile(new URL("../components/ExerciseLibrary.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/exercises/page.tsx", import.meta.url), "utf8"),
+  ]);
+  const reference = JSON.parse(rawReference).exercises;
+  const repdb = JSON.parse(rawRepdb).exercises;
+  const normalizedName = (value) => value
+    .normalize("NFKD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+  const uniqueNames = new Set([
+    ...reference.map(({ name }) => normalizedName(name)),
+    ...repdb.map(({ name }) => normalizedName(name)),
+  ]);
+
+  assert.equal(reference.length, 1_324);
+  assert.equal(repdb.length, 250);
+  assert.equal(uniqueNames.size, 1_521);
+  assert.match(component, /referenceLibraryData\.exercises/);
+  assert.match(component, /repdbLibraryData\.exercises/);
+  assert.match(component, /seenNames\.has/);
+  assert.match(component, /Illustrated only/);
+  assert.match(page, /more than 1,500 bodybuilding/);
+});

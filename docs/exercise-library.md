@@ -9,12 +9,19 @@ The source images and GIFs are owned by Gym Visual and are not included. See
 [`THIRD_PARTY_NOTICES.md`](../THIRD_PARTY_NOTICES.md) for attribution and the
 license notice.
 
-The product also vendors the complete 250-exercise RepDB free-tier snapshot and
-459 referenced 512px WebP illustrations for the public and signed-in exercise
-browser. These assets are licensed for commercial in-app use with visible
-attribution. ForgeFit does not expose RepDB records through its exercise API,
-redistribute them as a standalone dataset, include paid-tier preview
-animations, or use the illustrations as generative-AI references.
+The public and signed-in browser merges that complete reference library with
+the 250-exercise RepDB free-tier snapshot. Exact normalized names are combined,
+and duplicate names are consolidated, producing 1,521 unique searchable
+movements. All movements include instructions; the 250 RepDB movements include
+459 referenced 512px WebP illustrations. The browser can be filtered by body
+part, equipment, search term, or illustration availability.
+
+RepDB assets are licensed for commercial in-app use with visible attribution.
+ForgeFit does not expose RepDB records through its exercise API, redistribute
+them as a standalone dataset, include paid-tier preview animations, or use the
+illustrations as generative-AI references. Similar-looking movements are not
+matched heuristically, preventing an exercise from showing instructions or an
+illustration for a different equipment variant.
 
 ## API
 

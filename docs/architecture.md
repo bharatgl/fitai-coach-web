@@ -97,10 +97,12 @@ also avoids cross-origin browser calls and keeps preview deployments simpler.
    catalog. An exercise becomes eligible for AI plans only after ForgeFit adds
    safety guidance, equipment mapping, experience requirements, and a licensed
    or curated demonstration.
-5. A separate client-side RepDB snapshot powers the public and authenticated
-   illustrated exercise browser. Its 250 records and 459 referenced flat WebP
-   assets are bundled only for in-app use, visibly attributed, excluded from
-   backend APIs, and lazy-loaded from the authenticated workspace.
+5. The public and authenticated browser combines the 1,324 reference records
+   with a separate 250-exercise RepDB snapshot. Exact normalized names and the
+   source's duplicate names are consolidated into 1,521 unique movements;
+   approximate matches are intentionally rejected. RepDB's 459 referenced flat
+   WebP assets are bundled only for in-app use, visibly attributed, excluded
+   from backend APIs, and lazy-loaded from the authenticated workspace.
 
 ### Workout execution and adaptation
 
