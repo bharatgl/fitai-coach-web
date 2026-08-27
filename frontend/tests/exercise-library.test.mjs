@@ -36,12 +36,13 @@ test("vendors the complete RepDB free tier as attributed in-app exercise visuals
   assert.match(landing, /href="\/exercises"/);
 });
 
-test("presents all licensed sources as one deduplicated catalogue", async () => {
-  const [rawReference, rawRepdb, rawWorkoutGuide, component, page] = await Promise.all([
+test("presents all licensed sources as a visual-first, deduplicated catalogue", async () => {
+  const [rawReference, rawRepdb, rawWorkoutGuide, component, styles, page] = await Promise.all([
     readFile(new URL("../../backend/src/data/exercises.json", import.meta.url), "utf8"),
     readFile(new URL("../data/repdb-exercises.json", import.meta.url), "utf8"),
     readFile(new URL("../data/workout-guide-exercises.json", import.meta.url), "utf8"),
     readFile(new URL("../components/ExerciseLibrary.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/ExerciseLibrary.module.css", import.meta.url), "utf8"),
     readFile(new URL("../app/exercises/page.tsx", import.meta.url), "utf8"),
   ]);
   const reference = JSON.parse(rawReference).exercises;
@@ -74,8 +75,11 @@ test("presents all licensed sources as one deduplicated catalogue", async () => 
   assert.match(component, /workoutGuideLibraryData\.exercises/);
   assert.match(component, /seenNames\.has/);
   assert.match(component, /useState<LibraryMode>\("demos"\)/);
-  assert.match(component, /Visual demos/);
-  assert.match(component, /Full directory/);
+  assert.match(component, /ExercisePreview/);
+  assert.match(component, /Looping demo/);
+  assert.match(component, /role="dialog"/);
+  assert.match(component, /aria-haspopup="dialog"/);
+  assert.match(styles, /live-pulse/);
   assert.doesNotMatch(component, /Step-by-step text guide|Illustrated only/);
   assert.match(page, /more than 1,700 bodybuilding/);
 });
@@ -87,14 +91,20 @@ test("vendors the complete open Workout Guide demonstration set with provenance"
   ]);
   const data = JSON.parse(rawData);
   const paths = new Set();
+  const animations = new Set();
 
   assert.equal(data.exercises.length, 302);
   assert.equal(new Set(data.exercises.map(({ id }) => id)).size, 302);
   assert.equal(data.source.commit, "aac599224bb9780305239607ef98540b7e0ce389");
   assert.equal(data.source.license, "CC BY-SA 4.0");
-  assert.match(data.source.changes, /No changes/);
+  assert.equal(data.schemaVersion, 2);
+  assert.match(data.source.changes, /SVG artwork is unmodified.*generated looping GIF previews/);
   for (const exercise of data.exercises) {
     assert.equal(exercise.frames.length, 3);
+    assert.match(exercise.animation, /^\/exercises\/workout-guide\/assets\/[a-z0-9-]+\/movement\.gif$/);
+    animations.add(exercise.animation);
+    const animation = await readFile(new URL(`../public${exercise.animation}`, import.meta.url));
+    assert.equal(animation.subarray(0, 6).toString("ascii"), "GIF89a");
     for (const path of exercise.frames) {
       assert.match(path, /^\/exercises\/workout-guide\/assets\/[a-z0-9-]+\/frame-[123]\.svg$/);
       paths.add(path);
@@ -103,8 +113,9 @@ test("vendors the complete open Workout Guide demonstration set with provenance"
   }
 
   assert.equal(paths.size, 906);
+  assert.equal(animations.size, 302);
   await access(new URL("../public/exercises/workout-guide/LICENSE-ASSETS", import.meta.url));
   await access(new URL("../public/exercises/workout-guide/ATTRIBUTION.md", import.meta.url));
   assert.match(component, /creativecommons\.org\/licenses\/by-sa\/4\.0/);
-  assert.match(component, /Imported artwork is unmodified/);
+  assert.match(component, /GIF previews only sequence the supplied frames/);
 });

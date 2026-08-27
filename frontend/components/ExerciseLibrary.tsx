@@ -1,13 +1,13 @@
 "use client";
 
 import Image from "next/image";
-import { useDeferredValue, useMemo, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import referenceLibraryData from "../../backend/src/data/exercises.json";
 import repdbLibraryData from "@/data/repdb-exercises.json";
 import workoutGuideLibraryData from "@/data/workout-guide-exercises.json";
 import styles from "./ExerciseLibrary.module.css";
 
-type ExerciseImage = { main?: string; start?: string; peak?: string; frames?: string[] };
+type ExerciseImage = { main?: string; start?: string; peak?: string; frames?: string[]; animation?: string };
 type Exercise = {
   id: string;
   name: string;
@@ -44,6 +44,7 @@ type WorkoutGuideExercise = {
   primaryMuscle: string;
   secondaryMuscles: string[];
   frames: string[];
+  animation: string;
 };
 
 const pageSize = 24;
@@ -117,7 +118,9 @@ const referenceExercises = (referenceLibraryData.exercises as ReferenceExercise[
       goals: illustrated?.goals ?? [],
       instructions: illustrated?.instructions ?? exercise.instructions,
       tips: illustrated?.tips ?? [],
-      images: demonstrated ? { frames: demonstrated.frames } : illustrated?.images ?? {},
+      images: demonstrated
+        ? { frames: demonstrated.frames, animation: demonstrated.animation }
+        : illustrated?.images ?? {},
     };
   });
 
@@ -131,7 +134,9 @@ const baseExercises = [
         ...exercise,
         equipment: normalizedTaxonomy(exercise.equipment),
         bodyPart: normalizedTaxonomy(exercise.bodyPart),
-        images: demonstrated ? { frames: demonstrated.frames } : exercise.images,
+        images: demonstrated
+          ? { frames: demonstrated.frames, animation: demonstrated.animation }
+          : exercise.images,
       };
     }),
 ];
@@ -153,25 +158,41 @@ const exercises = [
       goals: [],
       instructions: [],
       tips: [],
-      images: { frames: exercise.frames },
+      images: { frames: exercise.frames, animation: exercise.animation },
     })),
 ].sort((left, right) => left.name.localeCompare(right.name, "en", { sensitivity: "base" }));
 
 const demoExercises = exercises.filter((exercise) => exercise.images.frames);
 type LibraryMode = "demos" | "directory";
 
-function ExerciseDemo({ exercise }: { exercise: Exercise }) {
+function ExercisePreview({ exercise }: { exercise: Exercise }) {
+  return (
+    <div className={styles.preview} aria-label={`${exercise.name} looping three-position preview`}>
+      <Image
+        src={exercise.images.animation ?? exercise.images.frames?.[0] ?? ""}
+        alt=""
+        width={512}
+        height={512}
+        sizes="(max-width: 42rem) 90vw, (max-width: 70rem) 44vw, 22vw"
+        unoptimized
+      />
+      <span className={styles.previewBadge}>Looping demo</span>
+    </div>
+  );
+}
+
+function ExercisePositions({ exercise }: { exercise: Exercise }) {
   const frames = exercise.images.frames ?? [];
   return (
-    <div className={`${styles.images} ${styles.demoFrames}`} aria-label={`${exercise.name} three-position demonstration`}>
+    <div className={styles.positionStrip} aria-label={`${exercise.name} three-position demonstration`}>
       {frames.map((path, index) => (
         <figure key={path}>
           <Image
             src={path}
-            alt={`${exercise.name} — position ${index + 1} of 3`}
+            alt={`${exercise.name} — ${["setup", "movement", "finish"][index]} position`}
             width={512}
             height={512}
-            sizes="(max-width: 42rem) 30vw, (max-width: 70rem) 15vw, 9rem"
+            sizes="(max-width: 42rem) 30vw, 15rem"
             unoptimized
           />
           <figcaption>{["Setup", "Move", "Finish"][index]}</figcaption>
@@ -187,6 +208,7 @@ export function ExerciseLibrary({ embedded = false }: { embedded?: boolean }) {
   const [bodyPart, setBodyPart] = useState("all");
   const [equipment, setEquipment] = useState("all");
   const [visibleCount, setVisibleCount] = useState(pageSize);
+  const [selectedExercise, setSelectedExercise] = useState<Exercise | null>(null);
   const deferredQuery = useDeferredValue(query.trim().toLowerCase());
   const activeExercises = mode === "demos" ? demoExercises : exercises;
   const bodyParts = useMemo(
@@ -212,6 +234,15 @@ export function ExerciseLibrary({ embedded = false }: { embedded?: boolean }) {
   }), [activeExercises, bodyPart, deferredQuery, equipment]);
   const visible = matches.slice(0, visibleCount);
 
+  useEffect(() => {
+    if (!selectedExercise) return;
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") setSelectedExercise(null);
+    }
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [selectedExercise]);
+
   function resetResults() {
     setVisibleCount(pageSize);
   }
@@ -221,99 +252,85 @@ export function ExerciseLibrary({ embedded = false }: { embedded?: boolean }) {
     setQuery("");
     setBodyPart("all");
     setEquipment("all");
+    setSelectedExercise(null);
     resetResults();
   }
 
   return (
     <section className={`${styles.library} ${embedded ? styles.embedded : ""}`} aria-labelledby="exercise-library-title">
-      <header className={styles.intro}>
-        <div>
-          <p>Exercise library</p>
-          <h1 id="exercise-library-title">Train with <em>better form.</em></h1>
-          <span>
-            Start with clear three-position demonstrations. Use the full directory
-            only when you need to look up a specific movement or variation.
-          </span>
-        </div>
-        <dl>
-          <div><dt>Visual demos</dt><dd>{demoExercises.length}</dd></div>
-          <div><dt>Full directory</dt><dd>{exercises.length.toLocaleString()}</dd></div>
-        </dl>
-      </header>
+      {embedded ? (
+        <header className={styles.compactIntro}>
+          <div>
+            <p>Movement library</p>
+            <h1 id="exercise-library-title">Exercise demos</h1>
+          </div>
+          <span>{demoExercises.length} visual guides · {exercises.length.toLocaleString()} directory movements</span>
+        </header>
+      ) : (
+        <header className={styles.intro}>
+          <div>
+            <p>Movement library</p>
+            <h1 id="exercise-library-title">See it. Learn it. <em>Train it.</em></h1>
+            <span>Clear movement previews first. Detailed setup and the complete exercise directory are one click away.</span>
+          </div>
+        </header>
+      )}
 
-      <nav className={styles.viewTabs} aria-label="Exercise library views">
-        <button type="button" aria-pressed={mode === "demos"} onClick={() => selectMode("demos")}>
-          <strong>Visual demos</strong>
-          <span>302 movements with clear setup, movement, and finish positions</span>
-        </button>
-        <button type="button" aria-pressed={mode === "directory"} onClick={() => selectMode("directory")}>
-          <strong>Full directory</strong>
-          <span>Search every exercise and equipment variation in a compact list</span>
-        </button>
-      </nav>
+      <div className={styles.toolbar}>
+        <nav className={styles.viewTabs} aria-label="Exercise library views">
+          <button type="button" aria-pressed={mode === "demos"} onClick={() => selectMode("demos")}>
+            Demos <span>{demoExercises.length}</span>
+          </button>
+          <button type="button" aria-pressed={mode === "directory"} onClick={() => selectMode("directory")}>
+            Directory <span>{exercises.length.toLocaleString()}</span>
+          </button>
+        </nav>
 
-      <form className={styles.filters} role="search" onSubmit={(event) => event.preventDefault()}>
-        <label className={styles.search}>
-          <span>Search exercises</span>
-          <input
-            type="search"
-            value={query}
-            placeholder={mode === "demos" ? "Search visual demos…" : "Search the full directory…"}
-            onChange={(event) => { setQuery(event.target.value); resetResults(); }}
-          />
-        </label>
-        <label>
-          <span>Body part</span>
-          <select value={bodyPart} onChange={(event) => { setBodyPart(event.target.value); resetResults(); }}>
-            <option value="all">All body parts</option>
-            {bodyParts.map((value) => <option value={value} key={value}>{readable(value)}</option>)}
-          </select>
-        </label>
-        <label>
-          <span>Equipment</span>
-          <select value={equipment} onChange={(event) => { setEquipment(event.target.value); resetResults(); }}>
-            <option value="all">All equipment</option>
-            {equipmentOptions.map((value) => <option value={value} key={value}>{readable(value)}</option>)}
-          </select>
-        </label>
-      </form>
+        <form className={styles.filters} role="search" onSubmit={(event) => event.preventDefault()}>
+          <label className={styles.search}>
+            <span>Search exercises</span>
+            <input
+              type="search"
+              value={query}
+              placeholder={mode === "demos" ? "Search demos…" : "Search directory…"}
+              onChange={(event) => { setQuery(event.target.value); resetResults(); }}
+            />
+          </label>
+          <label>
+            <span>Body part</span>
+            <select value={bodyPart} onChange={(event) => { setBodyPart(event.target.value); resetResults(); }}>
+              <option value="all">All body parts</option>
+              {bodyParts.map((value) => <option value={value} key={value}>{readable(value)}</option>)}
+            </select>
+          </label>
+          <label>
+            <span>Equipment</span>
+            <select value={equipment} onChange={(event) => { setEquipment(event.target.value); resetResults(); }}>
+              <option value="all">All equipment</option>
+              {equipmentOptions.map((value) => <option value={value} key={value}>{readable(value)}</option>)}
+            </select>
+          </label>
+        </form>
+      </div>
 
       <div className={styles.resultsLine} aria-live="polite">
         <strong>{matches.length} {mode === "demos" ? "visual demos" : "directory exercises"}</strong>
-        <span>Informational reference—not individualized medical or injury advice.</span>
       </div>
 
       {visible.length ? (
         mode === "demos" ? (
           <div className={styles.grid}>
             {visible.map((exercise) => (
-              <article className={styles.card} key={exercise.id}>
-                <ExerciseDemo exercise={exercise} />
+              <button className={styles.card} key={exercise.id} type="button" aria-haspopup="dialog" onClick={() => setSelectedExercise(exercise)}>
+                <ExercisePreview exercise={exercise} />
                 <div className={styles.cardBody}>
-                  <div className={styles.tags}>
-                    <span>{readable(exercise.bodyPart)}</span>
-                    <span>{readable(exercise.equipment)}</span>
+                  <div className={styles.cardHeading}>
+                    <h2>{exercise.name}</h2>
+                    <span aria-hidden="true">↗</span>
                   </div>
-                  <h2>{exercise.name}</h2>
-                  <small>
-                    <b>Primary:</b> {exercise.primaryMuscles.map(readable).join(", ")}
-                  </small>
-                  {exercise.instructions.length > 0 ? (
-                    <details>
-                      <summary>Setup and instructions <span>+</span></summary>
-                      <ol>{exercise.instructions.map((step) => <li key={step}>{step}</li>)}</ol>
-                      {exercise.tips.length > 0 && (
-                        <div className={styles.tips}>
-                          <strong>Form cues</strong>
-                          <ul>{exercise.tips.map((tip) => <li key={tip}>{tip}</li>)}</ul>
-                        </div>
-                      )}
-                    </details>
-                  ) : (
-                    <p className={styles.visualNote}>Visual reference only—ask your coach for setup and loading.</p>
-                  )}
+                  <p>{readable(exercise.primaryMuscles[0] ?? exercise.bodyPart)} · {readable(exercise.equipment)}</p>
                 </div>
-              </article>
+              </button>
             ))}
           </div>
         ) : (
@@ -356,12 +373,44 @@ export function ExerciseLibrary({ embedded = false }: { embedded?: boolean }) {
         </button>
       )}
 
+      {selectedExercise && (
+        <div className={styles.modalBackdrop} role="presentation" onMouseDown={(event) => {
+          if (event.target === event.currentTarget) setSelectedExercise(null);
+        }}>
+          <section className={styles.exerciseModal} role="dialog" aria-modal="true" aria-labelledby="exercise-detail-title">
+            <button className={styles.modalClose} type="button" onClick={() => setSelectedExercise(null)} aria-label="Close exercise details">×</button>
+            <header className={styles.modalHeader}>
+              <p>{readable(selectedExercise.bodyPart)} · {readable(selectedExercise.equipment)}</p>
+              <h2 id="exercise-detail-title">{selectedExercise.name}</h2>
+              <span>Primary: {selectedExercise.primaryMuscles.map(readable).join(", ")}</span>
+            </header>
+            <ExercisePositions exercise={selectedExercise} />
+            <div className={styles.modalBody}>
+              {selectedExercise.instructions.length > 0 ? (
+                <>
+                  <h3>How to perform it</h3>
+                  <ol>{selectedExercise.instructions.map((step) => <li key={step}>{step}</li>)}</ol>
+                  {selectedExercise.tips.length > 0 && (
+                    <div className={styles.tips}>
+                      <strong>Form cues</strong>
+                      <ul>{selectedExercise.tips.map((tip) => <li key={tip}>{tip}</li>)}</ul>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <p>This is a visual movement reference. Ask your coach to personalize setup, range of motion, and loading for your experience and equipment.</p>
+              )}
+            </div>
+          </section>
+        </div>
+      )}
+
       <footer className={styles.credit}>
         The catalogue combines the MIT-licensed Exercises Dataset, illustrations and exercise data
         by <a href="https://repdb.co" target="_blank" rel="noreferrer">RepDB</a>, and
         <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noreferrer">CC BY-SA 4.0</a> demonstrations
         from <a href="https://bryllim.github.io/workout-guide/" target="_blank" rel="noreferrer">Workout Guide</a>
-        by Bryl Lim, derived in part from Everkinetic. Imported artwork is unmodified.
+        by Bryl Lim, derived in part from Everkinetic. Source artwork is unmodified; GIF previews only sequence the supplied frames.
       </footer>
     </section>
   );

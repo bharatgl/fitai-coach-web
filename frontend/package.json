@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build --webpack",
+    "generate:exercise-gifs": "node scripts/generate-workout-guide-gifs.mjs",
     "start": "next start",
     "test": "node --import tsx --test tests/*.test.mjs tests/*.test.ts",
     "lint": "eslint . --ignore-pattern .next",
