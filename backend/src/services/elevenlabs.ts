@@ -3,9 +3,9 @@ import type { AppConfig } from "../config.js";
 
 const agentName = "ForgeFit Personal Coach";
 const defaultVoice = {
-  id: "SQ8WYwlpzxrTbbuJgi38",
-  publicOwnerId: "160aac6f63afb66ad5e88dd7e3271dd69a16a6dbc3dfb2db4d09e55c1b308d65",
-  name: "ForgeFit Neel",
+  id: "nPczCjzI2devNBz1zQrb",
+  publicOwnerId: null,
+  name: "ForgeFit Brian",
 };
 
 const agentListResponse = z.object({
@@ -137,9 +137,9 @@ export function buildElevenLabsCoachAgentConfig(config: ElevenLabsConfig) {
       tts: {
         voice_id: voiceId,
         model_id: "eleven_flash_v2",
-        stability: 0.52,
-        similarity_boost: 0.86,
-        speed: 0.92,
+        stability: 0.48,
+        similarity_boost: 0.84,
+        speed: 0.96,
         expressive_mode: true,
         agent_output_audio_format: "pcm_16000",
       },
@@ -182,6 +182,11 @@ async function ensureDefaultVoice(config: ElevenLabsConfig) {
   const response = await elevenLabsRequest(config, "/v1/voices");
   const voices = voiceListResponse.parse(await response.json());
   if (voices.voices.some((voice) => voice.voice_id === defaultVoice.id)) return;
+  if (!defaultVoice.publicOwnerId) {
+    throw Object.assign(new Error("The default ElevenLabs voice is unavailable for this account."), {
+      statusCode: 503,
+    });
+  }
   await elevenLabsRequest(
     config,
     `/v1/voices/add/${defaultVoice.publicOwnerId}/${defaultVoice.id}`,
