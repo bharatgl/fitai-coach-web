@@ -36,7 +36,7 @@ test("vendors the complete RepDB free tier as attributed in-app exercise visuals
   assert.match(landing, /href="\/exercises"/);
 });
 
-test("presents all licensed sources as a visual-first, deduplicated catalogue", async () => {
+test("enriches visual demos from licensed sources without exposing a text directory", async () => {
   const [rawReference, rawRepdb, rawWorkoutGuide, component, styles, page] = await Promise.all([
     readFile(new URL("../../backend/src/data/exercises.json", import.meta.url), "utf8"),
     readFile(new URL("../data/repdb-exercises.json", import.meta.url), "utf8"),
@@ -73,8 +73,9 @@ test("presents all licensed sources as a visual-first, deduplicated catalogue", 
   assert.match(component, /referenceLibraryData\.exercises/);
   assert.match(component, /repdbLibraryData\.exercises/);
   assert.match(component, /workoutGuideLibraryData\.exercises/);
-  assert.match(component, /seenNames\.has/);
-  assert.match(component, /useState<LibraryMode>\("demos"\)/);
+  assert.match(component, /workoutGuideExercises\s*\.map/);
+  assert.doesNotMatch(component, /seenNames|baseExercises|directoryRow/);
+  assert.doesNotMatch(component, /LibraryMode|Directory|directory exercises/);
   assert.match(component, /ExercisePreview/);
   assert.match(component, /Hover to play/);
   assert.match(component, /onPointerEnter=.*setPreviewing\(true\)/);
@@ -83,7 +84,7 @@ test("presents all licensed sources as a visual-first, deduplicated catalogue", 
   assert.match(component, /aria-haspopup="dialog"/);
   assert.match(styles, /live-pulse/);
   assert.doesNotMatch(component, /Step-by-step text guide|Illustrated only/);
-  assert.match(page, /more than 1,700 bodybuilding/);
+  assert.match(page, /302 animated bodybuilding/);
 });
 
 test("vendors the complete open Workout Guide demonstration set with provenance", async () => {

@@ -86,84 +86,39 @@ const repdbByName = new Map(
   repdbExercises.map((exercise) => [normalizedName(exercise.name), exercise]),
 );
 const workoutGuideExercises = workoutGuideLibraryData.exercises as WorkoutGuideExercise[];
-const workoutGuideByName = new Map(
-  workoutGuideExercises.map((exercise) => [normalizedName(exercise.name), exercise]),
+const referenceByName = new Map(
+  (referenceLibraryData.exercises as ReferenceExercise[])
+    .map((exercise) => [normalizedName(exercise.name), exercise]),
 );
-const seenNames = new Set<string>();
 
-const referenceExercises = (referenceLibraryData.exercises as ReferenceExercise[])
-  .filter((exercise) => {
-    const name = normalizedName(exercise.name);
-    if (seenNames.has(name)) return false;
-    seenNames.add(name);
-    return true;
-  })
+const demoExercises = workoutGuideExercises
   .map((exercise): Exercise => {
-    const illustrated = repdbByName.get(normalizedName(exercise.name));
-    const demonstrated = workoutGuideByName.get(normalizedName(exercise.name));
+    const name = normalizedName(exercise.name);
+    const reference = referenceByName.get(name);
+    const illustrated = repdbByName.get(name);
+    const primaryMuscle = reference?.target ?? exercise.primaryMuscle;
     return {
       id: exercise.id,
       name: exercise.name,
       description: illustrated?.description
-        ?? `A ${normalizedTaxonomy(exercise.equipment)} movement targeting the ${readable(exercise.target)}.`,
-      category: illustrated?.category ?? "strength",
-      difficulty: illustrated?.difficulty ?? "reference",
+        ?? `A three-position visual demonstration for ${exercise.name.toLowerCase()}.`,
+      category: illustrated?.category ?? readable(exercise.exerciseType),
+      difficulty: illustrated?.difficulty ?? "visual guide",
       equipment: normalizedTaxonomy(exercise.equipment),
-      bodyPart: normalizedTaxonomy(exercise.bodyPart),
-      primaryMuscles: illustrated?.primaryMuscles ?? [exercise.target],
+      bodyPart: reference ? normalizedTaxonomy(reference.bodyPart) : bodyPartForMuscle(exercise.primaryMuscle),
+      primaryMuscles: illustrated?.primaryMuscles ?? [primaryMuscle],
       secondaryMuscles: [...new Set([
         ...exercise.secondaryMuscles,
+        ...(reference?.secondaryMuscles ?? []),
         ...(illustrated?.secondaryMuscles ?? []),
       ])],
       goals: illustrated?.goals ?? [],
-      instructions: illustrated?.instructions ?? exercise.instructions,
+      instructions: illustrated?.instructions ?? reference?.instructions ?? [],
       tips: illustrated?.tips ?? [],
-      images: demonstrated
-        ? { frames: demonstrated.frames, animation: demonstrated.animation }
-        : illustrated?.images ?? {},
-    };
-  });
-
-const baseExercises = [
-  ...referenceExercises,
-  ...repdbExercises
-    .filter((exercise) => !seenNames.has(normalizedName(exercise.name)))
-    .map((exercise): Exercise => {
-      const demonstrated = workoutGuideByName.get(normalizedName(exercise.name));
-      return {
-        ...exercise,
-        equipment: normalizedTaxonomy(exercise.equipment),
-        bodyPart: normalizedTaxonomy(exercise.bodyPart),
-        images: demonstrated
-          ? { frames: demonstrated.frames, animation: demonstrated.animation }
-          : exercise.images,
-      };
-    }),
-];
-const baseNames = new Set(baseExercises.map((exercise) => normalizedName(exercise.name)));
-const exercises = [
-  ...baseExercises,
-  ...workoutGuideExercises
-    .filter((exercise) => !baseNames.has(normalizedName(exercise.name)))
-    .map((exercise): Exercise => ({
-      id: exercise.id,
-      name: exercise.name,
-      description: `A three-position visual demonstration for ${exercise.name.toLowerCase()}.`,
-      category: readable(exercise.exerciseType),
-      difficulty: "visual guide",
-      equipment: normalizedTaxonomy(exercise.equipment),
-      bodyPart: bodyPartForMuscle(exercise.primaryMuscle),
-      primaryMuscles: [exercise.primaryMuscle],
-      secondaryMuscles: exercise.secondaryMuscles,
-      goals: [],
-      instructions: [],
-      tips: [],
       images: { frames: exercise.frames, animation: exercise.animation },
-    })),
-].sort((left, right) => left.name.localeCompare(right.name, "en", { sensitivity: "base" }));
-
-const demoExercises = exercises.filter((exercise) => exercise.images.frames);
-type LibraryMode = "demos" | "directory";
+    };
+  })
+  .sort((left, right) => left.name.localeCompare(right.name, "en", { sensitivity: "base" }));
 
 function ExercisePreview({ exercise, active }: { exercise: Exercise; active: boolean }) {
   const previewSource = active
@@ -234,23 +189,21 @@ function ExercisePositions({ exercise }: { exercise: Exercise }) {
 }
 
 export function ExerciseLibrary({ embedded = false }: { embedded?: boolean }) {
-  const [mode, setMode] = useState<LibraryMode>("demos");
   const [query, setQuery] = useState("");
   const [bodyPart, setBodyPart] = useState("all");
   const [equipment, setEquipment] = useState("all");
   const [visibleCount, setVisibleCount] = useState(pageSize);
   const [selectedExercise, setSelectedExercise] = useState<Exercise | null>(null);
   const deferredQuery = useDeferredValue(query.trim().toLowerCase());
-  const activeExercises = mode === "demos" ? demoExercises : exercises;
   const bodyParts = useMemo(
-    () => [...new Set(activeExercises.map((exercise) => exercise.bodyPart))].sort(),
-    [activeExercises],
+    () => [...new Set(demoExercises.map((exercise) => exercise.bodyPart))].sort(),
+    [],
   );
   const equipmentOptions = useMemo(
-    () => [...new Set(activeExercises.map((exercise) => exercise.equipment))].sort(),
-    [activeExercises],
+    () => [...new Set(demoExercises.map((exercise) => exercise.equipment))].sort(),
+    [],
   );
-  const matches = useMemo(() => activeExercises.filter((exercise) => {
+  const matches = useMemo(() => demoExercises.filter((exercise) => {
     const searchable = [
       exercise.name,
       exercise.description,
@@ -262,7 +215,7 @@ export function ExerciseLibrary({ embedded = false }: { embedded?: boolean }) {
     return (!deferredQuery || searchable.includes(deferredQuery))
       && (bodyPart === "all" || exercise.bodyPart === bodyPart)
       && (equipment === "all" || exercise.equipment === equipment);
-  }), [activeExercises, bodyPart, deferredQuery, equipment]);
+  }), [bodyPart, deferredQuery, equipment]);
   const visible = matches.slice(0, visibleCount);
 
   useEffect(() => {
@@ -278,15 +231,6 @@ export function ExerciseLibrary({ embedded = false }: { embedded?: boolean }) {
     setVisibleCount(pageSize);
   }
 
-  function selectMode(nextMode: LibraryMode) {
-    setMode(nextMode);
-    setQuery("");
-    setBodyPart("all");
-    setEquipment("all");
-    setSelectedExercise(null);
-    resetResults();
-  }
-
   return (
     <section className={`${styles.library} ${embedded ? styles.embedded : ""}`} aria-labelledby="exercise-library-title">
       {embedded ? (
@@ -295,35 +239,26 @@ export function ExerciseLibrary({ embedded = false }: { embedded?: boolean }) {
             <p>Movement library</p>
             <h1 id="exercise-library-title">Exercise demos</h1>
           </div>
-          <span>{demoExercises.length} visual guides · {exercises.length.toLocaleString()} directory movements</span>
+          <span>{demoExercises.length} animated movement guides</span>
         </header>
       ) : (
         <header className={styles.intro}>
           <div>
             <p>Movement library</p>
             <h1 id="exercise-library-title">See it. Learn it. <em>Train it.</em></h1>
-            <span>Clear movement previews first. Detailed setup and the complete exercise directory are one click away.</span>
+            <span>Hover to preview each movement, then open any exercise for setup positions and practical form guidance.</span>
           </div>
         </header>
       )}
 
       <div className={styles.toolbar}>
-        <nav className={styles.viewTabs} aria-label="Exercise library views">
-          <button type="button" aria-pressed={mode === "demos"} onClick={() => selectMode("demos")}>
-            Demos <span>{demoExercises.length}</span>
-          </button>
-          <button type="button" aria-pressed={mode === "directory"} onClick={() => selectMode("directory")}>
-            Directory <span>{exercises.length.toLocaleString()}</span>
-          </button>
-        </nav>
-
         <form className={styles.filters} role="search" onSubmit={(event) => event.preventDefault()}>
           <label className={styles.search}>
             <span>Search exercises</span>
             <input
               type="search"
               value={query}
-              placeholder={mode === "demos" ? "Search demos…" : "Search directory…"}
+              placeholder="Search movement demos…"
               onChange={(event) => { setQuery(event.target.value); resetResults(); }}
             />
           </label>
@@ -345,41 +280,15 @@ export function ExerciseLibrary({ embedded = false }: { embedded?: boolean }) {
       </div>
 
       <div className={styles.resultsLine} aria-live="polite">
-        <strong>{matches.length} {mode === "demos" ? "visual demos" : "directory exercises"}</strong>
+        <strong>{matches.length} visual demos</strong>
       </div>
 
       {visible.length ? (
-        mode === "demos" ? (
-          <div className={styles.grid}>
-            {visible.map((exercise) => (
-              <ExerciseCard exercise={exercise} key={exercise.id} onSelect={() => setSelectedExercise(exercise)} />
-            ))}
-          </div>
-        ) : (
-          <div className={styles.directory}>
-            {visible.map((exercise) => (
-              <article className={styles.directoryRow} key={exercise.id}>
-                <div className={styles.directoryHeading}>
-                  <div>
-                    <div className={styles.tags}>
-                      <span>{readable(exercise.bodyPart)}</span>
-                      <span>{readable(exercise.equipment)}</span>
-                    </div>
-                    <h2>{exercise.name}</h2>
-                  </div>
-                  <small><b>Primary:</b> {exercise.primaryMuscles.map(readable).join(", ")}</small>
-                </div>
-                <p>{exercise.description}</p>
-                {exercise.instructions.length > 0 && (
-                  <details>
-                    <summary>Read instructions <span>+</span></summary>
-                    <ol>{exercise.instructions.map((step) => <li key={step}>{step}</li>)}</ol>
-                  </details>
-                )}
-              </article>
-            ))}
-          </div>
-        )
+        <div className={styles.grid}>
+          {visible.map((exercise) => (
+            <ExerciseCard exercise={exercise} key={exercise.id} onSelect={() => setSelectedExercise(exercise)} />
+          ))}
+        </div>
       ) : (
         <div className={styles.empty}>
           <h2>No exercises match those filters.</h2>

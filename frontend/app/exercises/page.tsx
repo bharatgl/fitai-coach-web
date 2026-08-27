@@ -6,7 +6,7 @@ import styles from "./page.module.css";
 
 export const metadata: Metadata = {
   title: "Exercise library — forgefit.space",
-  description: "Browse more than 1,700 bodybuilding, strength, mobility, and cardio exercises with instructions and open visual demonstrations.",
+  description: "Explore 302 animated bodybuilding, strength, mobility, and cardio movement demonstrations with practical form guidance.",
 };
 
 export default function ExercisesPage() {
