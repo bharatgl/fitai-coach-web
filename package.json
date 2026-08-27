@@ -19,6 +19,7 @@
     "typecheck": "turbo run typecheck",
     "infra:local": "docker compose up --build",
     "exercises:import:repdb": "node ./scripts/import-repdb-exercises.mjs",
+    "exercises:import:workout-guide": "node ./scripts/import-workout-guide.mjs",
     "gcp:bootstrap": "./infra/gcp/bootstrap.sh",
     "gcp:init-app-secrets": "node ./infra/gcp/initialize-app-secrets.mjs",
     "gcp:secrets": "node ./infra/gcp/sync-secrets.mjs",

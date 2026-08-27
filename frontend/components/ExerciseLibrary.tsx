@@ -4,9 +4,10 @@ import Image from "next/image";
 import { useDeferredValue, useMemo, useState } from "react";
 import referenceLibraryData from "../../backend/src/data/exercises.json";
 import repdbLibraryData from "@/data/repdb-exercises.json";
+import workoutGuideLibraryData from "@/data/workout-guide-exercises.json";
 import styles from "./ExerciseLibrary.module.css";
 
-type ExerciseImage = { main?: string; start?: string; peak?: string };
+type ExerciseImage = { main?: string; start?: string; peak?: string; frames?: string[] };
 type Exercise = {
   id: string;
   name: string;
@@ -21,7 +22,6 @@ type Exercise = {
   instructions: string[];
   tips: string[];
   images: ExerciseImage;
-  source: "combined" | "reference" | "repdb";
 };
 
 type ReferenceExercise = {
@@ -35,7 +35,16 @@ type ReferenceExercise = {
   instructions: string[];
 };
 
-type RepdbExercise = Omit<Exercise, "source">;
+type RepdbExercise = Exercise;
+type WorkoutGuideExercise = {
+  id: string;
+  name: string;
+  exerciseType: string;
+  equipment: string;
+  primaryMuscle: string;
+  secondaryMuscles: string[];
+  frames: string[];
+};
 
 const pageSize = 24;
 
@@ -58,9 +67,30 @@ function normalizedTaxonomy(value: string) {
   return normalized === "bodyweight" ? "body weight" : normalized;
 }
 
+function bodyPartForMuscle(value: string) {
+  const muscle = value.toLowerCase();
+  if (["chest"].includes(muscle)) return "chest";
+  if (["shoulders", "rear delts"].includes(muscle)) return "shoulders";
+  if (["biceps", "triceps"].includes(muscle)) return "upper arms";
+  if (["forearms"].includes(muscle)) return "lower arms";
+  if (["calves"].includes(muscle)) return "lower legs";
+  if (["core"].includes(muscle)) return "waist";
+  if (["back", "lats", "lower back", "upper back", "posterior chain"].includes(muscle)) return "back";
+  if (["quads", "hamstrings", "glutes", "adductors", "legs", "hips"].includes(muscle)) return "upper legs";
+  return "full body";
+}
+
+function hasVisuals(exercise: Exercise) {
+  return Object.keys(exercise.images).length > 0;
+}
+
 const repdbExercises = repdbLibraryData.exercises as RepdbExercise[];
 const repdbByName = new Map(
   repdbExercises.map((exercise) => [normalizedName(exercise.name), exercise]),
+);
+const workoutGuideExercises = workoutGuideLibraryData.exercises as WorkoutGuideExercise[];
+const workoutGuideByName = new Map(
+  workoutGuideExercises.map((exercise) => [normalizedName(exercise.name), exercise]),
 );
 const seenNames = new Set<string>();
 
@@ -73,6 +103,7 @@ const referenceExercises = (referenceLibraryData.exercises as ReferenceExercise[
   })
   .map((exercise): Exercise => {
     const illustrated = repdbByName.get(normalizedName(exercise.name));
+    const demonstrated = workoutGuideByName.get(normalizedName(exercise.name));
     return {
       id: exercise.id,
       name: exercise.name,
@@ -90,27 +121,71 @@ const referenceExercises = (referenceLibraryData.exercises as ReferenceExercise[
       goals: illustrated?.goals ?? [],
       instructions: illustrated?.instructions ?? exercise.instructions,
       tips: illustrated?.tips ?? [],
-      images: illustrated?.images ?? {},
-      source: illustrated ? "combined" : "reference",
+      images: demonstrated ? { frames: demonstrated.frames } : illustrated?.images ?? {},
     };
   });
 
-const exercises = [
+const baseExercises = [
   ...referenceExercises,
   ...repdbExercises
     .filter((exercise) => !seenNames.has(normalizedName(exercise.name)))
+    .map((exercise): Exercise => {
+      const demonstrated = workoutGuideByName.get(normalizedName(exercise.name));
+      return {
+        ...exercise,
+        equipment: normalizedTaxonomy(exercise.equipment),
+        bodyPart: normalizedTaxonomy(exercise.bodyPart),
+        images: demonstrated ? { frames: demonstrated.frames } : exercise.images,
+      };
+    }),
+];
+const baseNames = new Set(baseExercises.map((exercise) => normalizedName(exercise.name)));
+const exercises = [
+  ...baseExercises,
+  ...workoutGuideExercises
+    .filter((exercise) => !baseNames.has(normalizedName(exercise.name)))
     .map((exercise): Exercise => ({
-      ...exercise,
+      id: exercise.id,
+      name: exercise.name,
+      description: `A three-position visual demonstration for ${exercise.name.toLowerCase()}.`,
+      category: readable(exercise.exerciseType),
+      difficulty: "visual guide",
       equipment: normalizedTaxonomy(exercise.equipment),
-      bodyPart: normalizedTaxonomy(exercise.bodyPart),
-      source: "repdb",
+      bodyPart: bodyPartForMuscle(exercise.primaryMuscle),
+      primaryMuscles: [exercise.primaryMuscle],
+      secondaryMuscles: exercise.secondaryMuscles,
+      goals: [],
+      instructions: [],
+      tips: [],
+      images: { frames: exercise.frames },
     })),
 ].sort((left, right) => left.name.localeCompare(right.name, "en", { sensitivity: "base" }));
 
-const illustratedCount = exercises.filter((exercise) => Object.keys(exercise.images).length > 0).length;
+const illustratedCount = exercises.filter(hasVisuals).length;
+const demoCount = exercises.filter((exercise) => exercise.images.frames).length;
 
 function ExerciseImages({ exercise }: { exercise: Exercise }) {
-  if (!Object.keys(exercise.images).length) {
+  if (exercise.images.frames) {
+    return (
+      <div className={`${styles.images} ${styles.demoFrames}`} aria-label={`${exercise.name} three-position demonstration`}>
+        {exercise.images.frames.map((path, index) => (
+          <figure key={path}>
+            <Image
+              src={path}
+              alt={`${exercise.name} — position ${index + 1} of 3`}
+              width={512}
+              height={512}
+              sizes="(max-width: 42rem) 30vw, (max-width: 70rem) 15vw, 9rem"
+              unoptimized
+            />
+            <figcaption>{["Setup", "Move", "Finish"][index]}</figcaption>
+          </figure>
+        ))}
+      </div>
+    );
+  }
+
+  if (!hasVisuals(exercise)) {
     return (
       <div className={styles.textGuide} aria-label={`${exercise.name} text instruction guide`}>
         <span>{exercise.name.slice(0, 1)}</span>
@@ -171,7 +246,7 @@ export function ExerciseLibrary({ embedded = false }: { embedded?: boolean }) {
     return (!deferredQuery || searchable.includes(deferredQuery))
       && (bodyPart === "all" || exercise.bodyPart === bodyPart)
       && (equipment === "all" || exercise.equipment === equipment)
-      && (!illustratedOnly || Object.keys(exercise.images).length > 0);
+      && (!illustratedOnly || hasVisuals(exercise));
   }), [bodyPart, deferredQuery, equipment, illustratedOnly]);
   const visible = matches.slice(0, visibleCount);
 
@@ -186,12 +261,13 @@ export function ExerciseLibrary({ embedded = false }: { embedded?: boolean }) {
           <p>Complete bodybuilding movement reference</p>
           <h1 id="exercise-library-title">Find your next <em>exercise.</em></h1>
           <span>
-            Every movement from ForgeFit&apos;s 1,324-record reference library, expanded
-            with RepDB exercises and licensed illustrations in one searchable catalogue.
+            The complete ForgeFit reference library, expanded with licensed RepDB
+            illustrations and open three-position Workout Guide demonstrations.
           </span>
         </div>
         <dl>
           <div><dt>Unique exercises</dt><dd>{exercises.length.toLocaleString()}</dd></div>
+          <div><dt>3-step demos</dt><dd>{demoCount}</dd></div>
           <div><dt>Illustrated</dt><dd>{illustratedCount}</dd></div>
         </dl>
       </header>
@@ -245,23 +321,27 @@ export function ExerciseLibrary({ embedded = false }: { embedded?: boolean }) {
                   <span>{readable(exercise.bodyPart)}</span>
                   <span>{readable(exercise.equipment)}</span>
                   <span>{exercise.difficulty}</span>
-                  {Object.keys(exercise.images).length > 0 && <span>illustrated</span>}
+                  {exercise.images.frames ? <span>3-step demo</span> : hasVisuals(exercise) && <span>illustrated</span>}
                 </div>
                 <h2>{exercise.name}</h2>
                 <p>{exercise.description}</p>
                 <small>
                   <b>Primary:</b> {exercise.primaryMuscles.map(readable).join(", ")}
                 </small>
-                <details>
-                  <summary>Setup and instructions <span>+</span></summary>
-                  <ol>{exercise.instructions.map((step) => <li key={step}>{step}</li>)}</ol>
-                  {exercise.tips.length > 0 && (
-                    <div className={styles.tips}>
-                      <strong>Form cues</strong>
-                      <ul>{exercise.tips.map((tip) => <li key={tip}>{tip}</li>)}</ul>
-                    </div>
-                  )}
-                </details>
+                {exercise.instructions.length > 0 ? (
+                  <details>
+                    <summary>Setup and instructions <span>+</span></summary>
+                    <ol>{exercise.instructions.map((step) => <li key={step}>{step}</li>)}</ol>
+                    {exercise.tips.length > 0 && (
+                      <div className={styles.tips}>
+                        <strong>Form cues</strong>
+                        <ul>{exercise.tips.map((tip) => <li key={tip}>{tip}</li>)}</ul>
+                      </div>
+                    )}
+                  </details>
+                ) : (
+                  <p className={styles.visualNote}>Use the three positions as a movement reference. Ask your coach for individualized setup and loading.</p>
+                )}
               </div>
             </article>
           ))}
@@ -282,9 +362,11 @@ export function ExerciseLibrary({ embedded = false }: { embedded?: boolean }) {
       )}
 
       <footer className={styles.credit}>
-        The catalogue combines the MIT-licensed Exercises Dataset with illustrations and
-        exercise data by <a href="https://repdb.co" target="_blank" rel="noreferrer">RepDB</a>.
-        RepDB free-tier assets are used in-app with attribution.
+        The catalogue combines the MIT-licensed Exercises Dataset, illustrations and exercise data
+        by <a href="https://repdb.co" target="_blank" rel="noreferrer">RepDB</a>, and
+        <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noreferrer">CC BY-SA 4.0</a> demonstrations
+        from <a href="https://bryllim.github.io/workout-guide/" target="_blank" rel="noreferrer">Workout Guide</a>
+        by Bryl Lim, derived in part from Everkinetic. Imported artwork is unmodified.
       </footer>
     </section>
   );

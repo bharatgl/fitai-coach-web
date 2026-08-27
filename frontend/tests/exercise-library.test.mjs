@@ -30,21 +30,23 @@ test("vendors the complete RepDB free tier as attributed in-app exercise visuals
   }
   assert.equal(paths.size, 459);
   await access(new URL("../public/exercises/repdb/LICENSE-DATA.md", import.meta.url));
-  assert.match(component, /exercise data by/i);
+  assert.match(component, /exercise data\s+by/i);
   assert.match(component, /https:\/\/repdb\.co/);
   assert.match(landing, /Exercise data by/);
   assert.match(landing, /href="\/exercises"/);
 });
 
-test("presents the complete reference and RepDB libraries as one deduplicated catalogue", async () => {
-  const [rawReference, rawRepdb, component, page] = await Promise.all([
+test("presents all licensed sources as one deduplicated catalogue", async () => {
+  const [rawReference, rawRepdb, rawWorkoutGuide, component, page] = await Promise.all([
     readFile(new URL("../../backend/src/data/exercises.json", import.meta.url), "utf8"),
     readFile(new URL("../data/repdb-exercises.json", import.meta.url), "utf8"),
+    readFile(new URL("../data/workout-guide-exercises.json", import.meta.url), "utf8"),
     readFile(new URL("../components/ExerciseLibrary.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/exercises/page.tsx", import.meta.url), "utf8"),
   ]);
   const reference = JSON.parse(rawReference).exercises;
   const repdb = JSON.parse(rawRepdb).exercises;
+  const workoutGuide = JSON.parse(rawWorkoutGuide).exercises;
   const normalizedName = (value) => value
     .normalize("NFKD")
     .replace(/\p{Diacritic}/gu, "")
@@ -55,14 +57,51 @@ test("presents the complete reference and RepDB libraries as one deduplicated ca
   const uniqueNames = new Set([
     ...reference.map(({ name }) => normalizedName(name)),
     ...repdb.map(({ name }) => normalizedName(name)),
+    ...workoutGuide.map(({ name }) => normalizedName(name)),
+  ]);
+  const illustratedNames = new Set([
+    ...repdb.map(({ name }) => normalizedName(name)),
+    ...workoutGuide.map(({ name }) => normalizedName(name)),
   ]);
 
   assert.equal(reference.length, 1_324);
   assert.equal(repdb.length, 250);
-  assert.equal(uniqueNames.size, 1_521);
+  assert.equal(workoutGuide.length, 302);
+  assert.equal(uniqueNames.size, 1_725);
+  assert.equal(illustratedNames.size, 479);
   assert.match(component, /referenceLibraryData\.exercises/);
   assert.match(component, /repdbLibraryData\.exercises/);
+  assert.match(component, /workoutGuideLibraryData\.exercises/);
   assert.match(component, /seenNames\.has/);
   assert.match(component, /Illustrated only/);
-  assert.match(page, /more than 1,500 bodybuilding/);
+  assert.match(page, /more than 1,700 bodybuilding/);
+});
+
+test("vendors the complete open Workout Guide demonstration set with provenance", async () => {
+  const [rawData, component] = await Promise.all([
+    readFile(new URL("../data/workout-guide-exercises.json", import.meta.url), "utf8"),
+    readFile(new URL("../components/ExerciseLibrary.tsx", import.meta.url), "utf8"),
+  ]);
+  const data = JSON.parse(rawData);
+  const paths = new Set();
+
+  assert.equal(data.exercises.length, 302);
+  assert.equal(new Set(data.exercises.map(({ id }) => id)).size, 302);
+  assert.equal(data.source.commit, "aac599224bb9780305239607ef98540b7e0ce389");
+  assert.equal(data.source.license, "CC BY-SA 4.0");
+  assert.match(data.source.changes, /No changes/);
+  for (const exercise of data.exercises) {
+    assert.equal(exercise.frames.length, 3);
+    for (const path of exercise.frames) {
+      assert.match(path, /^\/exercises\/workout-guide\/assets\/[a-z0-9-]+\/frame-[123]\.svg$/);
+      paths.add(path);
+      await access(new URL(`../public${path}`, import.meta.url));
+    }
+  }
+
+  assert.equal(paths.size, 906);
+  await access(new URL("../public/exercises/workout-guide/LICENSE-ASSETS", import.meta.url));
+  await access(new URL("../public/exercises/workout-guide/ATTRIBUTION.md", import.meta.url));
+  assert.match(component, /creativecommons\.org\/licenses\/by-sa\/4\.0/);
+  assert.match(component, /Imported artwork is unmodified/);
 });

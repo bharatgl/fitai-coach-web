@@ -12,9 +12,16 @@ license notice.
 The public and signed-in browser merges that complete reference library with
 the 250-exercise RepDB free-tier snapshot. Exact normalized names are combined,
 and duplicate names are consolidated, producing 1,521 unique searchable
-movements. All movements include instructions; the 250 RepDB movements include
-459 referenced 512px WebP illustrations. The browser can be filtered by body
-part, equipment, search term, or illustration availability.
+movements with instructions. The 250 RepDB movements include 459 referenced
+512px WebP illustrations. The browser can be filtered by body part, equipment,
+search term, or illustration availability.
+
+The browser additionally vendors all 302 Workout Guide movements and 906
+unmodified 512px SVG frames. Each movement is shown as a three-position demo.
+Exact-name overlaps receive the demo while retaining their existing ForgeFit or
+RepDB instructions; 204 additional unique movements expand the combined browser
+to 1,725 exercises. Workout Guide artwork is CC BY-SA 4.0 and is visibly
+attributed to Bryl Lim and its Everkinetic source.
 
 RepDB assets are licensed for commercial in-app use with visible attribution.
 ForgeFit does not expose RepDB records through its exercise API, redistribute
@@ -65,3 +72,18 @@ npm run exercises:import:repdb -- \
 The importer accepts only the 250-entry free tier, copies only flat WebP images
 referenced by those records, excludes premium preview animations, and preserves
 the RepDB license and attribution files alongside the in-app assets.
+
+## Refreshing Workout Guide demonstrations
+
+After reviewing the current Workout Guide asset license and attribution, run:
+
+```sh
+npm run exercises:import:workout-guide -- \
+  --source /absolute/path/to/workout-guide \
+  --source-commit <reviewed-commit-sha>
+```
+
+The importer requires exactly 302 exercises and three 512px SVG frames per
+exercise, rejects active or externally loaded SVG content, preserves the source
+license and attribution files, and records that the imported artwork is
+unmodified.

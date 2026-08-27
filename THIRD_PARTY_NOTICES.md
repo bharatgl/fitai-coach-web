@@ -40,3 +40,18 @@ The licensed assets may not be republished as a dataset or used as input,
 reference, conditioning material, or training data for generative AI. The full
 license snapshot is distributed alongside the in-app assets at
 `frontend/public/exercises/repdb/LICENSE-DATA.md`.
+
+## Workout Guide
+
+ForgeFit includes 906 unmodified SVG demonstration frames for 302 exercises
+from [Workout Guide](https://github.com/bryllim/workout-guide), copyright (c)
+2026 Bryl Lim and licensed under
+[CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/). The original
+pose artwork is derived in part from
+[Everkinetic](https://github.com/everkinetic/data), also under CC BY-SA 4.0.
+
+ForgeFit sequences the three unmodified source frames in its exercise-browser
+layout. The imported artwork itself has not been modified. Source-specific
+attribution and license snapshots are distributed at
+`frontend/public/exercises/workout-guide/ATTRIBUTION.md` and
+`frontend/public/exercises/workout-guide/LICENSE-ASSETS`.

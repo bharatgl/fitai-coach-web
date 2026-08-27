@@ -99,10 +99,13 @@ also avoids cross-origin browser calls and keeps preview deployments simpler.
    or curated demonstration.
 5. The public and authenticated browser combines the 1,324 reference records
    with a separate 250-exercise RepDB snapshot. Exact normalized names and the
-   source's duplicate names are consolidated into 1,521 unique movements;
-   approximate matches are intentionally rejected. RepDB's 459 referenced flat
-   WebP assets are bundled only for in-app use, visibly attributed, excluded
-   from backend APIs, and lazy-loaded from the authenticated workspace.
+   source's duplicate names are consolidated. A third 302-exercise Workout
+   Guide snapshot adds three-frame movement demonstrations and expands the
+   browser to 1,725 unique movements. Approximate matches are intentionally
+   rejected. RepDB's 459 referenced flat
+   WebP assets and Workout Guide's 906 CC BY-SA SVG frames are bundled only for
+   in-app use, visibly attributed, excluded from backend APIs, and lazy-loaded
+   from the authenticated workspace.
 
 ### Workout execution and adaptation
 

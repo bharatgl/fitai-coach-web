@@ -147,12 +147,13 @@ camera calibration on physical devices.
   paginated MIT metadata with English instructions and pinned provenance. The
   restricted Gym Visual images/GIFs are intentionally excluded, and imported
   entries remain plan-ineligible until ForgeFit review is complete.
-- Added a public and signed-in browser covering 1,521 unique movements by
+- Added a public and signed-in browser covering 1,725 unique movements by
   combining the entire 1,324-record reference source with all 250 commercially
   usable RepDB free-tier exercises. It includes 459 referenced WebP
-  illustrations, text guides for the remaining movements, search, filters,
+  illustrations, text guides across the reference library, search, filters,
   setup instructions, visible attribution, pinned provenance, and license
-  guards.
+  guards. Added all 302 Workout Guide exercises and 906 open CC BY-SA SVG
+  frames as consistent three-position demonstrations with full provenance.
 - Replace the free-text-only goal with a versioned training phase:
   `muscle_gain`, `fat_loss`, `recomposition`, `maintenance`, or supervised
   `contest_prep`, including start date, optional target date, and member intent.
