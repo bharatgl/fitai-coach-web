@@ -76,7 +76,9 @@ test("presents all licensed sources as a visual-first, deduplicated catalogue", 
   assert.match(component, /seenNames\.has/);
   assert.match(component, /useState<LibraryMode>\("demos"\)/);
   assert.match(component, /ExercisePreview/);
-  assert.match(component, /Looping demo/);
+  assert.match(component, /Hover to play/);
+  assert.match(component, /onPointerEnter=.*setPreviewing\(true\)/);
+  assert.match(component, /onPointerLeave=.*setPreviewing\(false\)/);
   assert.match(component, /role="dialog"/);
   assert.match(component, /aria-haspopup="dialog"/);
   assert.match(styles, /live-pulse/);

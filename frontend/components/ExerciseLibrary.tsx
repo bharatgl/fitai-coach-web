@@ -165,19 +165,50 @@ const exercises = [
 const demoExercises = exercises.filter((exercise) => exercise.images.frames);
 type LibraryMode = "demos" | "directory";
 
-function ExercisePreview({ exercise }: { exercise: Exercise }) {
+function ExercisePreview({ exercise, active }: { exercise: Exercise; active: boolean }) {
+  const previewSource = active
+    ? exercise.images.animation ?? exercise.images.frames?.[0] ?? ""
+    : exercise.images.frames?.[0] ?? exercise.images.animation ?? "";
   return (
-    <div className={styles.preview} aria-label={`${exercise.name} looping three-position preview`}>
+    <div className={styles.preview} aria-label={`${exercise.name} movement preview`}>
       <Image
-        src={exercise.images.animation ?? exercise.images.frames?.[0] ?? ""}
+        key={previewSource}
+        src={previewSource}
         alt=""
         width={512}
         height={512}
         sizes="(max-width: 42rem) 90vw, (max-width: 70rem) 44vw, 22vw"
         unoptimized
       />
-      <span className={styles.previewBadge}>Looping demo</span>
+      <span className={`${styles.previewBadge} ${active ? styles.previewPlaying : ""}`}>
+        {active ? "Playing" : "Hover to play"}
+      </span>
     </div>
+  );
+}
+
+function ExerciseCard({ exercise, onSelect }: { exercise: Exercise; onSelect: () => void }) {
+  const [previewing, setPreviewing] = useState(false);
+  return (
+    <button
+      className={styles.card}
+      type="button"
+      aria-haspopup="dialog"
+      onBlur={() => setPreviewing(false)}
+      onClick={onSelect}
+      onFocus={() => setPreviewing(true)}
+      onPointerEnter={() => setPreviewing(true)}
+      onPointerLeave={() => setPreviewing(false)}
+    >
+      <ExercisePreview exercise={exercise} active={previewing} />
+      <div className={styles.cardBody}>
+        <div className={styles.cardHeading}>
+          <h2>{exercise.name}</h2>
+          <span aria-hidden="true">↗</span>
+        </div>
+        <p>{readable(exercise.primaryMuscles[0] ?? exercise.bodyPart)} · {readable(exercise.equipment)}</p>
+      </div>
+    </button>
   );
 }
 
@@ -321,16 +352,7 @@ export function ExerciseLibrary({ embedded = false }: { embedded?: boolean }) {
         mode === "demos" ? (
           <div className={styles.grid}>
             {visible.map((exercise) => (
-              <button className={styles.card} key={exercise.id} type="button" aria-haspopup="dialog" onClick={() => setSelectedExercise(exercise)}>
-                <ExercisePreview exercise={exercise} />
-                <div className={styles.cardBody}>
-                  <div className={styles.cardHeading}>
-                    <h2>{exercise.name}</h2>
-                    <span aria-hidden="true">↗</span>
-                  </div>
-                  <p>{readable(exercise.primaryMuscles[0] ?? exercise.bodyPart)} · {readable(exercise.equipment)}</p>
-                </div>
-              </button>
+              <ExerciseCard exercise={exercise} key={exercise.id} onSelect={() => setSelectedExercise(exercise)} />
             ))}
           </div>
         ) : (

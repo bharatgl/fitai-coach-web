@@ -191,7 +191,6 @@
   z-index: 2;
 }
 .previewBadge::before {
-  animation: live-pulse 1.5s ease-out infinite;
   background: #c8ff4b;
   border-radius: 50%;
   box-shadow: 0 0 0 0 rgb(200 255 75 / 45%);
@@ -202,6 +201,7 @@
   vertical-align: -.02rem;
   width: .34rem;
 }
+.previewPlaying::before { animation: live-pulse 1.5s ease-out infinite; }
 
 @keyframes live-pulse {
   65%,100% { box-shadow: 0 0 0 .28rem rgb(200 255 75 / 0%); }
@@ -392,5 +392,5 @@
 @media (prefers-reduced-motion: reduce) {
   .card { transition: none; }
   .preview img { transition: none; }
-  .previewBadge::before { animation: none; }
+  .previewPlaying::before { animation: none; }
 }
