@@ -6,19 +6,29 @@ import { createPortal } from "react-dom";
 
 const youtubeIdPattern = /^[A-Za-z0-9_-]{11}$/;
 
-export function youtubeEmbedUrl(videoId: string) {
+function validatedYoutubeId(videoId: string) {
   if (!youtubeIdPattern.test(videoId)) {
     throw new Error("Invalid YouTube video ID");
   }
-  return `https://www.youtube-nocookie.com/embed/${videoId}?rel=0&modestbranding=1`;
+  return videoId;
+}
+
+export function youtubeEmbedUrl(videoId: string) {
+  return `https://www.youtube-nocookie.com/embed/${validatedYoutubeId(videoId)}?rel=0&modestbranding=1`;
+}
+
+export function youtubeThumbnailUrl(videoId: string) {
+  return `https://i.ytimg.com/vi/${validatedYoutubeId(videoId)}/mqdefault.jpg`;
 }
 
 export function ExerciseVideoButton({
   exerciseName,
   video,
+  preview = false,
 }: {
   exerciseName: string;
   video: ExerciseVideo;
+  preview?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const titleId = useId();
@@ -47,12 +57,29 @@ export function ExerciseVideoButton({
     <>
       <button
         ref={triggerRef}
-        className="video-demo-button"
+        className={`video-demo-button${preview ? " video-demo-preview" : ""}`}
         type="button"
         onClick={() => setOpen(true)}
         aria-haspopup="dialog"
+        aria-label={`Watch YouTube demonstration for ${exerciseName}`}
       >
-        <span aria-hidden="true">▶</span> Watch demo
+        {preview ? (
+          <>
+            <span
+              className="video-demo-thumbnail"
+              style={{ backgroundImage: `url(${youtubeThumbnailUrl(video.videoId)})` }}
+              aria-hidden="true"
+            >
+              <i>▶</i>
+            </span>
+            <span className="video-demo-preview-copy">
+              <small>YouTube preview</small>
+              <b>{video.channel}</b>
+            </span>
+          </>
+        ) : (
+          <><span aria-hidden="true">▶</span> Watch demo</>
+        )}
       </button>
       {open && createPortal(
         <div className="video-dialog-backdrop">

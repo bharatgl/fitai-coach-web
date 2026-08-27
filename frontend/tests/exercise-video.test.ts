@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { youtubeEmbedUrl } from "../components/ExerciseVideo.js";
+import { youtubeEmbedUrl, youtubeThumbnailUrl } from "../components/ExerciseVideo.js";
 
 test("builds a privacy-enhanced YouTube embed URL from a video ID", () => {
   assert.equal(
@@ -9,6 +9,14 @@ test("builds a privacy-enhanced YouTube embed URL from a video ID", () => {
   );
 });
 
+test("builds a YouTube preview thumbnail URL from a video ID", () => {
+  assert.equal(
+    youtubeThumbnailUrl("MeIiIdhvXT4"),
+    "https://i.ytimg.com/vi/MeIiIdhvXT4/mqdefault.jpg",
+  );
+});
+
 test("rejects untrusted YouTube URL fragments", () => {
   assert.throws(() => youtubeEmbedUrl("not/a/video"), /Invalid YouTube video ID/);
+  assert.throws(() => youtubeThumbnailUrl("not/a/video"), /Invalid YouTube video ID/);
 });

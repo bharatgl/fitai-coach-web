@@ -119,8 +119,11 @@ test("shows a public landing page and protects the coaching workspace", async ()
   assert.match(coach, /name="dietaryPreference"/);
   assert.match(coach, /plan-overview/);
   assert.match(coach, /plan-week-tabs/);
-  assert.match(coach, /plan-session-grid/);
-  assert.match(coach, /How to read your plan/);
+  assert.match(coach, /plan-primary-session/);
+  assert.match(coach, /ExerciseVideoButton exerciseName=\{exercise\.name\} video=\{exercise\.video\} preview/);
+  assert.match(coach, /plan-session-row/);
+  assert.match(coach, /Later this week/);
+  assert.match(coach, /Plan terms/);
   assert.match(coach, /Deload/);
   assert.match(coach, /className="session-status"/);
   assert.match(coach, /\/v1\/plans\/generate/);
@@ -176,7 +179,8 @@ test("uses the shared responsive design system", async () => {
   assert.match(styles, /@media\(max-width:380px\)/);
   assert.match(styles, /@media\(min-width:48rem\)\{\.live-voice-backdrop/);
   assert.match(styles, /\.coach-workspace/);
-  assert.match(styles, /\.plan-session-grid/);
+  assert.match(styles, /\.plan-primary-session/);
+  assert.match(styles, /\.plan-session-row/);
   assert.match(styles, /\.plan-guide-grid/);
   assert.match(styles, /\.coach-suggestions/);
   assert.match(styles, /\.active-coach-suggestions\{margin-bottom:\.55rem\}/);

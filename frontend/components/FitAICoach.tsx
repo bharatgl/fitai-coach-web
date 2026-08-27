@@ -1355,8 +1355,8 @@ function PlanGuide() {
       <summary>
         <span className="plan-guide-icon" aria-hidden="true">?</span>
         <span className="plan-guide-heading">
-          <strong>How to read your plan</strong>
-          <small>A quick guide to sets, reps, tempo, RPE, deloads, and more.</small>
+          <strong>Plan terms</strong>
+          <small>Sets, reps, tempo, RPE and deloads explained.</small>
         </span>
         <span className="plan-guide-action">
           View guide
@@ -1420,6 +1420,9 @@ function Plan({
     (sum, workout) => sum + workout.exercises.length,
     0,
   );
+  const primarySession = selectedWeekSessions.find((workout) => workout.status === "in_progress")
+    ?? selectedWeekSessions[0];
+  const laterSessions = selectedWeekSessions.filter((workout) => workout.id !== primarySession?.id);
 
   async function generate() {
     setGenerating(true);
@@ -1458,7 +1461,6 @@ function Plan({
     <div className="wrap plan-page">
       {dashboard.activePlan ? (
         <section className="plan-overview" aria-labelledby="plan-title">
-          <div className="plan-overview-glow" aria-hidden="true" />
           <div className="plan-overview-copy">
             <div className="plan-kicker">
               <span>Active program</span>
@@ -1468,25 +1470,15 @@ function Plan({
             <p>{dashboard.activePlan.summary}</p>
           </div>
           <div className="plan-overview-action">
-            <span className="plan-version-mark">V{dashboard.activePlan.version}</span>
             <Button className="plan-generate" busy={generating} onClick={() => void generate()}>
-              {generating ? "Designing…" : "Build a new version"}
+              {generating ? "Updating…" : "Update plan"}
             </Button>
           </div>
-          <dl className="plan-metrics">
-            <div>
-              <dt>Training block</dt>
-              <dd>{dashboard.activePlan.durationWeeks} weeks</dd>
-            </div>
-            <div>
-              <dt>Weekly rhythm</dt>
-              <dd>{dashboard.activePlan.daysPerWeek} sessions</dd>
-            </div>
-            <div>
-              <dt>Selected week</dt>
-              <dd>{totalExercises} movements</dd>
-            </div>
-          </dl>
+          <div className="plan-overview-meta" aria-label="Program summary">
+            <span><b>{dashboard.activePlan.durationWeeks}</b> week block</span>
+            <span><b>{dashboard.activePlan.daysPerWeek}</b> sessions per week</span>
+            <span><b>{totalExercises}</b> movements this week</span>
+          </div>
         </section>
       ) : (
         <PageHeader
@@ -1515,7 +1507,6 @@ function Plan({
           </Button>
         </Card>
       )}
-      {dashboard.activePlan && <PlanGuide />}
       {weeklyWorkouts.length > 0 && selectedWeek && (
         <section className="plan-weeks" aria-label="Workout schedule">
           <nav className="plan-week-tabs" aria-label="Choose training week">
@@ -1532,8 +1523,8 @@ function Plan({
                   aria-pressed={week.weekNumber === selectedWeek.weekNumber}
                   onClick={() => setSelectedWeekNumber(week.weekNumber)}
                 >
-                  <span>0{week.weekNumber}</span>
-                  <strong>Week {week.weekNumber}</strong>
+                  <span>W{week.weekNumber}</span>
+                  <strong>{week.weekNumber === selectedWeek.weekNumber ? "Current view" : `Week ${week.weekNumber}`}</strong>
                   <small>{sessionCount} sessions</small>
                 </button>
               );
@@ -1543,7 +1534,7 @@ function Plan({
           <section className="plan-week" aria-labelledby={`week-${selectedWeek.weekNumber}`}>
             <header className="plan-week-summary">
               <div>
-                <Eyebrow>Week {selectedWeek.weekNumber} focus</Eyebrow>
+                <Eyebrow>Week {selectedWeek.weekNumber}</Eyebrow>
                 <h2 id={`week-${selectedWeek.weekNumber}`}>
                   {formatPlanDateRange(selectedWeek.days)}
                 </h2>
@@ -1554,79 +1545,124 @@ function Plan({
               </p>
             </header>
 
-            <div className="plan-session-grid">
-              {selectedWeekSessions.map((workout, workoutIndex) => {
-                const date = new Date(`${workout.date}T12:00:00`);
-                return (
-                  <Card as="article" key={workout.id} padding="md" className="plan-session-card">
-                    <header className="plan-session-head">
-                      <time dateTime={workout.date}>
-                        <span>{new Intl.DateTimeFormat("en", { weekday: "short" }).format(date)}</span>
-                        <strong>{new Intl.DateTimeFormat("en", { day: "2-digit" }).format(date)}</strong>
-                        <small>{new Intl.DateTimeFormat("en", { month: "short" }).format(date)}</small>
-                      </time>
-                      <div>
-                        <span className="session-number">Session {String(workoutIndex + 1).padStart(2, "0")}</span>
-                        <h3>{workout.name}</h3>
-                        <p>{workout.focus}</p>
-                      </div>
-                      <StatusBadge tone={workout.status === "in_progress" ? "warning" : "neutral"}>
-                        {workout.status === "in_progress" ? "In progress" : "Planned"}
-                      </StatusBadge>
-                    </header>
-
-                    <div className="plan-session-meta" aria-label="Session details">
-                      <span><b>{workout.estimatedMinutes}</b> min</span>
-                      <span><b>{workout.exercises.length}</b> movements</span>
-                      <span><b>{workout.exercises.reduce((sum, exercise) => sum + exercise.sets, 0)}</b> sets</span>
+            {primarySession && (() => {
+              const date = new Date(`${primarySession.date}T12:00:00`);
+              return (
+                <Card as="article" padding="md" className="plan-primary-session">
+                  <header className="plan-session-head">
+                    <time dateTime={primarySession.date}>
+                      <span>{new Intl.DateTimeFormat("en", { weekday: "short" }).format(date)}</span>
+                      <strong>{new Intl.DateTimeFormat("en", { day: "2-digit" }).format(date)}</strong>
+                      <small>{new Intl.DateTimeFormat("en", { month: "short" }).format(date)}</small>
+                    </time>
+                    <div>
+                      <span className="session-number">
+                        {primarySession.status === "in_progress" ? "Workout in progress" : "Up next"}
+                      </span>
+                      <h3>{primarySession.name}</h3>
+                      <p>{primarySession.focus}</p>
                     </div>
+                  </header>
 
-                    <ol className="plan-exercise-list">
-                      {workout.exercises.map((exercise, exerciseIndex) => (
-                        <li key={exercise.exerciseId}>
-                          <span className="exercise-index">{String(exerciseIndex + 1).padStart(2, "0")}</span>
-                          <span className="exercise-name">
-                            <strong>{exercise.name}</strong>
-                            {exercise.video && (
-                              <ExerciseVideoButton exerciseName={exercise.name} video={exercise.video} />
-                            )}
-                          </span>
-                          <b>
-                            {exercise.sets} × {exercise.repRange}
-                            {exercise.loadAdjustmentPercent
-                              ? ` · ${exercise.loadAdjustmentPercent > 0 ? "+" : ""}${exercise.loadAdjustmentPercent}%`
-                              : ""}
-                          </b>
-                        </li>
-                      ))}
-                    </ol>
+                  <div className="plan-session-meta" aria-label="Session details">
+                    <span><b>{primarySession.estimatedMinutes}</b> min</span>
+                    <span><b>{primarySession.exercises.length}</b> movements</span>
+                    <span><b>{primarySession.exercises.reduce((sum, exercise) => sum + exercise.sets, 0)}</b> sets</span>
+                  </div>
 
-                    <footer className="plan-session-footer">
-                      <small>Rest and tempo guidance appears during your workout.</small>
-                      <Button
-                        className="session-start"
-                        disabled={Boolean(startingId)}
-                        busy={!activeSession && startingId === workout.id}
-                        onClick={() => void start(workout.id)}
-                      >
-                        {activeSession
-                          ? activeSession.plannedWorkoutId === workout.id
-                            ? "Resume workout →"
-                            : "Resume current workout →"
-                          : startingId === workout.id
+                  <ol className="plan-exercise-list">
+                    {primarySession.exercises.map((exercise, exerciseIndex) => (
+                      <li key={exercise.exerciseId}>
+                        <span className="exercise-index">{String(exerciseIndex + 1).padStart(2, "0")}</span>
+                        <span className="exercise-name">
+                          <strong>{exercise.name}</strong>
+                          {exercise.video && <ExerciseVideoButton exerciseName={exercise.name} video={exercise.video} preview />}
+                        </span>
+                        <b>{exercise.sets} × {exercise.repRange}</b>
+                      </li>
+                    ))}
+                  </ol>
+
+                  <footer className="plan-session-footer">
+                    <small>Rest, tempo and logging open inside the workout.</small>
+                    <Button
+                      className="session-start"
+                      disabled={Boolean(startingId)}
+                      busy={!activeSession && startingId === primarySession.id}
+                      onClick={() => void start(primarySession.id)}
+                    >
+                      {activeSession
+                        ? activeSession.plannedWorkoutId === primarySession.id
+                          ? "Resume workout →"
+                          : "Resume current workout →"
+                        : startingId === primarySession.id
                           ? "Starting…"
-                          : workout.status === "in_progress"
+                          : primarySession.status === "in_progress"
                             ? "Resume workout →"
                             : "Start workout →"}
-                      </Button>
-                    </footer>
-                  </Card>
-                );
-              })}
-            </div>
+                    </Button>
+                  </footer>
+                </Card>
+              );
+            })()}
+
+            {laterSessions.length > 0 && (
+              <section className="plan-later" aria-labelledby="later-this-week">
+                <header>
+                  <h3 id="later-this-week">Later this week</h3>
+                  <span>{laterSessions.length} more {laterSessions.length === 1 ? "session" : "sessions"}</span>
+                </header>
+                <div className="plan-later-list">
+                  {laterSessions.map((workout) => {
+                    const date = new Date(`${workout.date}T12:00:00`);
+                    return (
+                      <details className="plan-session-row" key={workout.id}>
+                        <summary>
+                          <time dateTime={workout.date}>
+                            <span>{new Intl.DateTimeFormat("en", { weekday: "short" }).format(date)}</span>
+                            <strong>{new Intl.DateTimeFormat("en", { day: "2-digit" }).format(date)}</strong>
+                          </time>
+                          <span className="plan-session-row-copy">
+                            <strong>{workout.name}</strong>
+                            <small>{workout.focus}</small>
+                          </span>
+                          <span className="plan-session-row-meta">
+                            {workout.estimatedMinutes} min · {workout.exercises.length} movements
+                          </span>
+                          <b className="plan-session-row-toggle" aria-hidden="true">+</b>
+                        </summary>
+                        <div className="plan-session-row-detail">
+                          <ol className="plan-exercise-list">
+                            {workout.exercises.map((exercise, exerciseIndex) => (
+                              <li key={exercise.exerciseId}>
+                                <span className="exercise-index">{String(exerciseIndex + 1).padStart(2, "0")}</span>
+                                <span className="exercise-name">
+                                  <strong>{exercise.name}</strong>
+                                  {exercise.video && <ExerciseVideoButton exerciseName={exercise.name} video={exercise.video} />}
+                                </span>
+                                <b>{exercise.sets} × {exercise.repRange}</b>
+                              </li>
+                            ))}
+                          </ol>
+                          <Button
+                            className="session-start"
+                            disabled={Boolean(startingId)}
+                            busy={!activeSession && startingId === workout.id}
+                            onClick={() => void start(workout.id)}
+                          >
+                            {activeSession ? "Resume current workout →" : startingId === workout.id ? "Starting…" : "Start this workout →"}
+                          </Button>
+                        </div>
+                      </details>
+                    );
+                  })}
+                </div>
+              </section>
+            )}
           </section>
         </section>
       )}
+      {dashboard.activePlan && <PlanGuide />}
       {weeklyWorkouts.length === 0 && (
         <Card className="empty-state" padding="lg">
           <h2>No plan generated yet.</h2>
