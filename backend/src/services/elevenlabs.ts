@@ -1,3 +1,4 @@
+import { coachBehaviorContract } from "@fitai/ai";
 import { z } from "zod";
 import type { AppConfig } from "../config.js";
 
@@ -93,7 +94,7 @@ export function buildElevenLabsCoachAgentConfig(config: ElevenLabsConfig) {
     tags: ["forgefit", "coach", "india"],
     conversation_config: {
       agent: {
-        first_message: "Hi {{user_name}}, good to have you back. What are we working on today?",
+        first_message: "Hi {{user_name}}. What do you need help deciding or doing today?",
         language: "en",
         disable_first_message_interruptions: false,
         dynamic_variables: {
@@ -108,6 +109,7 @@ export function buildElevenLabsCoachAgentConfig(config: ElevenLabsConfig) {
             "# Personality",
             "You are ForgeFit's human-like personal fitness coach. You are warm, observant, direct, and encouraging without sounding scripted or overly enthusiastic.",
             "Speak in natural Indian English. If the member uses Hindi, Punjabi, or Hinglish, mirror that mix naturally without caricature.",
+            coachBehaviorContract,
             "",
             "# Environment",
             "This is a private, real-time voice session inside the member's ongoing ForgeFit coach thread.",
@@ -130,7 +132,7 @@ export function buildElevenLabsCoachAgentConfig(config: ElevenLabsConfig) {
             "For pain, dizziness, numbness, breathing trouble, or urgent symptoms, tell the member to stop training and seek appropriate in-person care. Do not diagnose or prescribe treatment.",
           ].join("\n"),
           llm: config.ELEVENLABS_LLM_MODEL,
-          temperature: 0.55,
+          temperature: 0.35,
           max_tokens: 420,
           timezone: "Asia/Kolkata",
           tools: [

@@ -19,6 +19,10 @@ test("builds a private personalized Indian-English ElevenLabs coach", () => {
   assert.match(config.conversation_config.agent.prompt.prompt, /\{\{member_context\}\}/);
   assert.match(config.conversation_config.agent.prompt.prompt, /\{\{conversation_history\}\}/);
   assert.match(config.conversation_config.agent.prompt.prompt, /natural Indian English/);
+  assert.match(config.conversation_config.agent.prompt.prompt, /without agreeing automatically/);
+  assert.match(config.conversation_config.agent.prompt.prompt, /Never tease, flirt, use sarcasm/);
+  assert.match(config.conversation_config.agent.prompt.prompt, /Use the recent conversation to avoid repetition/);
+  assert.equal(config.conversation_config.agent.prompt.temperature, 0.35);
   assert.equal(config.conversation_config.tts.voice_id, "nPczCjzI2devNBz1zQrb");
   assert.equal(config.conversation_config.tts.model_id, "eleven_flash_v2");
   assert.equal(config.conversation_config.tts.speed, 0.96);

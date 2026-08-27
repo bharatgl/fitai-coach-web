@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   appendPersonalizationEvidence,
   buildCoachContents,
+  coachBehaviorContract,
   coachSystemPrompt,
 } from "../src/coach.js";
 
@@ -81,6 +82,9 @@ test("includes exact training context and enforces personalized response detail"
   assert.match(coachSystemPrompt, /natural Indian English/);
   assert.match(coachSystemPrompt, /Hindi, Punjabi, or Hinglish/);
   assert.match(coachSystemPrompt, /Avoid exaggerated spellings, forced slang, or stereotypes/);
+  assert.match(coachBehaviorContract, /without agreeing automatically/);
+  assert.match(coachBehaviorContract, /Never tease, flirt, use sarcasm/);
+  assert.match(coachBehaviorContract, /Use the recent conversation to avoid repetition/);
 });
 
 test("includes only compact validated movement aggregates in coach context", () => {

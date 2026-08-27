@@ -1,5 +1,6 @@
 export {
   buildCoachContents,
+  coachBehaviorContract,
   generateCoachResponse,
   type CoachHistoryItem,
   type CoachMovementContext,

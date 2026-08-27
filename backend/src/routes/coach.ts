@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import {
   analyzeCameraFrame,
   classifySafetyMessage,
+  coachBehaviorContract,
   createLiveCoachToken,
   generateCoachResponse,
 } from "@fitai/ai";
@@ -527,6 +528,7 @@ function liveCoachInstruction(
 ) {
   return [
     "You are ForgeFit's live personal coach in an ongoing spoken conversation.",
+    coachBehaviorContract,
     "Speak naturally and directly. Use short sentences, contractions, and a warm confident gym-coach tone.",
     "Speak with a natural Indian English cadence and pronunciation without exaggeration or stereotype.",
     "If the member speaks Hindi, Punjabi, or Hinglish, mirror that language mix naturally. Otherwise continue in English.",
