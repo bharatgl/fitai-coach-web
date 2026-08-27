@@ -40,6 +40,7 @@ test("shows a public landing page and protects the coaching workspace", async ()
   assert.match(coach, /messages\.length === 0 && !loadingThreads/);
   assert.match(coach, /className="prompt-toggle-button"/);
   assert.match(coach, /aria-expanded=\{showSuggestions\}/);
+  assert.match(coach, /className="coach-suggestions active-coach-suggestions"[\s\S]*<form className="chat-composer"/);
   assert.match(coach, /Save and resend/);
   assert.match(coach, /Attach images or PDF/);
   assert.match(coach, /\/v1\/coach\/attachments/);
@@ -115,7 +116,8 @@ test("uses the shared responsive design system", async () => {
   assert.match(styles, /\.plan-session-grid/);
   assert.match(styles, /\.plan-guide-grid/);
   assert.match(styles, /\.coach-suggestions/);
-  assert.match(styles, /\.chat-composer \.composer-suggestions/);
+  assert.match(styles, /\.active-coach-suggestions\{margin-bottom:\.55rem\}/);
+  assert.doesNotMatch(styles, /\.chat-composer \.composer-suggestions/);
   assert.match(styles, /\.composer-attachments/);
   assert.match(styles, /\.message-attachment-image/);
   assert.match(styles, /\.attachment-button\{[\s\S]*border-color:transparent[\s\S]*padding:0/);

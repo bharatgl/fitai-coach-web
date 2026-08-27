@@ -1192,16 +1192,16 @@ function Coach({
               ))}
             </div>
           )}
+          {messages.length > 0 && showSuggestions && (
+            <div className="coach-suggestions active-coach-suggestions" id="composer-suggestions" aria-label="Suggested coach prompts">
+              {templates.map((template) => (
+                <button type="button" key={template.title} onClick={() => selectTemplate(template.prompt)}>
+                  {template.title}
+                </button>
+              ))}
+            </div>
+          )}
           <form className="chat-composer" onSubmit={send}>
-            {messages.length > 0 && showSuggestions && (
-              <div className="coach-suggestions composer-suggestions" id="composer-suggestions" aria-label="Suggested coach prompts">
-                {templates.map((template) => (
-                  <button type="button" key={template.title} onClick={() => selectTemplate(template.prompt)}>
-                    {template.title}
-                  </button>
-                ))}
-              </div>
-            )}
             {pendingAttachments.length > 0 && (
               <div className="composer-attachments" aria-label="Selected attachments">
                 {pendingAttachments.map((attachment) => (
