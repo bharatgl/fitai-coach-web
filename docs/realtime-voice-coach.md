@@ -13,8 +13,9 @@ photoreal, lip-synced WebRTC avatar rather than a local cartoon model.
   agent, returns a short-lived signed URL, and supplies the authenticated member's
   name, profile/training snapshot, and bounded chronological thread history as
   dynamic variables.
-- The agent greets the member by name and uses a natural male Indian-English
-  voice (`ForgeFit Neel` by default) that matches the male coach avatar.
+- The agent greets the member by name and uses the male Indian-English
+  `ForgeFit Neel` voice with a slower, grounded lower-register delivery that
+  matches the coach avatar without sounding like a dramatic narrator.
 - `POST /v1/coach/live-token` remains as the one-use Gemini Live fallback when
   ElevenLabs is temporarily unavailable.
 - `GET /v1/coach/live-snapshot` returns a redacted profile, current plan,
