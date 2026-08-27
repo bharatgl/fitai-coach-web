@@ -1227,3 +1227,25 @@ select option{background:#111426;color:#f7f8ff}
   .coach-active .chat .chat-composer>.prompt-toggle-button{min-width:2.75rem;padding:0;width:2.75rem}
   .coach-active .chat .chat-composer>.prompt-toggle-button>span:last-child{display:none}
 }
+
+/* An active workout is the only startable session until it is closed. */
+.performance-visual{pointer-events:none}
+.plan-active-session.ui-card{
+  align-items:center;
+  background:linear-gradient(135deg,rgb(200 255 75 / 12%),rgb(91 230 210 / 7%));
+  border:1px solid rgb(200 255 75 / 20%);
+  display:flex;
+  gap:1rem;
+  justify-content:space-between;
+  margin-top:1rem;
+}
+.plan-active-session>div{display:grid;gap:.25rem;min-width:0}
+.plan-active-session .ui-eyebrow{color:#c8ff4b;margin:0}
+.plan-active-session strong{color:#f5f7ff;font-size:.9rem}
+.plan-active-session small{color:#9ca6ba;font-size:.66rem;line-height:1.45}
+.plan-active-session>.ui-button{flex:none}
+
+@media(max-width:600px){
+  .plan-active-session.ui-card{align-items:stretch;display:grid}
+  .plan-active-session>.ui-button{width:100%}
+}

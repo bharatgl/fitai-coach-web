@@ -65,6 +65,10 @@ test("shows a public landing page and protects the coaching workspace", async ()
   assert.match(coach, /className="session-status"/);
   assert.match(coach, /\/v1\/plans\/generate/);
   assert.match(coach, /\/v1\/workouts\/\$\{plannedWorkoutId\}\/start/);
+  assert.match(coach, /activeSession=\{activeSession\}[\s\S]*onResume=\{\(\) => setView\("workout"\)\}/);
+  assert.match(coach, /if \(activeSession\) \{[\s\S]*onResume\(\);[\s\S]*return;/);
+  assert.match(coach, /className="plan-active-session"/);
+  assert.match(coach, /Resume current workout →/);
   assert.match(coach, /\/v1\/workout-sessions\/\$\{session\.id\}\/sets/);
   assert.match(coach, /\/v1\/workout-sessions\/\$\{session\.id\}\/finish/);
   assert.match(coach, /WorkoutRunner/);

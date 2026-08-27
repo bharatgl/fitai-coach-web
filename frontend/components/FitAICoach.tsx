@@ -357,7 +357,13 @@ function FitAIWorkspace({ user }: { user: CurrentUser }) {
           />
         )}
         {view === "plan" && (
-          <Plan dashboard={dashboard} refresh={loadDashboard} onStart={startWorkout} />
+          <Plan
+            dashboard={dashboard}
+            activeSession={activeSession}
+            refresh={loadDashboard}
+            onStart={startWorkout}
+            onResume={() => setView("workout")}
+          />
         )}
         {view === "history" && <History dashboard={dashboard} />}
         {view === "profile" && (
@@ -1349,12 +1355,16 @@ function PlanGuide() {
 
 function Plan({
   dashboard,
+  activeSession,
   refresh,
   onStart,
+  onResume,
 }: {
   dashboard: DashboardResponse;
+  activeSession: WorkoutSession | null;
   refresh: () => Promise<void>;
   onStart: (workoutId: string) => Promise<void>;
+  onResume: () => void;
 }) {
   const [generating, setGenerating] = useState(false);
   const [startingId, setStartingId] = useState("");
@@ -1406,6 +1416,11 @@ function Plan({
   }
 
   async function start(workoutId: string) {
+    if (activeSession) {
+      setError("");
+      onResume();
+      return;
+    }
     setStartingId(workoutId);
     setError("");
     try {
@@ -1464,6 +1479,20 @@ function Plan({
         />
       )}
       {error && <p className="form-error plan-error" role="alert">{error}</p>}
+      {activeSession && (
+        <Card className="plan-active-session" tone="accent" padding="md">
+          <div>
+            <Eyebrow>Workout in progress</Eyebrow>
+            <strong>{activeSession.name}</strong>
+            <small>
+              {activeSession.totalSets} sets recorded · resume this workout before starting another session.
+            </small>
+          </div>
+          <Button onClick={() => { setError(""); onResume(); }}>
+            Resume workout
+          </Button>
+        </Card>
+      )}
       {dashboard.activePlan && <PlanGuide />}
       {weeklyWorkouts.length > 0 && selectedWeek && (
         <section className="plan-weeks" aria-label="Workout schedule">
@@ -1555,10 +1584,14 @@ function Plan({
                       <Button
                         className="session-start"
                         disabled={Boolean(startingId)}
-                        busy={startingId === workout.id}
+                        busy={!activeSession && startingId === workout.id}
                         onClick={() => void start(workout.id)}
                       >
-                        {startingId === workout.id
+                        {activeSession
+                          ? activeSession.plannedWorkoutId === workout.id
+                            ? "Resume workout →"
+                            : "Resume current workout →"
+                          : startingId === workout.id
                           ? "Starting…"
                           : workout.status === "in_progress"
                             ? "Resume workout →"
