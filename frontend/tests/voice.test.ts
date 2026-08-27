@@ -99,7 +99,7 @@ test("chunks long spoken replies at readable boundaries", () => {
   assert.equal(chunks.join(" "), "First sentence gives the priority. Second sentence explains the working sets. Third sentence covers the adjustment.");
 });
 
-test("keeps the implemented voice fallback out of the client dependency graph", async () => {
+test("keeps the native live voice client out of the shared SDK dependency graph", async () => {
   const packageJson = JSON.parse(await readFile(
     new URL("../package.json", import.meta.url),
     "utf8",

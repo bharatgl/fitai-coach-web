@@ -1135,12 +1135,16 @@ select option{background:#111426;color:#f7f8ff}
 }
 @media(prefers-reduced-motion:reduce){.skeleton-block{animation:none;opacity:.75}}
 
-/* Explicit, browser-managed voice controls. */
-.spoken-replies-toggle{align-items:center;background:rgb(255 255 255 / 4%);border:1px solid rgb(255 255 255 / 9%);border-radius:.65rem;color:#aeb7ca;display:flex;flex:0 0 2.25rem;height:2.25rem;justify-content:center;line-height:0;overflow:hidden;padding:0;transition:background .15s ease,border-color .15s ease,color .15s ease;width:2.25rem}
-.spoken-replies-toggle svg{display:block;flex:none;height:1rem!important;max-height:1rem;max-width:1rem;width:1rem!important}
-.spoken-replies-toggle[aria-pressed="true"]{background:rgb(200 255 75 / 9%);border-color:rgb(200 255 75 / 25%);color:#d7ff78}
-.spoken-replies-toggle:hover:not(:disabled),.spoken-replies-toggle:focus-visible{border-color:rgb(91 230 210 / 32%);color:#e8fff9}
-.spoken-replies-toggle:disabled{cursor:not-allowed;opacity:.45}
+/* Live voice is a separate call surface; composer microphone remains dictation only. */
+.live-voice-launch{align-items:center;background:rgb(200 255 75 / 8%);border:1px solid rgb(200 255 75 / 23%);border-radius:.7rem;color:#d8ff7d;display:flex;font:700 .65rem/1 var(--font-body);gap:.45rem;min-height:2.25rem;padding:.55rem .7rem;transition:background .15s ease,border-color .15s ease,transform .15s ease;white-space:nowrap}
+.live-voice-launch:hover,.live-voice-launch:focus-visible{background:rgb(200 255 75 / 13%);border-color:rgb(200 255 75 / 40%);transform:translateY(-1px)}
+.live-voice-wave{align-items:center;display:flex;gap:2px;height:1rem;justify-content:center;width:1rem}.live-voice-wave i{background:currentColor;border-radius:99px;display:block;height:.45rem;width:2px}.live-voice-wave i:nth-child(2){height:.85rem}.live-voice-wave i:nth-child(3){height:.62rem}
+.live-voice-backdrop{align-items:flex-end;background:rgb(1 5 16 / 72%);display:flex;inset:0;justify-content:center;padding:1rem;position:fixed;z-index:1000}
+.live-voice-panel{background:linear-gradient(155deg,#111a2b 0%,#09131f 62%,#0b171b 100%);border:1px solid rgb(91 230 210 / 22%);border-radius:1.25rem;box-shadow:0 1.5rem 5rem rgb(0 0 0 / 55%);color:#f2f6ff;display:flex;flex-direction:column;max-height:min(44rem,calc(100dvh - 2rem));overflow:hidden;padding:1.1rem;width:min(100%,30rem)}
+.live-voice-panel>header{align-items:flex-start;border:0;display:flex;justify-content:space-between;margin:0;padding:0}.live-voice-panel>header small{color:#8ee9dc;font-size:.56rem;font-weight:800;letter-spacing:.16em}.live-voice-panel>header h2{font:700 1.05rem/1.25 var(--font-body);margin:.3rem 1rem 0 0}.live-voice-panel>header>button{align-items:center;background:rgb(255 255 255 / 5%);border:1px solid rgb(255 255 255 / 9%);border-radius:.65rem;color:#aeb8ca;display:flex;font-size:1.25rem;height:2.4rem;justify-content:center;line-height:1;width:2.4rem}
+.live-voice-orb{align-items:center;align-self:center;background:radial-gradient(circle at 35% 30%,#ceff6b,#64e8c8 38%,#122b34 72%);border:1px solid rgb(200 255 75 / 40%);border-radius:50%;box-shadow:0 0 0 .65rem rgb(91 230 210 / 5%),0 1rem 3rem rgb(53 238 202 / 15%);display:flex;height:6.5rem;justify-content:center;margin:2rem 0 1.2rem;position:relative;width:6.5rem}.live-voice-orb span{border:1px solid rgb(214 255 127 / 24%);border-radius:50%;inset:-.75rem;position:absolute}.live-voice-orb span:nth-child(2){inset:-1.45rem}.live-voice-orb b{color:#071117;font-size:.85rem;letter-spacing:.08em}.live-voice-orb.is-connecting,.live-voice-orb.is-speaking{animation:live-voice-pulse 1.35s ease-in-out infinite}.live-voice-orb.is-listening span{animation:live-voice-listen 1.8s ease-out infinite}.live-voice-orb.is-listening span:nth-child(2){animation-delay:.45s}
+@keyframes live-voice-pulse{50%{box-shadow:0 0 0 1rem rgb(91 230 210 / 7%),0 1rem 3.5rem rgb(53 238 202 / 28%);transform:scale(1.04)}}@keyframes live-voice-listen{from{opacity:.7;transform:scale(.86)}to{opacity:0;transform:scale(1.18)}}
+.live-voice-state{color:#c8d1e0;font-size:.72rem;margin:0 0 1rem;text-align:center}.live-voice-captions{background:rgb(255 255 255 / 3%);border:1px solid rgb(255 255 255 / 7%);border-radius:.85rem;display:flex;flex:1 1 auto;flex-direction:column;gap:.75rem;max-height:12rem;min-height:5.5rem;overflow:auto;padding:.85rem}.live-voice-captions p{color:#dbe2ee;font-size:.72rem;line-height:1.55;margin:0}.live-voice-captions p small{color:#7f8ba1;display:block;font-size:.5rem;font-weight:800;letter-spacing:.12em;margin-bottom:.2rem}.live-voice-captions p.is-empty{align-items:center;color:#7f8ba1;display:flex;height:100%;justify-content:center;text-align:center}.live-voice-panel>.form-error{margin:.7rem 0 0}.live-voice-controls{display:flex;justify-content:center;margin-top:1rem}.live-voice-primary,.live-voice-end{border-radius:.8rem;font:800 .72rem/1 var(--font-body);min-height:3rem;padding:.75rem 1rem;width:100%}.live-voice-primary{background:#c8ff4b;border:1px solid #d9ff82;color:#071018}.live-voice-primary span{color:#ff5b78;margin-right:.35rem}.live-voice-end{background:rgb(255 91 120 / 10%);border:1px solid rgb(255 91 120 / 30%);color:#ff9db0}.live-voice-privacy{color:#778399;font-size:.52rem;line-height:1.4;margin-top:.7rem;text-align:center}
 .chat .chat-composer .attachment-button.voice-input-button{align-items:center;background:transparent;border:1px solid rgb(255 255 255 / 9%);box-shadow:none;color:#aeb8ca;display:flex;height:2.65rem;justify-content:center;line-height:0;overflow:hidden;padding:0;transform:none;width:2.65rem}
 .chat .chat-composer .voice-input-button svg{display:block;flex:none;height:1.2rem!important;max-height:1.2rem;max-width:1.2rem;width:1.2rem!important}
 .chat .chat-composer .voice-input-button:hover:not(:disabled),.chat .chat-composer .voice-input-button:focus-visible{background:rgb(91 230 210 / 9%);border-color:rgb(91 230 210 / 28%);box-shadow:none;color:#83f1df;transform:none}
@@ -1154,8 +1158,7 @@ select option{background:#111426;color:#f7f8ff}
 .coach-active .chat>.voice-error{margin:0 auto .5rem;max-width:52rem;padding-inline:.25rem;width:calc(100% - 2rem)}
 
 @media(max-width:600px){
-  .spoken-replies-toggle{border-radius:.65rem;min-height:2.75rem;min-width:2.75rem;padding:.5rem}
-  .spoken-replies-toggle svg{height:1.05rem;width:1.05rem}
+  .live-voice-launch{min-height:2.75rem;padding:.6rem .8rem}
   .chat .chat-composer .attachment-button,.chat .chat-composer .voice-input-button,.chat .chat-composer .chat-send-button{height:2.75rem;width:2.75rem}
   .chat .chat-composer .voice-input-button{touch-action:none;-webkit-user-select:none;user-select:none}
   .chat-composer textarea{min-width:5rem}
@@ -1164,7 +1167,11 @@ select option{background:#111426;color:#f7f8ff}
 
 @media(prefers-reduced-motion:reduce){
   .chat .chat-composer .voice-input-button[aria-pressed="true"],.voice-experience-status i{animation:none}
+  .live-voice-orb,.live-voice-orb span{animation:none!important}
 }
+
+@media(min-width:48rem){.live-voice-backdrop{align-items:center}.live-voice-panel{padding:1.35rem}}
+@media(max-width:34rem){.live-voice-launch{min-width:2.75rem;padding:.6rem}.live-voice-launch>span:last-child{display:none}.live-voice-backdrop{padding:.5rem}.live-voice-panel{border-radius:1rem;max-height:calc(100dvh - 1rem)}}
 
 /* Final coach integration guards. Keep legacy global selectors out of the chat UI. */
 .coach-active .messages article.theirs .message-body>.coach-message-content{

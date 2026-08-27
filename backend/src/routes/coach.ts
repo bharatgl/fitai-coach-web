@@ -1,5 +1,9 @@
 import { randomUUID } from "node:crypto";
-import { generateCoachResponse } from "@fitai/ai";
+import {
+  classifySafetyMessage,
+  createLiveCoachToken,
+  generateCoachResponse,
+} from "@fitai/ai";
 import type {
   CoachAttachment,
   CoachMessage,
@@ -8,6 +12,8 @@ import type {
   CoachThreadDetail,
   CoachThreadListResponse,
   CreateCoachThreadResponse,
+  LiveCoachSnapshotResponse,
+  LiveCoachTokenResponse,
   UploadCoachAttachmentResponse,
 } from "@fitai/contracts";
 import type { FastifyInstance } from "fastify";
@@ -111,6 +117,19 @@ const editMessageInput = z.object({
 const threadParams = z.object({ threadId: z.string().uuid() });
 const messageParams = z.object({ messageId: z.string().uuid() });
 const attachmentParams = z.object({ attachmentId: z.string().uuid() });
+const liveTokenInput = z.object({
+  threadId: z.string().uuid(),
+  sessionId: z.string().trim().min(1).max(100).optional(),
+});
+const liveSnapshotQuery = z.object({
+  sessionId: z.string().trim().min(1).max(100).optional(),
+});
+const liveTurnInput = z.object({
+  threadId: z.string().uuid(),
+  sessionId: z.string().trim().min(1).max(100).optional(),
+  userTranscript: z.string().trim().min(1).max(2_000),
+  assistantTranscript: z.string().trim().min(1).max(4_000),
+});
 
 function notFound(message: string): never {
   throw Object.assign(new Error(message), { statusCode: 404 });
@@ -426,6 +445,85 @@ async function loadCoachMovementContext(
   return summarizeMovementEventsForCoach(session, events);
 }
 
+async function loadLiveCoachSnapshot(
+  database: Db,
+  userId: string,
+  sessionId?: string | null,
+): Promise<LiveCoachSnapshotResponse> {
+  const now = new Date();
+  const [profile, readiness, activePlan, activeSession, recentSessions, movementContext] =
+    await Promise.all([
+      database.collection("profiles").findOne(
+        { userId },
+        { projection: { _id: 0 } },
+      ),
+      database.collection<ReadinessDocument>("readinessCheckIns").findOne(
+        { userId },
+        { projection: { _id: 0 }, sort: { date: -1, updatedAt: -1 } },
+      ),
+      database.collection<WorkoutPlanDocument>("workoutPlans").findOne(
+        { userId, status: "active" },
+        { projection: { _id: 0 }, sort: { createdAt: -1 } },
+      ),
+      database.collection<WorkoutSessionDocument>("workoutSessions").findOne(
+        sessionId
+          ? { id: sessionId, userId }
+          : { userId, status: { $in: ["active", "paused"] } },
+        { projection: { _id: 0 }, sort: { updatedAt: -1 } },
+      ),
+      database.collection<WorkoutSessionDocument>("workoutSessions")
+        .find({ userId, status: "completed" }, { projection: { _id: 0 } })
+        .sort({ completedAt: -1 })
+        .limit(5)
+        .toArray(),
+      loadCoachMovementContext(database, userId, sessionId),
+    ]);
+  const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  const nextWorkout = activePlan
+    ? await database.collection<PlannedWorkoutDocument>("plannedWorkouts").findOne(
+      {
+        userId,
+        planId: activePlan.id,
+        status: { $in: ["planned", "in_progress"] },
+        scheduledFor: { $gte: today },
+      },
+      { projection: { _id: 0 }, sort: { scheduledFor: 1 } },
+    )
+    : null;
+
+  return {
+    capturedAt: now.toISOString(),
+    profile: buildCoachProfileContext(profile),
+    trainingContext: buildCoachTrainingContext({
+      readiness,
+      activePlan,
+      nextWorkout,
+      activeSession,
+      recentSessions,
+      now,
+    }),
+    movementContext,
+  };
+}
+
+function liveCoachInstruction(
+  snapshot: LiveCoachSnapshotResponse,
+  history: Array<Pick<CoachMessageDocument, "role" | "content">>,
+) {
+  return [
+    "You are ForgeFit's live personal coach in an ongoing spoken conversation.",
+    "Speak naturally and directly. Use short sentences, contractions, and a warm confident gym-coach tone.",
+    "Do not read headings, markdown, citations, profile fields, or a written report aloud.",
+    "Answer the exact question first. Usually speak for 15 to 35 seconds, then pause for the user.",
+    "Use the supplied member data concretely. Never ask for a preference or fact already present in it.",
+    "When workout state may have changed, call get_live_workout_snapshot before giving set-by-set guidance.",
+    "If the user interrupts, stop immediately and listen. Treat this as one continuous session.",
+    "Do not diagnose or prescribe medical treatment. For pain, dizziness, numbness, breathing difficulty, or urgent symptoms, tell the user to stop training and seek appropriate in-person care.",
+    `CURRENT MEMBER AND TRAINING CONTEXT:\n${JSON.stringify(snapshot)}`,
+    `RECENT CONVERSATION (continue it; do not re-introduce yourself):\n${JSON.stringify(history)}`,
+  ].join("\n\n");
+}
+
 async function requirePendingAttachments(
   database: Db,
   userId: string,
@@ -457,6 +555,84 @@ async function loadMessageAttachments(database: Db, userId: string, messageId: s
 }
 
 export async function coachRoutes(app: FastifyInstance) {
+  app.post(
+    "/v1/coach/live-token",
+    { config: { rateLimit: { max: 6, timeWindow: "1 minute" } } },
+    async (request): Promise<LiveCoachTokenResponse> => {
+      const user = await authenticate(request);
+      const input = liveTokenInput.parse(request.body);
+      await syncAuthenticatedUser(user);
+      const database = await getDatabase();
+      await requireThread(database, user.id, input.threadId);
+      const [snapshot, history] = await Promise.all([
+        loadLiveCoachSnapshot(database, user.id, input.sessionId),
+        database.collection<CoachMessageDocument>("coachMessages")
+          .find(
+            { userId: user.id, threadId: input.threadId },
+            { projection: { _id: 0, role: 1, content: 1 } },
+          )
+          .sort({ createdAt: -1 })
+          .limit(12)
+          .toArray(),
+      ]);
+      const config = getConfig();
+      return createLiveCoachToken({
+        apiKey: config.GEMINI_API_KEY,
+        model: config.GEMINI_LIVE_MODEL,
+        systemInstruction: liveCoachInstruction(snapshot, history.reverse()),
+      });
+    },
+  );
+
+  app.get(
+    "/v1/coach/live-snapshot",
+    { config: { rateLimit: { max: 30, timeWindow: "1 minute" } } },
+    async (request): Promise<LiveCoachSnapshotResponse> => {
+      const user = await authenticate(request);
+      const { sessionId } = liveSnapshotQuery.parse(request.query ?? {});
+      return loadLiveCoachSnapshot(await getDatabase(), user.id, sessionId);
+    },
+  );
+
+  app.post(
+    "/v1/coach/live-turns",
+    { config: { rateLimit: { max: 30, timeWindow: "1 minute" } } },
+    async (request): Promise<CoachThreadDetail> => {
+      const user = await authenticate(request);
+      const input = liveTurnInput.parse(request.body);
+      const database = await getDatabase();
+      await requireThread(database, user.id, input.threadId);
+      const now = new Date();
+      const safety = classifySafetyMessage(input.userTranscript);
+      await database.collection<CoachMessageDocument>("coachMessages").insertMany([
+        {
+          id: randomUUID(),
+          userId: user.id,
+          threadId: input.threadId,
+          sessionId: input.sessionId ?? null,
+          role: "user",
+          content: input.userTranscript,
+          safetyCategory: safety?.safetyCategory ?? "none",
+          createdAt: now,
+          editedAt: null,
+        },
+        {
+          id: randomUUID(),
+          userId: user.id,
+          threadId: input.threadId,
+          sessionId: input.sessionId ?? null,
+          role: "assistant",
+          content: input.assistantTranscript,
+          safetyCategory: safety?.safetyCategory ?? "none",
+          model: getConfig().GEMINI_LIVE_MODEL,
+          createdAt: new Date(now.getTime() + 1),
+        },
+      ]);
+      await updateThreadStats(database, user.id, input.threadId);
+      return loadThreadDetail(database, user.id, input.threadId);
+    },
+  );
+
   app.get("/v1/coach/threads", async (request): Promise<CoachThreadListResponse> => {
     const user = await authenticate(request);
     await syncAuthenticatedUser(user);

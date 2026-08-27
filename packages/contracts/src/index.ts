@@ -94,6 +94,26 @@ export type CoachResponse = {
   suggestedAdjustment: string | null;
 };
 
+export type LiveCoachTokenResponse = {
+  token: string;
+  model: string;
+  expiresAt: string;
+};
+
+export type LiveCoachSnapshotResponse = {
+  capturedAt: string;
+  profile: Record<string, unknown> | null;
+  trainingContext: Record<string, unknown>;
+  movementContext: Record<string, unknown> | null;
+};
+
+export type SaveLiveCoachTurnRequest = {
+  threadId: string;
+  sessionId?: string;
+  userTranscript: string;
+  assistantTranscript: string;
+};
+
 export type ExerciseVideo = {
   provider: "youtube";
   videoId: string;

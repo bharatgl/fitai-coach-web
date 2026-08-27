@@ -21,6 +21,11 @@ export {
   AiProviderError,
 } from "./provider-error.js";
 export {
+  createLiveCoachToken,
+  defaultLiveCoachModel,
+  type CreateLiveCoachTokenInput,
+} from "./live.js";
+export {
   toGeminiJsonSchema,
   translateGeminiError,
 } from "./gemini.js";

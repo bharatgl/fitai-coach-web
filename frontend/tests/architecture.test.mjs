@@ -3,7 +3,7 @@ import { access, readFile } from "node:fs/promises";
 import test from "node:test";
 
 test("shows a public landing page and protects the coaching workspace", async () => {
-  const [page, landing, landingStyles, tokenFactory, apiClient, coach, movementTracker] = await Promise.all([
+  const [page, landing, landingStyles, tokenFactory, apiClient, coach, movementTracker, liveVoice] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../components/LandingPage.tsx", import.meta.url), "utf8"),
     readFile(new URL("../components/LandingPage.module.css", import.meta.url), "utf8"),
@@ -11,6 +11,7 @@ test("shows a public landing page and protects the coaching workspace", async ()
     readFile(new URL("../lib/api.ts", import.meta.url), "utf8"),
     readFile(new URL("../components/FitAICoach.tsx", import.meta.url), "utf8"),
     readFile(new URL("../components/MovementTracker.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/LiveVoiceCoach.tsx", import.meta.url), "utf8"),
   ]);
 
   assert.match(page, /await auth\(\)/);
@@ -46,7 +47,7 @@ test("shows a public landing page and protects the coaching workspace", async ()
   assert.match(coach, /\/v1\/coach\/attachments/);
   assert.match(coach, /MessageAttachments/);
   assert.match(coach, /Hold to talk/);
-  assert.match(coach, /speechSynthesis/);
+  assert.doesNotMatch(coach, /speechSynthesis/);
   assert.match(coach, /Voice input uses your browser&apos;s speech service/);
   assert.match(coach, /Text input is always available/);
   assert.match(coach, /visibilitychange/);
@@ -54,7 +55,13 @@ test("shows a public landing page and protects the coaching workspace", async ()
   assert.doesNotMatch(coach, /MediaRecorder|audio\/webm/);
   assert.match(coach, /<svg width="20" height="20"/);
   assert.match(coach, /className="attachment-button voice-input-button"/);
-  assert.match(coach, /Turn spoken coach replies off/);
+  assert.match(coach, /LiveVoiceCoach/);
+  assert.match(liveVoice, /BidiGenerateContentConstrained/);
+  assert.match(liveVoice, /audio\/pcm;rate=16000/);
+  assert.match(liveVoice, /get_live_workout_snapshot/);
+  assert.match(liveVoice, /interrupted/);
+  assert.match(liveVoice, /\/v1\/coach\/live-turns/);
+  assert.doesNotMatch(liveVoice, /speechSynthesis|MediaRecorder|audio\/webm/);
   assert.match(coach, /className="ui-visually-hidden"/);
   assert.match(coach, /maxCoachAttachmentBytes/);
   assert.match(coach, /name="dietaryPreference"/);

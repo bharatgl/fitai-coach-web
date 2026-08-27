@@ -40,11 +40,8 @@ import {
 import { apiRequest } from "@/lib/api";
 import {
   collectSpeechTranscript,
-  prepareCoachSpeech,
-  selectNaturalSpeechVoice,
   speechRecognitionConstructor,
   speechRecognitionErrorMessage,
-  splitSpeechIntoChunks,
   type BrowserSpeechRecognition,
   type SpeechRecognitionConstructor,
 } from "@/lib/voice";
@@ -61,6 +58,11 @@ import {
 const MovementTracker = dynamic(
   () => import("@/components/MovementTracker").then((module) => module.MovementTracker),
   { ssr: false, loading: () => <MovementTrackerSkeleton /> },
+);
+
+const LiveVoiceCoach = dynamic(
+  () => import("@/components/LiveVoiceCoach").then((module) => module.LiveVoiceCoach),
+  { ssr: false },
 );
 
 type View = "today" | "coach" | "plan" | "history" | "profile" | "workout";
@@ -85,12 +87,6 @@ const subscribeToStaticBrowserCapability = () => () => {};
 function browserSpeechRecognitionConstructor() {
   if (typeof window === "undefined") return null;
   return speechRecognitionConstructor(window as SpeechWindow);
-}
-
-function browserSpeechOutputSupported() {
-  return typeof window !== "undefined" &&
-    "speechSynthesis" in window &&
-    "SpeechSynthesisUtterance" in window;
 }
 
 function AttachmentIcon({ kind = "attach" }: { kind?: "attach" | "file" | "remove" }) {
@@ -775,21 +771,15 @@ function Coach({
   const [voiceStatus, setVoiceStatus] = useState<
     "idle" | "starting" | "listening" | "processing"
   >("idle");
-  const [spokenReplies, setSpokenReplies] = useState(false);
   const [voiceError, setVoiceError] = useState("");
+  const [liveVoiceOpen, setLiveVoiceOpen] = useState(false);
   const attachmentInputRef = useRef<HTMLInputElement>(null);
   const pendingAttachmentsRef = useRef<PendingCoachAttachment[]>([]);
   const recognitionRef = useRef<BrowserSpeechRecognition | null>(null);
-  const speechVoiceRef = useRef<SpeechSynthesisVoice | null>(null);
   const voiceBaseDraftRef = useRef("");
   const voiceSupported = useSyncExternalStore(
     subscribeToStaticBrowserCapability,
     () => Boolean(browserSpeechRecognitionConstructor()),
-    () => false,
-  );
-  const speechOutputSupported = useSyncExternalStore(
-    subscribeToStaticBrowserCapability,
-    browserSpeechOutputSupported,
     () => false,
   );
   const templates = [
@@ -831,19 +821,6 @@ function Coach({
   }, []);
 
   useEffect(() => {
-    if (!speechOutputSupported) return;
-    const refreshSpeechVoice = () => {
-      speechVoiceRef.current = selectNaturalSpeechVoice(
-        window.speechSynthesis.getVoices(),
-        navigator.language || "en-US",
-      );
-    };
-    refreshSpeechVoice();
-    window.speechSynthesis.addEventListener("voiceschanged", refreshSpeechVoice);
-    return () => window.speechSynthesis.removeEventListener("voiceschanged", refreshSpeechVoice);
-  }, [speechOutputSupported]);
-
-  useEffect(() => {
     const stopForBackground = () => {
       recognitionRef.current?.abort();
       recognitionRef.current = null;
@@ -858,7 +835,6 @@ function Coach({
       window.removeEventListener("blur", stopForBackground);
       document.removeEventListener("visibilitychange", stopWhenHidden);
       stopForBackground();
-      window.speechSynthesis?.cancel();
     };
   }, []);
 
@@ -871,7 +847,6 @@ function Coach({
     }
 
     setVoiceError("");
-    window.speechSynthesis?.cancel();
     voiceBaseDraftRef.current = draft.trim();
     const recognition = new Recognition();
     recognition.continuous = true;
@@ -914,33 +889,6 @@ function Coach({
       recognition.abort();
       recognitionRef.current = null;
       setVoiceStatus("idle");
-    }
-  }
-
-  function speakCoachReply(content: string) {
-    if (!spokenReplies || !speechOutputSupported || !content.trim()) return;
-    setVoiceError("");
-    window.speechSynthesis.cancel();
-    const locale = navigator.language || "en-US";
-    const voice = speechVoiceRef.current ?? selectNaturalSpeechVoice(
-      window.speechSynthesis.getVoices(),
-      locale,
-    );
-    speechVoiceRef.current = voice;
-    const spokenText = prepareCoachSpeech(content);
-    for (const chunk of splitSpeechIntoChunks(spokenText)) {
-      const utterance = new SpeechSynthesisUtterance(chunk);
-      utterance.lang = voice?.lang || locale;
-      utterance.voice = voice;
-      utterance.rate = 0.96;
-      utterance.pitch = 1;
-      utterance.volume = 1;
-      utterance.onerror = (event) => {
-        if (event.error !== "canceled" && event.error !== "interrupted") {
-          setVoiceError("Spoken reply stopped. The complete answer is still available on screen.");
-        }
-      };
-      window.speechSynthesis.speak(utterance);
     }
   }
 
@@ -1060,7 +1008,6 @@ function Coach({
         response.userMessage,
         response.message,
       ]);
-      speakCoachReply(response.message.content);
       setActiveThread(response.thread);
       setDraft("");
       setShowSuggestions(false);
@@ -1092,10 +1039,6 @@ function Coach({
       setMessages(detail.messages);
       setActiveThread(detail.thread);
       setEditingMessageId(null);
-      const regeneratedReply = [...detail.messages]
-        .reverse()
-        .find((message) => message.role === "assistant");
-      if (regeneratedReply) speakCoachReply(regeneratedReply.content);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Unable to edit this message");
     } finally {
@@ -1114,23 +1057,29 @@ function Coach({
             </div>
             <div className="chat-header-actions">
               {activeThread && <small>{activeThread.messageCount} messages</small>}
-              <button
-                className="spoken-replies-toggle"
-                type="button"
-                aria-pressed={spokenReplies}
-                disabled={!speechOutputSupported}
-                aria-label={spokenReplies ? "Turn spoken coach replies off" : "Turn spoken coach replies on"}
-                title={speechOutputSupported ? "Read new coach replies aloud" : "Spoken replies are not supported in this browser"}
-                onClick={() => {
-                  if (spokenReplies) window.speechSynthesis.cancel();
-                  setSpokenReplies((enabled) => !enabled);
-                }}
-              >
-                <VoiceIcon kind="speaker" />
-                <span className="ui-visually-hidden">
-                  {spokenReplies ? "Voice replies on" : "Voice replies off"}
-                </span>
-              </button>
+              {activeThread && (
+                <button
+                  className="live-voice-launch"
+                  type="button"
+                  onClick={() => setLiveVoiceOpen(true)}
+                  aria-haspopup="dialog"
+                  title="Start a real-time voice session"
+                >
+                  <span className="live-voice-wave" aria-hidden="true"><i /><i /><i /></span>
+                  <span>Live voice</span>
+                </button>
+              )}
+              {activeThread && liveVoiceOpen && (
+                <LiveVoiceCoach
+                  threadId={activeThread.id}
+                  activeSessionId={activeSessionId}
+                  onClose={() => setLiveVoiceOpen(false)}
+                  onThreadUpdate={(detail) => {
+                    setActiveThread(detail.thread);
+                    setMessages(detail.messages);
+                  }}
+                />
+              )}
             </div>
           </header>
           <div className="messages">

@@ -1,8 +1,22 @@
-# Real-time voice coach proposal
+# Real-time voice coach
 
-This proposal extends the implemented push-to-talk experience into an optional
-low-latency voice session without weakening ForgeFit's authentication, privacy,
-or deterministic fitness-safety boundaries.
+ForgeFit now has an optional low-latency native-audio session in addition to
+text chat and composer dictation. Its interaction model follows the useful parts
+of Vapi's web-call UX: explicit call lifecycle, visible listening/speaking state,
+live transcripts, interruption, and tool-backed application context.
+
+## Implemented locally
+
+- `POST /v1/coach/live-token` provisions a one-use, 30-minute Gemini Live token
+  for the authenticated member and current coach thread.
+- `GET /v1/coach/live-snapshot` returns a redacted profile, current plan,
+  readiness, active-session sets, recent sessions, and compact movement data.
+- The lazily loaded browser client sends 16 kHz mono PCM over a raw WebSocket,
+  receives native PCM audio, clears queued playback on interruption, and closes
+  microphone, audio, and network resources on stop or backgrounding.
+- Completed user and coach transcripts are saved through
+  `POST /v1/coach/live-turns` into the same ongoing text thread.
+- Browser `speechSynthesis` is no longer presented as a voice-agent feature.
 
 ## Recommended architecture
 
@@ -11,7 +25,7 @@ Authenticated browser
   |-- POST /api/backend/coach/live-token
   |     -> authenticated backend creates a one-use, short-lived Gemini token
   |
-  |-- audio (only while the user holds or enables the session control)
+  |-- audio (only while the live session is explicitly active)
   |     -> direct WebSocket to Gemini Live using the ephemeral token
   |
   |-- authenticated tool request: get_live_workout_snapshot
@@ -25,7 +39,8 @@ Authenticated browser
 The browser-to-Gemini connection avoids routing high-frequency PCM audio
 through the application containers. The permanent `GEMINI_API_KEY` stays in the
 backend. The backend provisions one-use ephemeral tokens constrained to the
-reviewed model, audio response modality, session settings, and tool schema.
+reviewed model, native-audio response modality, and personalized instruction;
+the instruction stays inside the server-created token constraint.
 
 ## Real-time workout data
 
@@ -55,7 +70,7 @@ Direct native-audio conversation can begin producing output before a final
 transcript is available. That conflicts with the existing rule that deterministic
 urgent-symptom and pain checks run before every eligible coach model call.
 
-The first production version should therefore remain turn-gated:
+Before deploying native voice, add a deterministic turn gate:
 
 1. Stream microphone audio only while the user is actively speaking.
 2. End the turn explicitly and obtain the finalized input transcript.
@@ -82,13 +97,15 @@ must remain read-only until separate authorization and confirmation UX exists.
 - Enable context-window compression and session resumption, but set a product
   time limit and an idle timeout to control battery, bandwidth, and cost.
 
-## Delivery slices
+## Delivery status
 
-1. Authenticated ephemeral-token endpoint with rate limiting and fixed session
-   constraints.
-2. Read-only live-workout snapshot endpoint plus ownership and redaction tests.
-3. Lazily loaded microphone worklet, WebSocket client, audio playback, visible
-   transcript, and interruption handling.
-4. Turn-level deterministic safety gate and transcript persistence.
-5. Mobile browser/device calibration, cost telemetry, failure fallback to the
-   existing text and push-to-talk experience.
+1. Done: authenticated ephemeral-token endpoint with rate limiting and fixed
+   model/audio constraints.
+2. Done: read-only live-workout snapshot endpoint with authenticated ownership
+   and redacted context builders.
+3. Done: lazily loaded microphone worklet, raw WebSocket client, native audio
+   playback, visible transcript, and interruption handling.
+4. Partial: transcript persistence is done; the pre-response deterministic
+   safety gate remains required before deployment.
+5. Pending: physical mobile-device calibration, cost telemetry, session
+   resumption, and end-to-end provider tests.
