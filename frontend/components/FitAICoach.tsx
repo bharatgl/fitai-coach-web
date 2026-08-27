@@ -27,13 +27,24 @@ import {
 } from "@fitai/ui";
 import Link from "next/link";
 import Image from "next/image";
+import dynamic from "next/dynamic";
+import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { apiRequest } from "@/lib/api";
 import { BrandLockup } from "@/components/BrandLockup";
 import { CoachMessageContent } from "@/components/CoachMessageContent";
 import { ExerciseVideoButton } from "@/components/ExerciseVideo";
-import { MovementTracker } from "@/components/MovementTracker";
 import { ReadinessCheckIn } from "@/components/ReadinessCheckIn";
+import {
+  CoachSkeleton,
+  MovementTrackerSkeleton,
+  WorkspaceSkeleton,
+} from "@/components/LoadingSkeleton";
+
+const MovementTracker = dynamic(
+  () => import("@/components/MovementTracker").then((module) => module.MovementTracker),
+  { ssr: false, loading: () => <MovementTrackerSkeleton /> },
+);
 
 type View = "today" | "coach" | "plan" | "history" | "profile" | "workout";
 type CurrentUser = { id: string; name: string; email: string };
@@ -138,51 +149,60 @@ function NavIcon({ name }: { name: NavIconName }) {
 }
 
 export default function FitAICoach({ user }: { user: CurrentUser }) {
+  const [queryClient] = useState(() => new QueryClient({
+    defaultOptions: {
+      queries: {
+        gcTime: 10 * 60 * 1_000,
+        retry: 1,
+        staleTime: 30_000,
+      },
+    },
+  }));
+
+  return (
+    <QueryClientProvider client={queryClient}>
+      <FitAIWorkspace user={user} />
+    </QueryClientProvider>
+  );
+}
+
+function FitAIWorkspace({ user }: { user: CurrentUser }) {
   const [view, setView] = useState<View>("today");
-  const [dashboard, setDashboard] = useState<DashboardResponse | null>(null);
-  const [activeSession, setActiveSession] = useState<WorkoutSession | null>(null);
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(true);
+  const [activeSessionOverride, setActiveSession] = useState<WorkoutSession | null>();
+  const dashboardQuery = useQuery({
+    queryKey: ["dashboard", user.id],
+    queryFn: () => apiRequest<DashboardResponse>("/v1/dashboard"),
+  });
+  const dashboard = dashboardQuery.data;
+  const activeSession = activeSessionOverride === undefined
+    ? dashboard?.activeSession ?? null
+    : activeSessionOverride;
 
   async function loadDashboard() {
-    setLoading(true);
-    setError("");
-    try {
-      const data = await apiRequest<DashboardResponse>("/v1/dashboard");
-      setDashboard(data);
-      setActiveSession(data.activeSession);
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Unable to load forgefit.space");
-    } finally {
-      setLoading(false);
-    }
+    const result = await dashboardQuery.refetch();
+    if (result.error) throw result.error;
+    if (result.data) setActiveSession(result.data.activeSession);
   }
 
-  useEffect(() => {
-    let active = true;
-    apiRequest<DashboardResponse>("/v1/dashboard")
-      .then((data) => {
-        if (active) {
-          setDashboard(data);
-          setActiveSession(data.activeSession);
-        }
-      })
-      .catch((cause: unknown) => {
-        if (active) {
-          setError(cause instanceof Error ? cause.message : "Unable to load forgefit.space");
-        }
-      })
-      .finally(() => {
-        if (active) setLoading(false);
-      });
-    return () => {
-      active = false;
-    };
-  }, []);
-
-  if (loading) return <StatusScreen title="Loading your training data…" />;
-  if (error)
-    return <StatusScreen title="forgefit.space could not connect" detail={error} retry={loadDashboard} />;
+  if (dashboardQuery.isPending) return <WorkspaceSkeleton />;
+  if (dashboardQuery.isError && !dashboard) {
+    const detail = dashboardQuery.error instanceof Error
+      ? dashboardQuery.error.message
+      : "Unable to load forgefit.space";
+    return (
+      <StatusScreen
+        title="forgefit.space could not connect"
+        detail={detail}
+        retry={async () => {
+          try {
+            await loadDashboard();
+          } catch {
+            // The query owns and renders the retry error state.
+          }
+        }}
+      />
+    );
+  }
   if (!dashboard?.profile)
     return <Onboarding user={user} onSaved={loadDashboard} />;
 
@@ -243,7 +263,7 @@ export default function FitAICoach({ user }: { user: CurrentUser }) {
               <small>{dashboard.profile.experienceLevel} · Edit profile</small>
             </span>
           </button>
-          <Link className="signout" href="/api/auth/signout">
+          <Link className="signout" href="/signout">
             Sign out
           </Link>
         </div>
@@ -330,6 +350,18 @@ function StatusScreen({
   detail?: string;
   retry?: () => void | Promise<void>;
 }) {
+  const [retrying, setRetrying] = useState(false);
+
+  async function runRetry() {
+    if (!retry || retrying) return;
+    setRetrying(true);
+    try {
+      await retry();
+    } finally {
+      setRetrying(false);
+    }
+  }
+
   return (
     <main className="auth-shell">
       <Card className="auth-card" padding="lg">
@@ -337,8 +369,8 @@ function StatusScreen({
         <h1>{title}</h1>
         {detail && <p>{detail}</p>}
         {retry && (
-          <Button onClick={() => void retry()}>
-            Try again
+          <Button busy={retrying} onClick={() => void runRetry()}>
+            {retrying ? "Reconnecting…" : "Try again"}
           </Button>
         )}
       </Card>
@@ -878,7 +910,12 @@ function Coach({ initialMessages }: { initialMessages: CoachMessage[] }) {
             </div>
           </header>
           <div className="messages">
-            {loadingThreads && <p className="coach-loading" role="status">Loading your coach…</p>}
+            {loadingThreads && (
+              <>
+                <CoachSkeleton />
+                <span className="ui-visually-hidden" role="status">Loading your coach…</span>
+              </>
+            )}
             {messages.length === 0 && !loadingThreads && (
               <div className="chat-starter">
                 <div className="coach-starter-mark" aria-hidden="true">
@@ -1274,6 +1311,7 @@ function Plan({
                       <Button
                         className="session-start"
                         disabled={Boolean(startingId)}
+                        busy={startingId === workout.id}
                         onClick={() => void start(workout.id)}
                       >
                         {startingId === workout.id
@@ -1323,13 +1361,13 @@ function WorkoutRunner({
   onSession: (session: WorkoutSession) => void;
   onClose: () => Promise<void>;
 }) {
-  const [working, setWorking] = useState(false);
+  const [workingAction, setWorkingAction] = useState("");
   const [error, setError] = useState("");
   const [reflection, setReflection] = useState(session.reflection);
   const [perceivedEffort, setPerceivedEffort] = useState(7);
 
-  async function update(path: string, init: RequestInit) {
-    setWorking(true);
+  async function update(action: string, path: string, init: RequestInit) {
+    setWorkingAction(action);
     setError("");
     try {
       const response = await apiRequest<WorkoutSessionResponse>(path, init);
@@ -1339,12 +1377,12 @@ function WorkoutRunner({
       setError(cause instanceof Error ? cause.message : "Workout update failed");
       return null;
     } finally {
-      setWorking(false);
+      setWorkingAction("");
     }
   }
 
   async function changeStatus() {
-    await update(`/v1/workout-sessions/${session.id}/status`, {
+    await update("status", `/v1/workout-sessions/${session.id}/status`, {
       method: "PATCH",
       body: JSON.stringify({ action: session.status === "paused" ? "resume" : "pause" }),
     });
@@ -1354,21 +1392,21 @@ function WorkoutRunner({
     exerciseId: string,
     input: { reps: number; loadKg: number; effortRpe: number },
   ) {
-    await update(`/v1/workout-sessions/${session.id}/sets`, {
+    await update(`log-${exerciseId}`, `/v1/workout-sessions/${session.id}/sets`, {
       method: "POST",
       body: JSON.stringify({ exerciseId, ...input }),
     });
   }
 
   async function substitute(exerciseId: string) {
-    await update(`/v1/workout-sessions/${session.id}/substitutions`, {
+    await update(`substitute-${exerciseId}`, `/v1/workout-sessions/${session.id}/substitutions`, {
       method: "POST",
       body: JSON.stringify({ exerciseId }),
     });
   }
 
   async function finish() {
-    const result = await update(`/v1/workout-sessions/${session.id}/finish`, {
+    const result = await update("finish", `/v1/workout-sessions/${session.id}/finish`, {
       method: "POST",
       body: JSON.stringify({ reflection, perceivedEffort }),
     });
@@ -1377,7 +1415,7 @@ function WorkoutRunner({
 
   async function abandon() {
     if (!window.confirm("Abandon this workout? It will be recorded as skipped.")) return;
-    const result = await update(`/v1/workout-sessions/${session.id}/abandon`, {
+    const result = await update("abandon", `/v1/workout-sessions/${session.id}/abandon`, {
       method: "POST",
       body: JSON.stringify({ reflection }),
     });
@@ -1392,8 +1430,8 @@ function WorkoutRunner({
         title={session.name}
         description={`${session.totalSets} sets · ${session.totalVolumeKg} kg volume · ${formatDuration(session.durationSeconds)}`}
         actions={
-          <Button variant="secondary" disabled={working} onClick={() => void changeStatus()}>
-            {session.status === "paused" ? "Resume workout" : "Pause workout"}
+          <Button variant="secondary" busy={workingAction === "status"} disabled={Boolean(workingAction)} onClick={() => void changeStatus()}>
+            {workingAction === "status" ? "Updating…" : session.status === "paused" ? "Resume workout" : "Pause workout"}
           </Button>
         }
       />
@@ -1407,7 +1445,8 @@ function WorkoutRunner({
           <ExerciseLogger
             key={exercise.exerciseId}
             exercise={exercise}
-            disabled={working || session.status !== "active"}
+            disabled={Boolean(workingAction) || session.status !== "active"}
+            workingAction={workingAction}
             onLog={logSet}
             onSubstitute={substitute}
           />
@@ -1438,11 +1477,11 @@ function WorkoutRunner({
           />
         </Field>
         <div className="finish-actions">
-          <Button variant="danger" disabled={working} onClick={() => void abandon()}>
-            Abandon workout
+          <Button variant="danger" busy={workingAction === "abandon"} disabled={Boolean(workingAction)} onClick={() => void abandon()}>
+            {workingAction === "abandon" ? "Closing…" : "Abandon workout"}
           </Button>
-          <Button busy={working} disabled={session.totalSets === 0} onClick={() => void finish()}>
-            {working ? "Saving…" : "Finish workout →"}
+          <Button busy={workingAction === "finish"} disabled={Boolean(workingAction) || session.totalSets === 0} onClick={() => void finish()}>
+            {workingAction === "finish" ? "Saving…" : "Finish workout →"}
           </Button>
         </div>
       </Card>
@@ -1453,11 +1492,13 @@ function WorkoutRunner({
 function ExerciseLogger({
   exercise,
   disabled,
+  workingAction,
   onLog,
   onSubstitute,
 }: {
   exercise: WorkoutSession["exercises"][number];
   disabled: boolean;
+  workingAction: string;
   onLog: (
     exerciseId: string,
     input: { reps: number; loadKg: number; effortRpe: number },
@@ -1490,9 +1531,10 @@ function ExerciseLogger({
             size="sm"
             className="substitute"
             disabled={disabled || exercise.sets.length > 0}
+            busy={workingAction === `substitute-${exercise.exerciseId}`}
             onClick={() => void onSubstitute(exercise.exerciseId)}
           >
-            Find substitute
+            {workingAction === `substitute-${exercise.exerciseId}` ? "Finding…" : "Find substitute"}
           </Button>
         </div>
       </header>
@@ -1516,9 +1558,10 @@ function ExerciseLogger({
         </Field>
         <Button
           disabled={disabled || exercise.sets.length >= exercise.prescribedSets + 2}
+          busy={workingAction === `log-${exercise.exerciseId}`}
           onClick={() => void onLog(exercise.exerciseId, { reps, loadKg, effortRpe })}
         >
-          Log set
+          {workingAction === `log-${exercise.exerciseId}` ? "Logging…" : "Log set"}
         </Button>
       </div>
     </Card>
