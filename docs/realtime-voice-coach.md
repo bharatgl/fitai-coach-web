@@ -92,4 +92,3 @@ must remain read-only until separate authorization and confirmation UX exists.
 4. Turn-level deterministic safety gate and transcript persistence.
 5. Mobile browser/device calibration, cost telemetry, failure fallback to the
    existing text and push-to-talk experience.
-
