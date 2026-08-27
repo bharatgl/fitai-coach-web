@@ -146,12 +146,14 @@ export function LiveVoiceCoach({
   const setupCompleteRef = useRef(false);
   const shouldRunRef = useRef(false);
   const setupTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const elevenLabsResponseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reconnectAttemptRef = useRef(0);
   const connectedAtRef = useRef(0);
   const resumptionHandleRef = useRef<string | null>(null);
   const pendingMovementSignalRef = useRef<LiveMovementSignal | null>(null);
   const lastMovementSignalIdRef = useRef("");
+  const avatarReadyRef = useRef(false);
 
   const clearSetupTimer = useCallback(() => {
     if (setupTimerRef.current) clearTimeout(setupTimerRef.current);
@@ -161,6 +163,11 @@ export function LiveVoiceCoach({
   const clearReconnectTimer = useCallback(() => {
     if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
     reconnectTimerRef.current = null;
+  }, []);
+
+  const clearElevenLabsResponseTimer = useCallback(() => {
+    if (elevenLabsResponseTimerRef.current) clearTimeout(elevenLabsResponseTimerRef.current);
+    elevenLabsResponseTimerRef.current = null;
   }, []);
 
   const clearPlayback = useCallback(() => {
@@ -175,6 +182,7 @@ export function LiveVoiceCoach({
     shouldRunRef.current = false;
     clearSetupTimer();
     clearReconnectTimer();
+    clearElevenLabsResponseTimer();
     captureNodeRef.current?.disconnect();
     captureSourceRef.current?.disconnect();
     captureNodeRef.current = null;
@@ -184,6 +192,7 @@ export function LiveVoiceCoach({
     clearPlayback();
     const avatarClient = avatarClientRef.current;
     avatarClientRef.current = null;
+    avatarReadyRef.current = false;
     if (avatarClient) void avatarClient.stop().catch(() => undefined);
     const elevenLabsConversation = elevenLabsConversationRef.current;
     elevenLabsConversationRef.current = null;
@@ -205,7 +214,7 @@ export function LiveVoiceCoach({
     const audioContext = audioContextRef.current;
     audioContextRef.current = null;
     if (audioContext && audioContext.state !== "closed") void audioContext.close();
-  }, [clearPlayback, clearReconnectTimer, clearSetupTimer]);
+  }, [clearElevenLabsResponseTimer, clearPlayback, clearReconnectTimer, clearSetupTimer]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -479,8 +488,10 @@ export function LiveVoiceCoach({
       avatarClientRef.current = client;
       client.on("start", () => {
         if (!mountedRef.current || avatarClientRef.current !== client) return;
+        avatarReadyRef.current = true;
         setAvatarReady(true);
         setAvatarIssue("");
+        elevenLabsConversationRef.current?.setVolume({ volume: 0 });
         void audioElement.play().catch(() => undefined);
       });
       client.on("speaking", () => {
@@ -493,6 +504,7 @@ export function LiveVoiceCoach({
         if (!mountedRef.current || avatarClientRef.current !== client) return;
         avatarClientRef.current = null;
         void client.stop().catch(() => undefined);
+        avatarReadyRef.current = false;
         setAvatarReady(false);
         elevenLabsConversationRef.current?.setVolume({ volume: 1 });
         setAvatarIssue(message || "Photoreal coach video disconnected; voice remains available.");
@@ -517,6 +529,7 @@ export function LiveVoiceCoach({
     } catch (cause) {
       const client = avatarClientRef.current;
       avatarClientRef.current = null;
+      avatarReadyRef.current = false;
       if (client) void client.stop().catch(() => undefined);
       if (mountedRef.current) {
         setAvatarReady(false);
@@ -525,6 +538,45 @@ export function LiveVoiceCoach({
           : "Photoreal coach video is unavailable. Voice-only mode is still available.");
       }
       return false;
+    }
+  }
+
+  function armElevenLabsResponseTimer() {
+    const expectedConversation = elevenLabsConversationRef.current;
+    if (!expectedConversation) return;
+    clearElevenLabsResponseTimer();
+    elevenLabsResponseTimerRef.current = setTimeout(() => {
+      if (
+        !mountedRef.current ||
+        !shouldRunRef.current ||
+        voiceProviderRef.current !== "elevenlabs" ||
+        elevenLabsConversationRef.current !== expectedConversation
+      ) return;
+      void switchToGeminiFallback(
+        expectedConversation,
+        "The natural voice provider connected but did not answer. Switched to backup voice automatically.",
+      );
+    }, 15_000);
+  }
+
+  async function switchToGeminiFallback(
+    conversation: ElevenLabsConversation,
+    message: string,
+  ) {
+    if (elevenLabsConversationRef.current !== conversation || !shouldRunRef.current) return;
+    clearElevenLabsResponseTimer();
+    elevenLabsConversationRef.current = null;
+    await conversation.endSession().catch(() => undefined);
+    if (!shouldRunRef.current) return;
+    setAvatarIssue(message);
+    setConnectionStage("reconnecting");
+    setState("connecting");
+    try {
+      await startGeminiFallback();
+    } catch (cause) {
+      closeResources();
+      setError(cause instanceof Error ? cause.message : "Backup live voice could not start.");
+      setState("error");
     }
   }
 
@@ -550,7 +602,7 @@ export function LiveVoiceCoach({
       dynamicVariables: credentials.dynamicVariables,
       onConversationCreated: (createdConversation) => {
         elevenLabsConversationRef.current = createdConversation;
-        createdConversation.setVolume({ volume: avatarClientRef.current ? 0 : 1 });
+        createdConversation.setVolume({ volume: avatarReadyRef.current ? 0 : 1 });
       },
       clientTools: {
         get_live_workout_snapshot: async () => {
@@ -566,6 +618,7 @@ export function LiveVoiceCoach({
         reconnectAttemptRef.current = 0;
         setError("");
         setState("listening");
+        armElevenLabsResponseTimer();
       },
       onModeChange: ({ mode }) => {
         if (mountedRef.current && shouldRunRef.current) {
@@ -579,16 +632,19 @@ export function LiveVoiceCoach({
           coachTurnRef.current = "";
           setCoachCaption("");
           setUserCaption(userTurnRef.current);
+          armElevenLabsResponseTimer();
           return;
         }
+        clearElevenLabsResponseTimer();
         coachTurnRef.current = message.trim();
         setUserCaption("");
         setCoachCaption(coachTurnRef.current);
         void saveCompletedTurn();
       },
       onAudio: (base64Audio) => {
+        clearElevenLabsResponseTimer();
         const avatarClient = avatarClientRef.current;
-        if (!avatarClient) return;
+        if (!avatarClient || !avatarReadyRef.current) return;
         avatarClient.sendAudioData(pcmForAvatar(base64Audio, "audio/pcm;rate=16000"));
       },
       onError: (message) => {
@@ -596,6 +652,7 @@ export function LiveVoiceCoach({
       },
       onDisconnect: (details) => {
         if (!mountedRef.current || !shouldRunRef.current || details.reason === "user") return;
+        clearElevenLabsResponseTimer();
         elevenLabsConversationRef.current = null;
         scheduleReconnect("The ElevenLabs coach connection ended unexpectedly.");
       },
@@ -605,7 +662,7 @@ export function LiveVoiceCoach({
       return;
     }
     elevenLabsConversationRef.current = conversation;
-    conversation.setVolume({ volume: avatarClientRef.current ? 0 : 1 });
+    conversation.setVolume({ volume: avatarReadyRef.current ? 0 : 1 });
     const pendingMovement = pendingMovementSignalRef.current;
     if (pendingMovement) {
       conversation.sendContextualUpdate(movementSignalText(pendingMovement));
@@ -734,8 +791,6 @@ export function LiveVoiceCoach({
     setConnectionStage("microphone");
     setState("connecting");
     try {
-      await connectAvatar();
-      if (!shouldRunRef.current) return;
       try {
         await connectElevenLabs(false);
       } catch (cause) {
@@ -745,6 +800,7 @@ export function LiveVoiceCoach({
           : "ElevenLabs is unavailable. Using the backup live voice.");
         await startGeminiFallback();
       }
+      if (shouldRunRef.current) void connectAvatar();
     } catch (cause) {
       closeResources();
       const timedOut = cause instanceof DOMException && cause.name === "TimeoutError";

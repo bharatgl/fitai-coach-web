@@ -18,6 +18,14 @@ test("builds a private personalized Indian-English ElevenLabs coach", () => {
   assert.match(config.conversation_config.agent.prompt.prompt, /natural Indian English/);
   assert.equal(config.conversation_config.tts.voice_id, "SQ8WYwlpzxrTbbuJgi38");
   assert.equal(config.conversation_config.tts.agent_output_audio_format, "pcm_16000");
+  assert.deepEqual(config.conversation_config.conversation.client_events, [
+    "audio",
+    "user_transcript",
+    "agent_response",
+    "agent_response_correction",
+    "interruption",
+    "agent_response_complete",
+  ]);
   assert.equal(config.platform_settings.auth.enable_auth, true);
   assert.match(serialized, /get_live_workout_snapshot/);
   assert.doesNotMatch(serialized, /server-only-key/);

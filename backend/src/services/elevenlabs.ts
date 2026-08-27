@@ -134,7 +134,14 @@ export function buildElevenLabsCoachAgentConfig(config: ElevenLabsConfig) {
       },
       conversation: {
         max_duration_seconds: 1_800,
-        client_events: ["agent_response_complete"],
+        client_events: [
+          "audio",
+          "user_transcript",
+          "agent_response",
+          "agent_response_correction",
+          "interruption",
+          "agent_response_complete",
+        ],
       },
     },
     platform_settings: {
