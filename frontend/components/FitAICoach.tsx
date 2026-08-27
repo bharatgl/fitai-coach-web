@@ -775,6 +775,7 @@ function Coach({
   const [voiceError, setVoiceError] = useState("");
   const [liveVoiceOpen, setLiveVoiceOpen] = useState(false);
   const attachmentInputRef = useRef<HTMLInputElement>(null);
+  const messagesRef = useRef<HTMLDivElement>(null);
   const pendingAttachmentsRef = useRef<PendingCoachAttachment[]>([]);
   const recognitionRef = useRef<BrowserSpeechRecognition | null>(null);
   const voiceBaseDraftRef = useRef("");
@@ -814,6 +815,14 @@ function Coach({
   useEffect(() => {
     pendingAttachmentsRef.current = pendingAttachments;
   }, [pendingAttachments]);
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      const messageList = messagesRef.current;
+      if (messageList) messageList.scrollTop = messageList.scrollHeight;
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [activeThread?.id, loadingThreads, messages.length]);
 
   useEffect(() => () => {
     pendingAttachmentsRef.current.forEach((attachment) => {
@@ -1083,7 +1092,7 @@ function Coach({
               )}
             </div>
           </header>
-          <div className="messages">
+          <div className="messages" ref={messagesRef}>
             {loadingThreads && (
               <>
                 <CoachSkeleton />
@@ -1266,7 +1275,7 @@ function Coach({
                   event.currentTarget.form?.requestSubmit();
                 }
               }}
-              placeholder="Ask about your training…"
+              placeholder="Message your coach…"
             />
             <button
               className="chat-send-button"

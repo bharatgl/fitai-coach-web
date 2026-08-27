@@ -287,6 +287,10 @@ export function LiveVoiceCoach({
     const stopWhenHidden = () => {
       if (document.visibilityState !== "hidden") return;
       closeResources();
+      setUserCaption("");
+      setCoachCaption("");
+      setAvatarIssue("");
+      setError("");
       setState("idle");
     };
     document.addEventListener("visibilitychange", stopWhenHidden);
@@ -982,12 +986,18 @@ export function LiveVoiceCoach({
   function endSession() {
     setState("ending");
     closeResources();
+    userTurnRef.current = "";
+    coachTurnRef.current = "";
+    setUserCaption("");
+    setCoachCaption("");
+    setAvatarIssue("");
+    setError("");
     setState("idle");
   }
 
-  const isSessionActive = state !== "idle" && state !== "error";
   const activeCaption = state === "speaking" ? coachCaption : userCaption || coachCaption;
   const captionOwner = state === "speaking" || (!userCaption && coachCaption) ? "YOUR COACH" : "YOU";
+  const showCoachContext = state === "idle" && !activeCaption;
 
   return (
     <div className="live-voice-backdrop" role="presentation" onMouseDown={(event) => {
@@ -1037,26 +1047,28 @@ export function LiveVoiceCoach({
                 </div>
               </div>
               <div className="live-coach-session">
-                <p className="live-voice-state" aria-live="polite">
-                  <i aria-hidden="true" />
-                  {sessionLabel(state, connectionStage)}
-                </p>
-                <div className="live-coach-utterance" aria-live="polite">
-                  <small>{activeCaption ? captionOwner : "PRIVATE, PERSONALIZED COACHING"}</small>
-                  <p>{activeCaption || "I know your profile, plan, and recent conversations. When you're ready, let's talk."}</p>
-                  {state === "speaking" && (
-                    <span className="live-coach-speaking-wave" aria-hidden="true"><i /><i /><i /><i /><i /></span>
+                <div className="live-coach-session-scroll">
+                  <p className="live-voice-state" aria-live="polite">
+                    <i aria-hidden="true" />
+                    {sessionLabel(state, connectionStage)}
+                  </p>
+                  <div className="live-coach-utterance" aria-live="polite">
+                    <small>{activeCaption ? captionOwner : "PRIVATE, PERSONALIZED COACHING"}</small>
+                    <p>{activeCaption || "I know your profile, plan, and recent conversations. When you're ready, let's talk."}</p>
+                    {state === "speaking" && (
+                      <span className="live-coach-speaking-wave" aria-hidden="true"><i /><i /><i /><i /><i /></span>
+                    )}
+                  </div>
+                  {showCoachContext && (
+                    <ul className="live-coach-context" aria-label="Live coach capabilities">
+                      <li><i>✓</i><span><b>Remembers you</b>Your goals and past coaching stay in context.</span></li>
+                      <li><i>✓</i><span><b>Workout aware</b>Receives live form cues from your tracker.</span></li>
+                      <li><i>✓</i><span><b>Natural conversation</b>Speak freely and interrupt at any time.</span></li>
+                    </ul>
                   )}
+                  {error && <p className="form-error" role="alert">{error}</p>}
+                  {avatarIssue && <p className="live-avatar-notice" role="status">{avatarIssue}</p>}
                 </div>
-                {!isSessionActive && (
-                  <ul className="live-coach-context" aria-label="Live coach capabilities">
-                    <li><i>✓</i><span><b>Remembers you</b>Your goals and past coaching stay in context.</span></li>
-                    <li><i>✓</i><span><b>Workout aware</b>Receives live form cues from your tracker.</span></li>
-                    <li><i>✓</i><span><b>Natural conversation</b>Speak freely and interrupt at any time.</span></li>
-                  </ul>
-                )}
-                {error && <p className="form-error" role="alert">{error}</p>}
-                {avatarIssue && <p className="live-avatar-notice" role="status">{avatarIssue}</p>}
                 <div className="live-voice-controls">
                   {state === "idle" || state === "error" ? (
                     <button className="live-voice-primary" type="button" onClick={() => void startSession()}>

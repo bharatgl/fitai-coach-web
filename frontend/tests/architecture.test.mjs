@@ -44,6 +44,9 @@ test("shows a public landing page and protects the coaching workspace", async ()
   assert.match(coach, /className="prompt-toggle-button"/);
   assert.match(coach, /aria-expanded=\{showSuggestions\}/);
   assert.match(coach, /className="coach-suggestions active-coach-suggestions"[\s\S]*<form className="chat-composer"/);
+  assert.match(coach, /className="messages" ref=\{messagesRef\}/);
+  assert.match(coach, /messageList\.scrollTop = messageList\.scrollHeight/);
+  assert.match(coach, /placeholder="Message your coach…"/);
   assert.match(coach, /Save and resend/);
   assert.match(coach, /Attach images or PDF/);
   assert.match(coach, /\/v1\/coach\/attachments/);
@@ -89,6 +92,8 @@ test("shows a public landing page and protects the coaching workspace", async ()
   assert.match(liveVoice, /Your coach is here/);
   assert.match(liveVoice, /<LiveCoachCamera/);
   assert.match(liveVoice, /live-coach-utterance/);
+  assert.match(liveVoice, /live-coach-session-scroll/);
+  assert.match(liveVoice, /showCoachContext/);
   assert.doesNotMatch(liveVoice, /live-voice-orb|live-voice-captions/);
   await access(new URL("../public/coach/forge-coach-avatar.webp", import.meta.url));
   assert.doesNotMatch(liveVoice, /JSON\.parse\(String\(event\.data\)\)/);
