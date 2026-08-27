@@ -37,3 +37,20 @@ test("sets JSON content type when a request has a body", async (context) => {
   });
   assert.equal(response.ok, true);
 });
+
+test("surfaces an actionable backend message instead of a generic status", async (context) => {
+  const originalFetch = globalThis.fetch;
+  context.after(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  globalThis.fetch = async () => Response.json(
+    { message: "Photoreal coach video is not configured." },
+    { status: 503 },
+  );
+
+  await assert.rejects(
+    apiRequest("/v1/coach/live-avatar-token", { method: "POST" }),
+    /Photoreal coach video is not configured\./,
+  );
+});

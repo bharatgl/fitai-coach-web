@@ -10,10 +10,10 @@ export async function apiRequest<T>(path: string, init?: RequestInit): Promise<T
   });
 
   const body = (await response.json().catch(() => null)) as
-    | ({ error?: string } & T)
+    | ({ error?: string; message?: string } & T)
     | null;
   if (!response.ok) {
-    throw new Error(body?.error ?? `API request failed with ${response.status}`);
+    throw new Error(body?.message ?? body?.error ?? `API request failed with ${response.status}`);
   }
   return body as T;
 }
