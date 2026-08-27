@@ -153,7 +153,9 @@ camera calibration on physical devices.
   illustrations, text guides across the reference library, search, filters,
   setup instructions, visible attribution, pinned provenance, and license
   guards. Added all 302 Workout Guide exercises and 906 open CC BY-SA SVG
-  frames as consistent three-position demonstrations with full provenance.
+  frames as consistent three-position demonstrations with full provenance. The
+  visual demo browser and compact full directory are separate views so records
+  from different sources are not mixed into one inconsistent card grid.
 - Replace the free-text-only goal with a versioned training phase:
   `muscle_gain`, `fat_loss`, `recomposition`, `maintenance`, or supervised
   `contest_prep`, including start date, optional target date, and member intent.

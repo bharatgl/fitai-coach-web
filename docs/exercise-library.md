@@ -23,6 +23,11 @@ RepDB instructions; 204 additional unique movements expand the combined browser
 to 1,725 exercises. Workout Guide artwork is CC BY-SA 4.0 and is visibly
 attributed to Bryl Lim and its Everkinetic source.
 
+The UI deliberately keeps these collections separate: the Library opens on the
+302 visual demonstrations, while a distinct Full directory tab presents all
+1,725 movements as compact text rows. Text-only records are never rendered as
+empty visual cards.
+
 RepDB assets are licensed for commercial in-app use with visible attribution.
 ForgeFit does not expose RepDB records through its exercise API, redistribute
 them as a standalone dataset, include paid-tier preview animations, or use the

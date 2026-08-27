@@ -73,7 +73,10 @@ test("presents all licensed sources as one deduplicated catalogue", async () => 
   assert.match(component, /repdbLibraryData\.exercises/);
   assert.match(component, /workoutGuideLibraryData\.exercises/);
   assert.match(component, /seenNames\.has/);
-  assert.match(component, /Illustrated only/);
+  assert.match(component, /useState<LibraryMode>\("demos"\)/);
+  assert.match(component, /Visual demos/);
+  assert.match(component, /Full directory/);
+  assert.doesNotMatch(component, /Step-by-step text guide|Illustrated only/);
   assert.match(page, /more than 1,700 bodybuilding/);
 });
 
