@@ -48,6 +48,7 @@ import {
 } from "@/lib/voice";
 import { BrandLockup } from "@/components/BrandLockup";
 import { CoachMessageContent } from "@/components/CoachMessageContent";
+import coachVoiceStyles from "@/components/CoachVoiceFirst.module.css";
 import { ExerciseVideoButton } from "@/components/ExerciseVideo";
 import { ReadinessCheckIn } from "@/components/ReadinessCheckIn";
 import {
@@ -1062,23 +1063,11 @@ function Coach({
         <Card className="chat" padding="md">
           <header className="chat-header">
             <div className="chat-header-copy">
-              <strong>Coach</strong>
-              <span>Your profile and conversation stay in context.</span>
+              <strong>Your AI coach</strong>
+              <span>Voice first, with your profile and conversation in context.</span>
             </div>
             <div className="chat-header-actions">
               {activeThread && <small>{activeThread.messageCount} messages</small>}
-              {activeThread && (
-                <button
-                  className="live-voice-launch"
-                  type="button"
-                  onClick={() => setLiveVoiceOpen(true)}
-                  aria-haspopup="dialog"
-                  title="Start a real-time voice session"
-                >
-                  <span className="live-voice-wave" aria-hidden="true"><i /><i /><i /></span>
-                  <span>Live voice</span>
-                </button>
-              )}
               {activeThread && liveVoiceOpen && (
                 <LiveVoiceCoach
                   threadId={activeThread.id}
@@ -1092,6 +1081,26 @@ function Coach({
               )}
             </div>
           </header>
+          {activeThread && (
+            <section className={`${coachVoiceStyles.voiceEntry} coach-voice-entry`} aria-label="Live voice coach">
+              <button
+                className={coachVoiceStyles.voiceButton}
+                type="button"
+                onClick={() => setLiveVoiceOpen(true)}
+                aria-haspopup="dialog"
+              >
+                <span className={`${coachVoiceStyles.voiceIcon} coach-voice-entry-icon`} aria-hidden="true">
+                  <span className="live-voice-wave"><i /><i /><i /></span>
+                </span>
+                <span className={`${coachVoiceStyles.voiceCopy} coach-voice-entry-copy`}>
+                  <small>REAL-TIME COACH</small>
+                  <strong>Talk to your coach</strong>
+                  <span>Natural conversation · remembers your plan</span>
+                </span>
+                <span className={`${coachVoiceStyles.voiceAction} coach-voice-entry-action`} aria-hidden="true">Start →</span>
+              </button>
+            </section>
+          )}
           <div className="messages" ref={messagesRef}>
             {loadingThreads && (
               <>
@@ -1104,8 +1113,8 @@ function Coach({
                 <div className="coach-starter-mark" aria-hidden="true">
                   <span /><span /><b>AI</b>
                 </div>
-                <h2>What can I help with?</h2>
-                <p>Ask about your training, recovery, plan, or nutrition.</p>
+                <h2>Prefer to type?</h2>
+                <p>Text chat stays synced with your live coach.</p>
               </div>
             )}
             {messages.map((message) => (
@@ -1160,7 +1169,7 @@ function Coach({
               ))}
             </div>
           )}
-          <form className="chat-composer" onSubmit={send}>
+          <form className={`chat-composer ${coachVoiceStyles.composer}`} onSubmit={send}>
             {pendingAttachments.length > 0 && (
               <div className="composer-attachments" aria-label="Selected attachments">
                 {pendingAttachments.map((attachment) => (
@@ -1197,94 +1206,99 @@ function Coach({
                 event.target.value = "";
               }}
             />
-            {messages.length > 0 && (
+            <div className={`composer-main ${coachVoiceStyles.main}`}>
+              <label className="ui-visually-hidden" htmlFor="coach-message">Message your AI coach</label>
+              <textarea
+                id="coach-message"
+                rows={1}
+                value={draft}
+                onChange={(event) => setDraft(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" && !event.shiftKey) {
+                    event.preventDefault();
+                    event.currentTarget.form?.requestSubmit();
+                  }
+                }}
+                placeholder="Type a message…"
+              />
               <button
-                className="prompt-toggle-button"
-                type="button"
-                aria-controls="composer-suggestions"
-                aria-expanded={showSuggestions}
-                onClick={() => setShowSuggestions((visible) => !visible)}
+                className="chat-send-button"
+                type="submit"
+                disabled={sending || (!draft.trim() && !pendingAttachments.length)}
+                aria-label={sending ? "Sending message" : "Send message"}
               >
-                <span aria-hidden="true">✦</span>
-                <span>Prompts</span>
+                {sending ? <span className="send-spinner" /> : <span aria-hidden="true">↑</span>}
               </button>
-            )}
-            <button
-              className="attachment-button"
-              type="button"
-              disabled={sending || pendingAttachments.length >= maxCoachAttachments}
-              onClick={() => attachmentInputRef.current?.click()}
-              aria-label="Attach images or PDF"
-              title="Attach images or PDF (up to 5 MB)"
-            >
-              <AttachmentIcon />
-            </button>
-            <button
-              className="attachment-button voice-input-button"
-              type="button"
-              disabled={sending || !voiceSupported}
-              aria-label={
-                voiceSupported
-                  ? voiceStatus !== "idle"
-                    ? "Release to stop voice input"
-                    : "Hold to talk"
-                  : "Voice input is not supported in this browser"
-              }
-              aria-pressed={voiceStatus !== "idle"}
-              title={voiceSupported ? "Hold to talk" : "Voice input is not supported in this browser"}
-              onPointerDown={(event) => {
-                if (event.button !== 0) return;
-                event.preventDefault();
-                event.currentTarget.setPointerCapture(event.pointerId);
-                startVoiceInput();
-              }}
-              onPointerUp={(event) => {
-                event.preventDefault();
-                if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-                  event.currentTarget.releasePointerCapture(event.pointerId);
+            </div>
+            <div className={`composer-tools ${coachVoiceStyles.tools}`} aria-label="Message tools">
+              {messages.length > 0 && (
+                <button
+                  className={`prompt-toggle-button ${coachVoiceStyles.tool}`}
+                  type="button"
+                  aria-controls="composer-suggestions"
+                  aria-expanded={showSuggestions}
+                  onClick={() => setShowSuggestions((visible) => !visible)}
+                >
+                  <span aria-hidden="true">✦</span>
+                  <span>Ideas</span>
+                </button>
+              )}
+              <button
+                className={`attachment-button ${coachVoiceStyles.tool}`}
+                type="button"
+                disabled={sending || pendingAttachments.length >= maxCoachAttachments}
+                onClick={() => attachmentInputRef.current?.click()}
+                aria-label="Attach images or PDF"
+                title="Attach images or PDF (up to 5 MB)"
+              >
+                <AttachmentIcon />
+                <span>Attach</span>
+              </button>
+              <button
+                className={`attachment-button voice-input-button ${coachVoiceStyles.tool} ${coachVoiceStyles.dictate}`}
+                type="button"
+                disabled={sending || !voiceSupported}
+                aria-label={
+                  voiceSupported
+                    ? voiceStatus !== "idle"
+                      ? "Release to stop dictation"
+                      : "Hold to dictate"
+                    : "Voice input is not supported in this browser"
                 }
-                stopVoiceInput();
-              }}
-              onPointerCancel={() => stopVoiceInput()}
-              onKeyDown={(event) => {
-                if ((event.key === " " || event.key === "Enter") && !event.repeat) {
+                aria-pressed={voiceStatus !== "idle"}
+                title={voiceSupported ? "Hold to dictate" : "Voice input is not supported in this browser"}
+                onPointerDown={(event) => {
+                  if (event.button !== 0) return;
                   event.preventDefault();
+                  event.currentTarget.setPointerCapture(event.pointerId);
                   startVoiceInput();
-                }
-              }}
-              onKeyUp={(event) => {
-                if (event.key === " " || event.key === "Enter") {
+                }}
+                onPointerUp={(event) => {
                   event.preventDefault();
+                  if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+                    event.currentTarget.releasePointerCapture(event.pointerId);
+                  }
                   stopVoiceInput();
-                }
-              }}
-              onClick={(event) => event.preventDefault()}
-            >
-              <VoiceIcon />
-              <span className="ui-visually-hidden">Hold to talk</span>
-            </button>
-            <label className="ui-visually-hidden" htmlFor="coach-message">Message your AI coach</label>
-            <textarea
-              id="coach-message"
-              rows={1}
-              value={draft}
-              onChange={(event) => setDraft(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" && !event.shiftKey) {
-                  event.preventDefault();
-                  event.currentTarget.form?.requestSubmit();
-                }
-              }}
-              placeholder="Message your coach…"
-            />
-            <button
-              className="chat-send-button"
-              type="submit"
-              disabled={sending || (!draft.trim() && !pendingAttachments.length)}
-              aria-label={sending ? "Sending message" : "Send message"}
-            >
-              {sending ? <span className="send-spinner" /> : <span aria-hidden="true">↑</span>}
-            </button>
+                }}
+                onPointerCancel={() => stopVoiceInput()}
+                onKeyDown={(event) => {
+                  if ((event.key === " " || event.key === "Enter") && !event.repeat) {
+                    event.preventDefault();
+                    startVoiceInput();
+                  }
+                }}
+                onKeyUp={(event) => {
+                  if (event.key === " " || event.key === "Enter") {
+                    event.preventDefault();
+                    stopVoiceInput();
+                  }
+                }}
+                onClick={(event) => event.preventDefault()}
+              >
+                <VoiceIcon />
+                <span>Dictate</span>
+              </button>
+            </div>
           </form>
           <div
             className={`voice-experience-status${voiceStatus === "idle" ? "" : " is-active"}`}

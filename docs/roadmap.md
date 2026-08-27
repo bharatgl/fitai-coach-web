@@ -91,3 +91,149 @@ data and can be tested before the next capability depends on it.
 - API integration, authorization, AI safety, and browser end-to-end tests.
 - Error monitoring, product analytics with sensitive-field filtering, backups,
   restore drills, cost limits, audit logs, accessibility, and load tests.
+
+## Product and stability audit — 2026-08-28
+
+ForgeFit has a credible authenticated strength-training foundation, but it is
+not yet a stable bodybuilding or fat-loss product. The current product can
+generate a conservative four-week plan, run and log workouts, calculate simple
+load guidance, collect self-reported readiness, and ground text or live coaching
+in that data. Bodybuilding, fat loss, and contest preparation currently exist
+mainly as free-text goals and coaching instructions rather than first-class
+product workflows.
+
+The public deployment and database readiness endpoint are reachable. Local
+typechecking, linting, the production build, and the automated unit/contract
+suite pass. These checks do not validate production OAuth, authenticated
+end-to-end journeys, paid AI-provider behavior, real voice/avatar sessions, or
+camera calibration on physical devices.
+
+### Launch blockers — do before inviting public traffic
+
+- Complete the deterministic safety gate before any live model can respond to a
+  finalized voice turn. Text safety checks do not protect direct native-audio
+  output.
+- Move production fitness, body, movement, and nutrition context off AI free
+  tiers whose data terms are unsuitable for real member information.
+- Add production error monitoring, privacy-filtered product analytics, provider
+  latency/error metrics, per-member usage accounting, quota alerts, and feature
+  kill switches for voice, avatar, vision, and plan generation.
+- Exercise the real signed-in path in browser tests: sign in, onboarding, plan
+  generation, readiness, workout start/log/pause/resume/finish, history, text
+  coach, voice fallback, camera consent, and account sign-out.
+- Test supported iOS Safari, Android Chrome, and desktop browsers on physical
+  devices. Define measurable camera framing, confidence, rep-count, battery,
+  thermal, microphone, interruption, and reconnect acceptance thresholds.
+- Publish accurate Privacy and Terms pages. Explain separately that continuous
+  pose tracking stays on-device while one compressed frame leaves the device
+  only after an explicit visual-analysis request and is not retained.
+- Add account deletion and data export covering Auth.js records, profiles,
+  readiness, plans, sessions, movement summaries, coach threads, messages, and
+  attachments. Verify deletion rather than relying on a UI-only acknowledgement.
+- Restrict the initial product to adults until consent and data handling for
+  minors have received an appropriate legal and safety review.
+- Configure MongoDB backups and complete a restore drill. Document recovery
+  time, recovery point, secret rotation, and provider-outage procedures.
+- Load-test the uncached public landing route, authenticated proxy, database
+  connection pool, synchronous plan generation, and voice-session provisioning.
+  Preserve text coaching and workout logging when optional providers are down.
+- Replace the long first-run form with progressive profiling and generate the
+  first plan automatically after the minimum goal, experience, equipment,
+  schedule, and session-duration inputs.
+
+### Bodybuilding foundation — required for a real hypertrophy product
+
+- Replace the free-text-only goal with a versioned training phase:
+  `muscle_gain`, `fat_loss`, `recomposition`, `maintenance`, or supervised
+  `contest_prep`, including start date, optional target date, and member intent.
+- Expand the reviewed catalog beyond the current small general-strength set.
+  Add machine, cable, isolation, and common commercial-gym movements with muscle
+  groups, stimulus role, fatigue cost, equipment, substitutions, setup cues,
+  contraindication notes, and reviewed demonstrations.
+- Bootstrap catalog research from a source with explicit commercial media terms,
+  then review every imported movement before making it plan-eligible. RepDB's
+  free dataset currently permits commercial in-app use with visible attribution;
+  wger exposes per-entry Creative Commons licensing. Do not ship media from
+  repositories that merely label scraped or purchased footage as MIT/public
+  domain without proving the original media rights. Self-host approved assets
+  instead of treating GitHub raw URLs as a production CDN.
+- Model per-muscle weekly volume, exercise order, rep targets, RIR/RPE, rest,
+  tempo, warm-ups, progression rules, deload triggers, and mesocycle history.
+- Track personal exercise performance and rep-range progression rather than
+  deriving future load from only the most recently completed sets.
+- Add weekly check-ins for performance, soreness, recovery, schedule adherence,
+  and member feedback. Apply bounded, auditable adjustments instead of silently
+  regenerating an unrelated four-week plan.
+- Support program edits such as moving a session, replacing an exercise,
+  reducing duration, or changing volume without archiving and rebuilding the
+  whole plan.
+- Add meaningful physique progress views: strength trends, completed volume,
+  adherence, and optional body measurements. Progress photos require explicit
+  consent, private storage, retention controls, and deletion.
+
+### Sustainable fat-loss journey — required before claiming fat-loss coaching
+
+- Add weight entries and a rolling trend so recommendations do not react to a
+  single noisy measurement. Keep weigh-ins optional and avoid moral language.
+- Add an evidence-based starting-target workflow for energy and protein with
+  explicit assumptions, unit handling, dietary preference, allergies, food
+  availability, and a clear non-medical scope. Targets must be deterministic and
+  reviewable rather than invented by the language model.
+- Track adherence using weekly summaries instead of requiring perfect daily food
+  logging. Include optional waist/measurement trends, steps, and cardio minutes.
+- Add bounded adjustment rules based on several weeks of weight trend,
+  adherence, hunger, recovery, and performance. Prevent rapid-loss targets and
+  repeated automatic reductions.
+- Provide India-relevant vegetarian, eggetarian, vegan, and non-vegetarian meal
+  templates with editable portions and substitutions. Do not present generated
+  meal examples as clinical diet prescriptions.
+- Preserve resistance-training performance and recovery as first-class outcomes;
+  do not turn fat loss into a scale-only score or punitive exercise target.
+
+### Natural contest-preparation support — supervised and safety-bounded
+
+- Model show date, weeks out, federation/division notes, prior prep experience,
+  current support team, posing practice, and weekly check-in cadence.
+- Keep the product focused on organization, gradual trend monitoring, training,
+  meal adherence, posing practice, and questions for the member's coach,
+  dietitian, or physician.
+- Continue to block dehydration, water cuts, diuretics, laxatives, purging,
+  extreme heat, severe restriction, and performance-enhancing drug protocols in
+  text, voice, attachments, and camera-triggered flows.
+- Do not estimate exact body-fat percentage, diagnose a condition, or declare
+  stage readiness from a photo. Visual comparisons must state lighting, pose,
+  clothing, angle, and framing limitations.
+- Add escalation and recovery guidance for dizziness, fainting, neurological or
+  breathing symptoms, severe pain, disordered-eating signals, menstrual-cycle
+  disruption concerns, and other signs that require qualified care.
+
+### Commercial launch foundation
+
+- Add subscription entitlements and server-enforced limits for plan generation,
+  text turns, attachment/vision analysis, live voice minutes, and avatar minutes.
+- Record cost per successful plan, coach turn, voice minute, avatar minute, and
+  activated member before offering an unlimited tier.
+- Add pricing, trial state, billing lifecycle, invoices, failed-payment handling,
+  cancellation, and support contact surfaces.
+- Add Product Hunt assets only after the product gates pass: a working free or
+  trial experience, real product screenshots, a short walkthrough, a clear
+  privacy explanation, and a monitored launch-day capacity plan.
+
+## Release gates
+
+The public beta is ready only when all of the following are measured rather than
+assumed:
+
+- A new adult member can reach a generated plan and preview the first workout in
+  under two minutes without support.
+- The complete authenticated workout lifecycle passes against an isolated
+  production-shaped database and in at least one automated browser journey.
+- Voice connection, interruption, transcript persistence, safety gating,
+  fallback, and resource cleanup pass on the supported mobile browser matrix.
+- Camera tracking clearly rejects bad framing or low confidence and never claims
+  to assess what it cannot see.
+- Provider failures do not corrupt plans, sessions, messages, or billing usage.
+- Monitoring contains no coach content, body notes, camera frames, auth tokens,
+  provider credentials, or other sensitive free text.
+- Backups restore successfully, account deletion is verified, cost caps are
+  active, and a documented rollback can be executed during a launch.

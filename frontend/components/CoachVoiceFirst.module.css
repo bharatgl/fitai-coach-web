@@ -1,0 +1,240 @@
+.voiceEntry {
+  flex: none;
+  margin: 0.85rem auto 0.35rem;
+  max-width: 52rem;
+  padding: 0;
+  width: calc(100% - 2rem);
+}
+
+.voiceButton {
+  align-items: center;
+  background:
+    radial-gradient(circle at 8% 50%, rgb(200 255 75 / 18%), transparent 9rem),
+    linear-gradient(105deg, rgb(20 35 37 / 96%), rgb(10 27 35 / 94%));
+  border: 1px solid rgb(200 255 75 / 25%);
+  border-radius: 1rem;
+  box-shadow: inset 0 1px rgb(255 255 255 / 6%), 0 0.8rem 2.5rem rgb(0 0 0 / 18%);
+  color: #eff8f3;
+  display: grid;
+  gap: 0.8rem;
+  grid-template-columns: 3rem minmax(0, 1fr) auto;
+  min-height: 4.75rem;
+  padding: 0.7rem 0.9rem;
+  text-align: left;
+  transition: border-color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
+  width: 100%;
+}
+
+.voiceButton:hover,
+.voiceButton:focus-visible {
+  border-color: rgb(200 255 75 / 48%);
+  box-shadow: inset 0 1px rgb(255 255 255 / 8%), 0 1rem 3rem rgb(0 0 0 / 25%);
+  transform: translateY(-1px);
+}
+
+.voiceIcon {
+  align-items: center;
+  background: linear-gradient(145deg, #d1ff58, #5be6d2);
+  border-radius: 0.85rem;
+  box-shadow: 0 0 0 0.35rem rgb(200 255 75 / 7%);
+  color: #091412;
+  display: flex;
+  height: 3rem;
+  justify-content: center;
+  width: 3rem;
+}
+
+.voiceCopy {
+  display: grid;
+  gap: 0.12rem;
+  min-width: 0;
+}
+
+.voiceCopy small {
+  color: #aeeac9;
+  font-size: 0.5rem;
+  font-weight: 900;
+  letter-spacing: 0.16em;
+}
+
+.voiceCopy strong {
+  color: #f7fff9;
+  font-size: 0.9rem;
+  letter-spacing: -0.01em;
+}
+
+.voiceCopy > span {
+  color: #93a9ae;
+  font-size: 0.62rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.voiceAction {
+  color: #d8ff79;
+  font-size: 0.66rem;
+  font-weight: 850;
+  white-space: nowrap;
+}
+
+.composer.composer {
+  align-items: stretch !important;
+  display: grid !important;
+  flex-wrap: nowrap !important;
+  gap: 0.4rem !important;
+  padding: 0.45rem !important;
+}
+
+.main {
+  align-items: end;
+  display: grid;
+  gap: 0.45rem;
+  grid-template-columns: minmax(0, 1fr) 2.65rem;
+  min-width: 0;
+  width: 100%;
+}
+
+.main textarea {
+  font-size: 0.84rem !important;
+  line-height: 1.45;
+  max-height: 7.5rem;
+  min-height: 2.65rem !important;
+  min-width: 0 !important;
+  padding: 0.68rem 0.7rem !important;
+  width: 100%;
+}
+
+.tools {
+  align-items: center;
+  border-top: 1px solid rgb(255 255 255 / 7%);
+  display: flex;
+  gap: 0.2rem;
+  min-width: 0;
+  padding: 0.35rem 0.15rem 0;
+}
+
+.tool.tool {
+  align-items: center !important;
+  background: transparent !important;
+  border: 1px solid transparent !important;
+  border-radius: 0.55rem !important;
+  box-shadow: none !important;
+  color: #98a5b8 !important;
+  display: flex !important;
+  font-size: 0.58rem !important;
+  font-weight: 750 !important;
+  gap: 0.38rem !important;
+  height: 2rem !important;
+  justify-content: center !important;
+  min-width: 0 !important;
+  padding: 0 0.55rem !important;
+  transform: none !important;
+  white-space: nowrap;
+  width: auto !important;
+}
+
+.tool.tool:hover:not(:disabled),
+.tool.tool:focus-visible {
+  background: rgb(200 255 75 / 7%) !important;
+  border-color: rgb(200 255 75 / 12%) !important;
+  color: #d8ff7d !important;
+}
+
+.tool.tool:disabled {
+  opacity: 0.45;
+}
+
+.dictate {
+  margin-left: auto;
+}
+
+@media (max-width: 56.25rem) {
+  .voiceEntry {
+    margin: 0.7rem auto 0.25rem;
+    width: calc(100% - 1.5rem);
+  }
+}
+
+@media (max-width: 37.5rem) {
+  .voiceEntry {
+    margin: 0.55rem auto 0.2rem;
+    width: calc(100% - 1rem);
+  }
+
+  .voiceButton {
+    border-radius: 0.85rem;
+    gap: 0.65rem;
+    grid-template-columns: 2.55rem minmax(0, 1fr) auto;
+    min-height: 4rem;
+    padding: 0.55rem 0.65rem;
+  }
+
+  .voiceIcon {
+    border-radius: 0.7rem;
+    height: 2.55rem;
+    width: 2.55rem;
+  }
+
+  .voiceCopy strong {
+    font-size: 0.8rem;
+  }
+
+  .voiceCopy > span {
+    font-size: 0.56rem;
+  }
+
+  .voiceAction {
+    font-size: 0.6rem;
+  }
+
+  .composer.composer {
+    border-radius: 0.9rem !important;
+    gap: 0.3rem !important;
+    margin-bottom: 0.45rem !important;
+    padding: 0.38rem !important;
+    width: calc(100% - 1rem) !important;
+  }
+
+  .main {
+    gap: 0.35rem;
+    grid-template-columns: minmax(0, 1fr) 2.55rem;
+  }
+
+  .main textarea {
+    font-size: 1rem !important;
+    min-height: 2.55rem !important;
+    padding: 0.58rem 0.55rem !important;
+  }
+
+  .tool.tool {
+    font-size: 0.58rem !important;
+    height: 1.9rem !important;
+    padding: 0 0.45rem !important;
+  }
+}
+
+@media (max-width: 23.75rem) {
+  .voiceCopy > span {
+    display: none;
+  }
+
+  .voiceAction {
+    font-size: 0;
+  }
+
+  .voiceAction::after {
+    content: "→";
+    font-size: 0.8rem;
+  }
+
+  .tool.tool {
+    padding-inline: 0.4rem !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .voiceButton {
+    transition: none;
+  }
+}

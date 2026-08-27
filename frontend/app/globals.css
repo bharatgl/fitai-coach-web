@@ -1267,3 +1267,160 @@ select option{background:#111426;color:#f7f8ff}
   .workout-live-actions{display:grid;grid-template-columns:1fr 1fr;width:100%}
   .workout-live-actions>.ui-button{margin:0;width:100%}
 }
+
+/* Voice-first coach surface and uncluttered message composer. */
+.coach-voice-entry{
+  flex:none;
+  margin:.85rem auto .35rem;
+  max-width:52rem;
+  padding:0;
+  width:calc(100% - 2rem);
+}
+.coach-voice-entry>button{
+  align-items:center;
+  background:
+    radial-gradient(circle at 8% 50%,rgb(200 255 75 / 18%),transparent 9rem),
+    linear-gradient(105deg,rgb(20 35 37 / 96%),rgb(10 27 35 / 94%));
+  border:1px solid rgb(200 255 75 / 25%);
+  border-radius:1rem;
+  box-shadow:inset 0 1px rgb(255 255 255 / 6%),0 .8rem 2.5rem rgb(0 0 0 / 18%);
+  color:#eff8f3;
+  display:grid;
+  gap:.8rem;
+  grid-template-columns:3rem minmax(0,1fr) auto;
+  min-height:4.75rem;
+  padding:.7rem .9rem;
+  text-align:left;
+  transition:border-color .16s ease,box-shadow .16s ease,transform .16s ease;
+  width:100%;
+}
+.coach-voice-entry>button:hover,.coach-voice-entry>button:focus-visible{
+  border-color:rgb(200 255 75 / 48%);
+  box-shadow:inset 0 1px rgb(255 255 255 / 8%),0 1rem 3rem rgb(0 0 0 / 25%);
+  transform:translateY(-1px);
+}
+.coach-voice-entry-icon{
+  align-items:center;
+  background:linear-gradient(145deg,#d1ff58,#5be6d2);
+  border-radius:.85rem;
+  box-shadow:0 0 0 .35rem rgb(200 255 75 / 7%);
+  color:#091412;
+  display:flex;
+  height:3rem;
+  justify-content:center;
+  width:3rem;
+}
+.coach-voice-entry-icon .live-voice-wave{height:1.25rem;width:1.25rem}
+.coach-voice-entry-icon .live-voice-wave i{height:.6rem;width:3px}
+.coach-voice-entry-icon .live-voice-wave i:nth-child(2){height:1.1rem}
+.coach-voice-entry-icon .live-voice-wave i:nth-child(3){height:.8rem}
+.coach-voice-entry-copy{display:grid;gap:.12rem;min-width:0}
+.coach-voice-entry-copy small{color:#aeeac9;font-size:.5rem;font-weight:900;letter-spacing:.16em}
+.coach-voice-entry-copy strong{color:#f7fff9;font-size:.9rem;letter-spacing:-.01em}
+.coach-voice-entry-copy>span{color:#93a9ae;font-size:.62rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.coach-voice-entry-action{color:#d8ff79;font-size:.66rem;font-weight:850;white-space:nowrap}
+
+.coach-active .chat .chat-composer{
+  align-items:stretch;
+  display:grid;
+  gap:.4rem;
+  padding:.45rem;
+}
+.chat-composer .composer-main{
+  align-items:end;
+  display:grid;
+  gap:.45rem;
+  grid-template-columns:minmax(0,1fr) 2.65rem;
+  min-width:0;
+  width:100%;
+}
+.chat-composer .composer-main textarea{
+  font-size:.84rem;
+  line-height:1.45;
+  max-height:7.5rem;
+  min-height:2.65rem;
+  min-width:0;
+  padding:.68rem .7rem;
+  width:100%;
+}
+.chat-composer .composer-tools{
+  align-items:center;
+  border-top:1px solid rgb(255 255 255 / 7%);
+  display:flex;
+  gap:.2rem;
+  min-width:0;
+  padding:.35rem .15rem 0;
+}
+.coach-active .chat .chat-composer .composer-tools button,
+.coach-active .chat .chat-composer .composer-tools .attachment-button,
+.coach-active .chat .chat-composer .composer-tools .voice-input-button,
+.coach-active .chat .chat-composer .composer-tools .prompt-toggle-button{
+  align-items:center;
+  background:transparent;
+  border:1px solid transparent;
+  border-radius:.55rem;
+  box-shadow:none;
+  color:#98a5b8;
+  display:flex;
+  font-size:.58rem;
+  font-weight:750;
+  gap:.38rem;
+  height:2rem;
+  justify-content:center;
+  min-width:0;
+  padding:0 .55rem;
+  transform:none;
+  white-space:nowrap;
+  width:auto;
+}
+.coach-active .chat .chat-composer .composer-tools button:hover:not(:disabled),
+.coach-active .chat .chat-composer .composer-tools button:focus-visible{
+  background:rgb(200 255 75 / 7%);
+  border-color:rgb(200 255 75 / 12%);
+  box-shadow:none;
+  color:#d8ff7d;
+  transform:none;
+}
+.coach-active .chat .chat-composer .composer-tools button:disabled{opacity:.45}
+.chat-composer .composer-tools .attachment-button svg,
+.chat-composer .composer-tools .voice-input-button svg{height:.95rem!important;width:.95rem!important}
+.chat-composer .composer-tools .voice-input-button{margin-left:auto}
+.chat-composer .composer-tools .voice-input-button[aria-pressed="true"]{color:#ff9bad}
+
+@media(max-width:900px){
+  .coach-voice-entry{margin:.7rem auto .25rem;width:calc(100% - 1.5rem)}
+}
+
+@media(max-width:600px){
+  .coach-active .chat-header{min-height:3.65rem;padding:.55rem .75rem!important}
+  .coach-voice-entry{margin:.55rem auto .2rem;width:calc(100% - 1rem)}
+  .coach-voice-entry>button{border-radius:.85rem;gap:.65rem;grid-template-columns:2.55rem minmax(0,1fr) auto;min-height:4rem;padding:.55rem .65rem}
+  .coach-voice-entry-icon{border-radius:.7rem;height:2.55rem;width:2.55rem}
+  .coach-voice-entry-copy strong{font-size:.8rem}
+  .coach-voice-entry-copy>span{font-size:.56rem}
+  .coach-voice-entry-action{font-size:.6rem}
+  .coach-active .coach-workspace .messages{padding-top:.65rem}
+  .coach-active .chat .chat-composer{border-radius:.9rem;gap:.3rem;margin-bottom:.45rem;padding:.38rem;width:calc(100% - 1rem)}
+  .chat-composer .composer-main{gap:.35rem;grid-template-columns:minmax(0,1fr) 2.55rem}
+  .chat-composer .composer-main textarea{font-size:1rem;min-height:2.55rem;padding:.58rem .55rem}
+  .chat-composer .composer-main .chat-send-button{height:2.55rem;width:2.55rem}
+  .chat-composer .composer-tools{padding-top:.28rem}
+  .coach-active .chat .chat-composer .composer-tools button,
+  .coach-active .chat .chat-composer .composer-tools .attachment-button,
+  .coach-active .chat .chat-composer .composer-tools .voice-input-button,
+  .coach-active .chat .chat-composer .composer-tools .prompt-toggle-button{font-size:.58rem;height:1.9rem;padding:0 .45rem}
+}
+
+@media(max-width:380px){
+  .coach-voice-entry-copy>span{display:none}
+  .coach-voice-entry-action{font-size:0}
+  .coach-voice-entry-action:after{content:"→";font-size:.8rem}
+  .coach-active .chat .chat-composer .composer-tools button,
+  .coach-active .chat .chat-composer .composer-tools .attachment-button,
+  .coach-active .chat .chat-composer .composer-tools .voice-input-button,
+  .coach-active .chat .chat-composer .composer-tools .prompt-toggle-button{padding-inline:.4rem}
+}
+
+@media(prefers-reduced-motion:reduce){
+  .coach-voice-entry>button{transition:none}
+}
