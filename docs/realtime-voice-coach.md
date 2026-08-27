@@ -34,6 +34,11 @@ photoreal, lip-synced WebRTC avatar rather than a local cartoon model.
   the front camera only after the member taps **Turn camera on**, shows a private
   mobile-first preview, and runs MediaPipe rep/range-of-motion tracking when an
   active supported workout is available. Without one, it remains preview-only.
+- When the member explicitly asks the coach to inspect their physique, posture,
+  form, or current camera view, the `analyze_camera_view` client tool captures
+  one downscaled JPEG and sends it to the authenticated vision endpoint. The
+  frame is analyzed in memory and is not stored. Routine pose tracking remains
+  entirely on-device.
 - `POST /v1/coach/live-avatar-token` creates a short-lived Simli session on the
   authenticated backend, keeping `SIMLI_API_KEY` out of the browser.
 - The live surface forwards ElevenLabs 16 kHz PCM callbacks to Simli and mutes
@@ -67,6 +72,11 @@ Authenticated browser
   |     -> active workout, logged sets, and compact movement aggregates
   |     <- no camera frames, landmark arrays, or free-form health records
   |
+  |-- explicit visual tool request: analyze_camera_view(focus)
+  |     -> one compressed current frame to the authenticated backend
+  |     -> Gemini structured visual analysis with fitness safety constraints
+  |     <- observations, limitations, and one actionable next step; no storage
+  |
   |-- on-device movement signal (corrective or every third rep)
   |     -> exercise, rep, duration, ROM, confidence, and local cue only
   |
@@ -83,10 +93,11 @@ signed URLs; the member sees only their own name and coaching context.
 
 ## Real-time workout data
 
-Expose one read-only function to the live model:
+Expose two read-only functions to the live model:
 
 ```text
 get_live_workout_snapshot()
+analyze_camera_view(focus)
 ```
 
 The browser handles the tool call by requesting an authenticated snapshot from
@@ -99,9 +110,11 @@ ForgeFit. The response should contain only:
   range-of-motion by exercise;
 - an explicit timestamp so the model describes the data as a snapshot.
 
-Do not expose raw camera frames, pose landmarks, pending database documents,
-internal user IDs, API credentials, or unrestricted backend URLs as tool data.
-The model requests data; application code validates and executes every tool.
+Do not expose continuous camera video, pose landmarks, pending database
+documents, internal user IDs, API credentials, or unrestricted backend URLs as
+tool data. A single compressed frame may leave the device only after an explicit
+visual request, and the backend must not persist it. The model requests data;
+application code validates and executes every tool.
 
 ## Safety gate
 
@@ -161,3 +174,6 @@ must remain read-only until separate authorization and confirmation UX exists.
 8. Done: explicit live-session workout camera, private preview fallback,
    on-device pose overlay, compact rep-summary persistence, and live movement
    cues forwarded to the active voice agent.
+9. Done: explicit still-frame visual analysis shared by ElevenLabs and Gemini
+   Live, with authenticated transport, rate/size limits, no frame persistence,
+   honest framing guidance, and sensitive-inference safeguards.

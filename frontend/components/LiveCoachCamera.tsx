@@ -19,6 +19,13 @@ import {
 } from "@/lib/movement-tracking";
 
 type CameraStatus = "off" | "starting" | "preview" | "tracking" | "error";
+export type LiveCameraFrame = {
+  imageBase64: string;
+  mimeType: "image/jpeg";
+  width: number;
+  height: number;
+};
+export type CaptureLiveCameraFrame = () => LiveCameraFrame | null;
 type TrackableExercise = {
   exerciseId: string;
   name: string;
@@ -39,9 +46,11 @@ function trackableExercises(snapshot: LiveCoachSnapshotResponse) {
 export function LiveCoachCamera({
   sessionId,
   onMovement,
+  onCaptureReady,
 }: {
   sessionId: string | null;
   onMovement: (signal: LiveMovementSignal) => void;
+  onCaptureReady?: (capture: CaptureLiveCameraFrame | null) => void;
 }) {
   const [status, setStatus] = useState<CameraStatus>("off");
   const [feedback, setFeedback] = useState("Camera is off.");
@@ -55,6 +64,34 @@ export function LiveCoachCamera({
   const landmarkerRef = useRef<PoseLandmarker | null>(null);
   const animationFrameRef = useRef<number | null>(null);
   const runIdRef = useRef(0);
+
+  const captureCurrentFrame = useCallback<CaptureLiveCameraFrame>(() => {
+    const video = videoRef.current;
+    if (!streamRef.current || !video || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
+      return null;
+    }
+    const sourceWidth = video.videoWidth;
+    const sourceHeight = video.videoHeight;
+    if (!sourceWidth || !sourceHeight) return null;
+    const maximumDimension = 768;
+    const scale = Math.min(1, maximumDimension / Math.max(sourceWidth, sourceHeight));
+    const width = Math.max(1, Math.round(sourceWidth * scale));
+    const height = Math.max(1, Math.round(sourceHeight * scale));
+    const frame = document.createElement("canvas");
+    frame.width = width;
+    frame.height = height;
+    const context = frame.getContext("2d");
+    if (!context) return null;
+    context.drawImage(video, 0, 0, width, height);
+    const dataUrl = frame.toDataURL("image/jpeg", 0.72);
+    const imageBase64 = dataUrl.slice(dataUrl.indexOf(",") + 1);
+    return { imageBase64, mimeType: "image/jpeg", width, height };
+  }, []);
+
+  useEffect(() => {
+    onCaptureReady?.(captureCurrentFrame);
+    return () => onCaptureReady?.(null);
+  }, [captureCurrentFrame, onCaptureReady]);
 
   const stopCamera = useCallback((updateUi = true) => {
     runIdRef.current += 1;

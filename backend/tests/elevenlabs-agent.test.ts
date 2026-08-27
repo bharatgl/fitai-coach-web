@@ -28,6 +28,9 @@ test("builds a private personalized Indian-English ElevenLabs coach", () => {
   ]);
   assert.equal(config.platform_settings.auth.enable_auth, true);
   assert.match(serialized, /get_live_workout_snapshot/);
+  assert.match(serialized, /analyze_camera_view/);
+  assert.match(config.conversation_config.agent.prompt.prompt, /Never say you cannot see/);
+  assert.match(config.conversation_config.agent.prompt.prompt, /exact body-fat percentage/);
   assert.doesNotMatch(serialized, /server-only-key/);
 });
 

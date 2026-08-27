@@ -95,6 +95,9 @@ export function buildElevenLabsCoachAgentConfig(config: ElevenLabsConfig) {
             "# Goal",
             "Give specific, personalized coaching for training, workout logging, recovery, nutrition habits, and bodybuilding preparation.",
             "Before time-sensitive set or workout guidance, call get_live_workout_snapshot and use the newest data.",
+            "When the member explicitly asks you to look at, inspect, analyze, or assess their physique, posture, exercise form, or current camera view, call analyze_camera_view before answering.",
+            "Never say you cannot see the member before trying analyze_camera_view. If it reports that the camera is off or the framing is insufficient, tell the member exactly how to reposition and offer to look again. If it reports unavailable, explain that visual analysis is temporarily unavailable and retry only when the member asks.",
+            "Treat a camera result as one limited still-frame observation. Never identify the member, estimate exact body-fat percentage, judge attractiveness, diagnose an injury, or infer a health condition from it.",
             "Treat this as one continuous conversation. If interrupted, stop and listen.",
             "For pain, dizziness, numbness, breathing trouble, or urgent symptoms, tell the member to stop training and seek appropriate in-person care. Do not diagnose or prescribe treatment.",
           ].join("\n"),
@@ -102,13 +105,32 @@ export function buildElevenLabsCoachAgentConfig(config: ElevenLabsConfig) {
           temperature: 0.55,
           max_tokens: 420,
           timezone: "Asia/Kolkata",
-          tools: [{
-            type: "client",
-            name: "get_live_workout_snapshot",
-            description: "Get the member's latest active workout, logged sets, readiness, plan, and movement feedback before giving time-sensitive guidance.",
-            expects_response: true,
-            parameters: { type: "object", properties: {}, required: [] },
-          }],
+          tools: [
+            {
+              type: "client",
+              name: "get_live_workout_snapshot",
+              description: "Get the member's latest active workout, logged sets, readiness, plan, and movement feedback before giving time-sensitive guidance.",
+              expects_response: true,
+              parameters: { type: "object", properties: {}, required: [] },
+            },
+            {
+              type: "client",
+              name: "analyze_camera_view",
+              description: "Analyze one current workout-camera frame when the member explicitly asks for visual feedback about physique, posture, form, or what the camera sees.",
+              expects_response: true,
+              parameters: {
+                type: "object",
+                properties: {
+                  focus: {
+                    type: "string",
+                    enum: ["physique", "posture", "form", "general"],
+                    description: "The kind of visual feedback the member requested.",
+                  },
+                },
+                required: ["focus"],
+              },
+            },
+          ],
         },
       },
       tts: {

@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import {
+  analyzeCameraFrame,
   classifySafetyMessage,
   createLiveCoachToken,
   generateCoachResponse,
@@ -14,6 +15,7 @@ import type {
   CreateCoachThreadResponse,
   ElevenLabsCoachSessionResponse,
   LiveCoachAvatarTokenResponse,
+  LiveCameraAnalysisResponse,
   LiveCoachSnapshotResponse,
   LiveCoachTokenResponse,
   UploadCoachAttachmentResponse,
@@ -128,6 +130,14 @@ const liveTokenInput = z.object({
 });
 const liveSnapshotQuery = z.object({
   sessionId: z.string().trim().min(1).max(100).optional(),
+});
+const liveCameraAnalysisInput = z.object({
+  focus: z.enum(["physique", "posture", "form", "general"]).default("general"),
+  sessionId: z.string().trim().min(1).max(100).optional(),
+  mimeType: z.literal("image/jpeg"),
+  imageBase64: z.string().min(100).max(1_250_000).regex(/^[A-Za-z0-9+/]+={0,2}$/),
+  width: z.number().int().positive().max(1_920),
+  height: z.number().int().positive().max(1_920),
 });
 const liveTurnInput = z.object({
   threadId: z.string().uuid(),
@@ -526,6 +536,8 @@ function liveCoachInstruction(
     "Answer the exact question first. Usually speak for 15 to 35 seconds, then pause for the user.",
     "Use the supplied member data concretely. Never ask for a preference or fact already present in it.",
     "When workout state may have changed, call get_live_workout_snapshot before giving set-by-set guidance.",
+    "When the member explicitly asks you to look at, inspect, analyze, or assess their physique, posture, exercise form, or current camera view, call analyze_camera_view before answering. Never say you cannot see until you have tried that tool. If visual analysis is temporarily unavailable, say so clearly instead of claiming the camera is off.",
+    "The camera tool analyzes one current still frame. Explain framing limitations honestly, never estimate exact body-fat percentage, and do not diagnose injuries or health conditions from an image.",
     "The ongoing coach thread is provided as initial conversation history. Continue from it and never claim that you cannot access earlier messages that were supplied.",
     "Messages beginning ON_DEVICE_MOVEMENT_UPDATE contain privacy-preserving pose estimates, not raw camera footage. Give one immediate cue under 12 words only when it is actionable; otherwise stay silent.",
     "If the user interrupts, stop immediately and listen. Treat this as one continuous session.",
@@ -710,6 +722,44 @@ export async function coachRoutes(app: FastifyInstance) {
       const user = await authenticate(request);
       const { sessionId } = liveSnapshotQuery.parse(request.query ?? {});
       return loadLiveCoachSnapshot(await getDatabase(), user.id, sessionId);
+    },
+  );
+
+  app.post(
+    "/v1/coach/live-camera-analysis",
+    {
+      bodyLimit: 1_350_000,
+      config: { rateLimit: { max: 6, timeWindow: "1 minute" } },
+    },
+    async (request): Promise<LiveCameraAnalysisResponse> => {
+      const user = await authenticate(request);
+      const input = liveCameraAnalysisInput.parse(request.body);
+      const image = Buffer.from(input.imageBase64, "base64");
+      if (!image.length || image.length > 900_000) {
+        badRequest("The camera frame is too large to analyze");
+      }
+      if (!attachmentSignatureMatches(input.mimeType, image)) {
+        badRequest("The camera frame is not a valid JPEG image");
+      }
+      const snapshot = await loadLiveCoachSnapshot(
+        await getDatabase(),
+        user.id,
+        input.sessionId,
+      );
+      const config = getConfig();
+      const analysis = await analyzeCameraFrame({
+        apiKey: config.GEMINI_API_KEY,
+        model: config.GEMINI_MODEL,
+        focus: input.focus,
+        memberContext: snapshot,
+        imageBase64: input.imageBase64,
+        mimeType: input.mimeType,
+        dimensions: { width: input.width, height: input.height },
+      });
+      return {
+        ...analysis,
+        capturedAt: new Date().toISOString(),
+      };
     },
   );
 

@@ -61,6 +61,8 @@ test("shows a public landing page and protects the coaching workspace", async ()
   assert.match(liveVoice, /BidiGenerateContentConstrained/);
   assert.match(liveVoice, /audio\/pcm;rate=16000/);
   assert.match(liveVoice, /get_live_workout_snapshot/);
+  assert.match(liveVoice, /analyze_camera_view/);
+  assert.match(liveVoice, /\/v1\/coach\/live-camera-analysis/);
   assert.match(liveVoice, /interrupted/);
   assert.match(liveVoice, /\/v1\/coach\/live-turns/);
   assert.match(liveVoice, /\/v1\/coach\/elevenlabs-session/);
@@ -101,6 +103,8 @@ test("shows a public landing page and protects the coaching workspace", async ()
   assert.match(liveCamera, /\/movement-events/);
   assert.match(liveCamera, /Camera frames stay on your device|Private workout camera preview/);
   assert.match(liveCamera, /Turn camera on/);
+  assert.match(liveCamera, /toDataURL\("image\/jpeg", 0\.72\)/);
+  assert.match(liveVoice, /one compressed frame is analyzed securely and is not stored/);
   assert.match(coach, /className="ui-visually-hidden"/);
   assert.match(coach, /maxCoachAttachmentBytes/);
   assert.match(coach, /name="dietaryPreference"/);

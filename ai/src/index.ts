@@ -29,3 +29,10 @@ export {
   toGeminiJsonSchema,
   translateGeminiError,
 } from "./gemini.js";
+export {
+  analyzeCameraFrame,
+  buildCameraAnalysisContents,
+  liveCameraAnalysisSystemPrompt,
+  type AnalyzeCameraFrameInput,
+  type LiveCameraAnalysis,
+} from "./vision.js";

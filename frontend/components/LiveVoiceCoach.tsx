@@ -4,13 +4,18 @@ import type {
   CoachThreadDetail,
   ElevenLabsCoachSessionResponse,
   LiveCoachAvatarTokenResponse,
+  LiveCameraAnalysisFocus,
+  LiveCameraAnalysisResponse,
   LiveCoachSnapshotResponse,
   LiveCoachTokenResponse,
 } from "@fitai/contracts";
 import type { Conversation as ElevenLabsConversation } from "@elevenlabs/client";
 import Image from "next/image";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { LiveCoachCamera } from "@/components/LiveCoachCamera";
+import {
+  LiveCoachCamera,
+  type CaptureLiveCameraFrame,
+} from "@/components/LiveCoachCamera";
 import { apiRequest } from "@/lib/api";
 import {
   decodeLiveServerMessage,
@@ -154,6 +159,51 @@ export function LiveVoiceCoach({
   const pendingMovementSignalRef = useRef<LiveMovementSignal | null>(null);
   const lastMovementSignalIdRef = useRef("");
   const avatarReadyRef = useRef(false);
+  const cameraCaptureRef = useRef<CaptureLiveCameraFrame | null>(null);
+
+  const registerCameraCapture = useCallback((capture: CaptureLiveCameraFrame | null) => {
+    cameraCaptureRef.current = capture;
+  }, []);
+
+  async function analyzeCurrentCamera(focusValue: unknown) {
+    const allowedFocuses: LiveCameraAnalysisFocus[] = ["physique", "posture", "form", "general"];
+    const focus = typeof focusValue === "string" &&
+        allowedFocuses.includes(focusValue as LiveCameraAnalysisFocus)
+      ? focusValue as LiveCameraAnalysisFocus
+      : "general";
+    const capture = cameraCaptureRef.current;
+    const frame = capture?.();
+    if (!frame) {
+      return {
+        status: "needs_better_view",
+        capturedAt: new Date().toISOString(),
+        summary: "I don't have an active camera frame yet.",
+        observations: [],
+        limitations: ["The workout camera is off or has not finished starting."],
+        nextStep: "Turn the camera on, keep the requested body area in frame, then ask me to look again.",
+      } satisfies LiveCameraAnalysisResponse;
+    }
+    try {
+      return await apiRequest<LiveCameraAnalysisResponse>("/v1/coach/live-camera-analysis", {
+        method: "POST",
+        body: JSON.stringify({
+          ...frame,
+          focus,
+          sessionId: activeSessionId ?? undefined,
+        }),
+        signal: AbortSignal.timeout(25_000),
+      });
+    } catch {
+      return {
+        status: "unavailable",
+        capturedAt: new Date().toISOString(),
+        summary: "The camera is on, but visual analysis is temporarily unavailable.",
+        observations: [],
+        limitations: ["The visual analysis service did not return a result."],
+        nextStep: "Keep the camera on and ask me to look again in a moment.",
+      } satisfies LiveCameraAnalysisResponse;
+    }
+  }
 
   const clearSetupTimer = useCallback(() => {
     if (setupTimerRef.current) clearTimeout(setupTimerRef.current);
@@ -314,16 +364,25 @@ export function LiveVoiceCoach({
   async function answerToolCalls(calls: FunctionCall[]) {
     const socket = socketRef.current;
     if (!socket || socket.readyState !== WebSocket.OPEN) return;
-    const query = activeSessionId ? `?sessionId=${encodeURIComponent(activeSessionId)}` : "";
-    const snapshot = await apiRequest<LiveCoachSnapshotResponse>(`/v1/coach/live-snapshot${query}`);
-    socket.send(JSON.stringify({
-      toolResponse: {
-        functionResponses: calls.map((call) => ({
+    const responses = await Promise.all(calls.map(async (call) => {
+      if (call.name === "analyze_camera_view") {
+        return {
           id: call.id,
           name: call.name,
-          response: { result: snapshot },
-        })),
-      },
+          response: { result: await analyzeCurrentCamera(call.args?.focus) },
+        };
+      }
+      const query = activeSessionId ? `?sessionId=${encodeURIComponent(activeSessionId)}` : "";
+      return {
+        id: call.id,
+        name: call.name,
+        response: {
+          result: await apiRequest<LiveCoachSnapshotResponse>(`/v1/coach/live-snapshot${query}`),
+        },
+      };
+    }));
+    socket.send(JSON.stringify({
+      toolResponse: { functionResponses: responses },
     }));
   }
 
@@ -611,6 +670,9 @@ export function LiveVoiceCoach({
             await apiRequest<LiveCoachSnapshotResponse>(`/v1/coach/live-snapshot${query}`),
           );
         },
+        analyze_camera_view: async (parameters: { focus?: unknown }) => {
+          return JSON.stringify(await analyzeCurrentCamera(parameters?.focus));
+        },
       },
       onConnect: () => {
         if (!mountedRef.current || !shouldRunRef.current) return;
@@ -732,11 +794,27 @@ export function LiveVoiceCoach({
             inputAudioTranscription: {},
             outputAudioTranscription: {},
             tools: [{
-              functionDeclarations: [{
-                name: "get_live_workout_snapshot",
-                description: "Get the member's latest active workout, logged sets, readiness, plan, and movement feedback before giving time-sensitive guidance.",
-                parameters: { type: "OBJECT", properties: {} },
-              }],
+              functionDeclarations: [
+                {
+                  name: "get_live_workout_snapshot",
+                  description: "Get the member's latest active workout, logged sets, readiness, plan, and movement feedback before giving time-sensitive guidance.",
+                  parameters: { type: "OBJECT", properties: {} },
+                },
+                {
+                  name: "analyze_camera_view",
+                  description: "Analyze one current workout-camera frame when the member explicitly asks you to look at their physique, posture, form, or camera view.",
+                  parameters: {
+                    type: "OBJECT",
+                    properties: {
+                      focus: {
+                        type: "STRING",
+                        enum: ["physique", "posture", "form", "general"],
+                      },
+                    },
+                    required: ["focus"],
+                  },
+                },
+              ],
             }],
           },
         }));
@@ -862,6 +940,7 @@ export function LiveVoiceCoach({
                 <LiveCoachCamera
                   sessionId={activeSessionId}
                   onMovement={setCameraMovementSignal}
+                  onCaptureReady={registerCameraCapture}
                 />
                 <div className="live-coach-presence-badge" aria-hidden="true">
                   <i /> {state === "speaking" ? "Speaking" : state === "listening" ? "Listening" : "Ready"}
@@ -901,7 +980,7 @@ export function LiveVoiceCoach({
                 </div>
               </div>
             </div>
-            <footer className="live-voice-privacy"><span aria-hidden="true">◆</span> Audio streams only during this session. Workout camera frames stay on your device; only compact rep summaries are saved.</footer>
+            <footer className="live-voice-privacy"><span aria-hidden="true">◆</span> Audio streams only during this session. Camera tracking stays on-device; when you ask for visual feedback, one compressed frame is analyzed securely and is not stored.</footer>
           </section>
     </div>
   );

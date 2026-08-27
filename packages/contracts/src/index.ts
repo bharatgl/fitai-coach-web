@@ -127,6 +127,17 @@ export type LiveCoachSnapshotResponse = {
   movementContext: Record<string, unknown> | null;
 };
 
+export type LiveCameraAnalysisFocus = "physique" | "posture" | "form" | "general";
+
+export type LiveCameraAnalysisResponse = {
+  status: "analyzed" | "needs_better_view" | "unavailable";
+  capturedAt: string;
+  summary: string;
+  observations: string[];
+  limitations: string[];
+  nextStep: string;
+};
+
 export type SaveLiveCoachTurnRequest = {
   threadId: string;
   sessionId?: string;

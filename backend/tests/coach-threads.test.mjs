@@ -29,10 +29,14 @@ test("persists isolated coach conversations with management routes", async () =>
   assert.match(source, /dataBase64: Buffer\.from/);
   assert.match(source, /post\(\s*"\/v1\/coach\/live-avatar-token"/);
   assert.match(source, /post\(\s*"\/v1\/coach\/elevenlabs-session"/);
+  assert.match(source, /post\(\s*"\/v1\/coach\/live-camera-analysis"/);
+  assert.match(source, /analyzeCameraFrame/);
+  assert.match(source, /bodyLimit: 1_350_000/);
   assert.match(source, /createElevenLabsSignedUrl/);
   assert.match(source, /user_name: userName/);
   assert.match(source, /https:\/\/api\.simli\.ai\/compose\/token/);
   assert.match(source, /"x-simli-api-key": config\.SIMLI_API_KEY/);
   assert.match(source, /natural Indian English cadence/);
   assert.match(source, /Hindi, Punjabi, or Hinglish/);
+  assert.match(source, /call analyze_camera_view before answering/);
 });
