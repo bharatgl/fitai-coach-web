@@ -20,6 +20,7 @@ export async function createLiveCoachToken({
   const newSessionExpiresAt = new Date(now.getTime() + 60 * 1_000);
   const token = await client.authTokens.create({
     config: {
+      abortSignal: AbortSignal.timeout(20_000),
       uses: 1,
       expireTime: expiresAt.toISOString(),
       newSessionExpireTime: newSessionExpiresAt.toISOString(),

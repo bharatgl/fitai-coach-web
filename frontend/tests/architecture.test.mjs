@@ -61,6 +61,8 @@ test("shows a public landing page and protects the coaching workspace", async ()
   assert.match(liveVoice, /get_live_workout_snapshot/);
   assert.match(liveVoice, /interrupted/);
   assert.match(liveVoice, /\/v1\/coach\/live-turns/);
+  assert.match(liveVoice, /AbortSignal\.timeout\(25_000\)/);
+  assert.match(liveVoice, /did not finish setup/);
   assert.doesNotMatch(liveVoice, /speechSynthesis|MediaRecorder|audio\/webm/);
   assert.match(coach, /className="ui-visually-hidden"/);
   assert.match(coach, /maxCoachAttachmentBytes/);

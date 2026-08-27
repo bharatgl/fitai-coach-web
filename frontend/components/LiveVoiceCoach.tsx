@@ -9,6 +9,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { apiRequest } from "@/lib/api";
 
 type LiveState = "idle" | "connecting" | "listening" | "speaking" | "ending" | "error";
+type ConnectionStage = "microphone" | "authorizing" | "socket" | "setup";
 
 type LiveVoiceCoachProps = {
   threadId: string;
@@ -58,8 +59,11 @@ function decodePcm(data: string) {
   return samples;
 }
 
-function sessionLabel(state: LiveState) {
-  if (state === "connecting") return "Connecting securely…";
+function sessionLabel(state: LiveState, stage: ConnectionStage) {
+  if (state === "connecting" && stage === "microphone") return "Waiting for microphone access…";
+  if (state === "connecting" && stage === "authorizing") return "Authorizing your live coach…";
+  if (state === "connecting" && stage === "socket") return "Opening the live audio channel…";
+  if (state === "connecting" && stage === "setup") return "Preparing your personalized coach…";
   if (state === "listening") return "Listening — speak naturally";
   if (state === "speaking") return "Coach is speaking — interrupt anytime";
   if (state === "ending") return "Ending session…";
@@ -74,6 +78,7 @@ export function LiveVoiceCoach({
   onClose,
 }: LiveVoiceCoachProps) {
   const [state, setState] = useState<LiveState>("idle");
+  const [connectionStage, setConnectionStage] = useState<ConnectionStage>("microphone");
   const [error, setError] = useState("");
   const [userCaption, setUserCaption] = useState("");
   const [coachCaption, setCoachCaption] = useState("");
@@ -87,6 +92,14 @@ export function LiveVoiceCoach({
   const userTurnRef = useRef("");
   const coachTurnRef = useRef("");
   const mountedRef = useRef(true);
+  const setupCompleteRef = useRef(false);
+  const intentionalCloseRef = useRef(false);
+  const setupTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clearSetupTimer = useCallback(() => {
+    if (setupTimerRef.current) clearTimeout(setupTimerRef.current);
+    setupTimerRef.current = null;
+  }, []);
 
   const clearPlayback = useCallback(() => {
     for (const source of outputSourcesRef.current) {
@@ -97,6 +110,8 @@ export function LiveVoiceCoach({
   }, []);
 
   const closeResources = useCallback(() => {
+    clearSetupTimer();
+    intentionalCloseRef.current = true;
     captureNodeRef.current?.disconnect();
     captureSourceRef.current?.disconnect();
     captureNodeRef.current = null;
@@ -110,7 +125,7 @@ export function LiveVoiceCoach({
     const audioContext = audioContextRef.current;
     audioContextRef.current = null;
     if (audioContext && audioContext.state !== "closed") void audioContext.close();
-  }, [clearPlayback]);
+  }, [clearPlayback, clearSetupTimer]);
 
   useEffect(() => () => {
     mountedRef.current = false;
@@ -191,7 +206,9 @@ export function LiveVoiceCoach({
   }
 
   function handleServerMessage(message: LiveServerMessage) {
-    if (message.setupComplete) {
+    if ("setupComplete" in message) {
+      setupCompleteRef.current = true;
+      clearSetupTimer();
       setState("listening");
       const stream = streamRef.current;
       const audioContext = audioContextRef.current;
@@ -256,6 +273,9 @@ export function LiveVoiceCoach({
     setError("");
     setUserCaption("");
     setCoachCaption("");
+    setupCompleteRef.current = false;
+    intentionalCloseRef.current = false;
+    setConnectionStage("microphone");
     setState("connecting");
     try {
       const AudioContextClass = window.AudioContext;
@@ -269,14 +289,24 @@ export function LiveVoiceCoach({
         audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
       });
       streamRef.current = stream;
+      setConnectionStage("authorizing");
       const credentials = await apiRequest<LiveCoachTokenResponse>("/v1/coach/live-token", {
         method: "POST",
+        signal: AbortSignal.timeout(25_000),
         body: JSON.stringify({ threadId, sessionId: activeSessionId ?? undefined }),
       });
+      setConnectionStage("socket");
       const endpoint = "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContentConstrained";
       const socket = new WebSocket(`${endpoint}?access_token=${encodeURIComponent(credentials.token)}`);
       socketRef.current = socket;
       socket.onopen = () => {
+        setConnectionStage("setup");
+        setupTimerRef.current = setTimeout(() => {
+          if (setupCompleteRef.current) return;
+          setError("The voice provider connected but did not finish setup. End the session and retry.");
+          setState("error");
+          closeResources();
+        }, 15_000);
         socket.send(JSON.stringify({
           setup: {
             model: `models/${credentials.model.replace(/^models\//, "")}`,
@@ -305,17 +335,23 @@ export function LiveVoiceCoach({
       socket.onerror = () => {
         setError("The live coach connection failed. Check the API model access and try again.");
         setState("error");
+        closeResources();
       };
       socket.onclose = (event) => {
-        if (!mountedRef.current) return;
-        if (event.code !== 1000) {
+        clearSetupTimer();
+        if (!mountedRef.current || intentionalCloseRef.current) return;
+        if (!setupCompleteRef.current || event.code !== 1000) {
           setError("The live coach session ended unexpectedly. You can reconnect without losing chat history.");
           setState("error");
+          closeResources();
         }
       };
     } catch (cause) {
       closeResources();
-      setError(cause instanceof Error ? cause.message : "Live voice could not start.");
+      const timedOut = cause instanceof DOMException && cause.name === "TimeoutError";
+      setError(timedOut
+        ? "Authorizing live voice took too long. Check that the backend is running, then retry."
+        : cause instanceof Error ? cause.message : "Live voice could not start.");
       setState("error");
     }
   }
@@ -341,7 +377,7 @@ export function LiveVoiceCoach({
             <div className={`live-voice-orb is-${state}`} aria-hidden="true">
               <span /><span /><b>AI</b>
             </div>
-            <p className="live-voice-state" aria-live="polite">{sessionLabel(state)}</p>
+            <p className="live-voice-state" aria-live="polite">{sessionLabel(state, connectionStage)}</p>
             <div className="live-voice-captions" aria-live="polite">
               {userCaption && <p><small>YOU</small>{userCaption}</p>}
               {coachCaption && <p><small>COACH</small>{coachCaption}</p>}
