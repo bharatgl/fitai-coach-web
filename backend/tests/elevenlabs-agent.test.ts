@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildElevenLabsCoachAgentConfig } from "../src/services/elevenlabs.js";
+import {
+  buildElevenLabsCoachAgentConfig,
+  elevenLabsQuotaAvailability,
+} from "../src/services/elevenlabs.js";
 
 test("builds a private personalized Indian-English ElevenLabs coach", () => {
   const config = buildElevenLabsCoachAgentConfig({
@@ -46,4 +49,18 @@ test("honors an explicitly configured ElevenLabs voice", () => {
   });
 
   assert.equal(config.conversation_config.tts.voice_id, "custom-voice-id");
+});
+
+test("detects an exhausted ElevenLabs quota and reports its reset delay", () => {
+  const availability = elevenLabsQuotaAvailability({
+    character_count: 10_000,
+    character_limit: 10_000,
+    next_character_count_reset_unix: 1_700_003_600,
+  }, 1_700_000_000_000);
+
+  assert.deepEqual(availability, { exhausted: true, retryAfterSeconds: 3_600 });
+  assert.deepEqual(elevenLabsQuotaAvailability({
+    character_count: 9_999,
+    character_limit: 10_000,
+  }), { exhausted: false, retryAfterSeconds: null });
 });

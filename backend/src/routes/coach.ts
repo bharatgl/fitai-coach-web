@@ -674,7 +674,15 @@ export async function coachRoutes(app: FastifyInstance) {
         const statusCode = cause && typeof cause === "object" && "statusCode" in cause
           ? Number(cause.statusCode)
           : 502;
-        await reply.code(statusCode === 503 ? 503 : 502).send({
+        const responseStatus = statusCode === 429 || statusCode === 503 ? statusCode : 502;
+        const retryAfterSeconds = cause && typeof cause === "object" &&
+            "retryAfterSeconds" in cause && Number.isFinite(Number(cause.retryAfterSeconds))
+          ? Math.max(1, Math.ceil(Number(cause.retryAfterSeconds)))
+          : null;
+        if (responseStatus === 429 && retryAfterSeconds) {
+          reply.header("retry-after", String(retryAfterSeconds));
+        }
+        await reply.code(responseStatus).send({
           message: cause instanceof Error ? cause.message : "ElevenLabs voice is unavailable.",
         });
       }

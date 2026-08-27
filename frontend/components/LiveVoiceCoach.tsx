@@ -156,6 +156,7 @@ export function LiveVoiceCoach({
   const stableSessionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reconnectAttemptRef = useRef(0);
   const elevenLabsConnectionIdRef = useRef(0);
+  const fallbackInProgressRef = useRef(false);
   const connectedAtRef = useRef(0);
   const resumptionHandleRef = useRef<string | null>(null);
   const pendingMovementSignalRef = useRef<LiveMovementSignal | null>(null);
@@ -549,7 +550,8 @@ export function LiveVoiceCoach({
   }
 
   async function startBackupVoice(message: string) {
-    if (!shouldRunRef.current) return;
+    if (!shouldRunRef.current || fallbackInProgressRef.current) return;
+    fallbackInProgressRef.current = true;
     clearReconnectTimer();
     clearStableSessionTimer();
     clearElevenLabsResponseTimer();
@@ -557,7 +559,11 @@ export function LiveVoiceCoach({
     const conversation = elevenLabsConversationRef.current;
     elevenLabsConversationRef.current = null;
     if (conversation) await conversation.endSession().catch(() => undefined);
-    if (!shouldRunRef.current) return;
+    clearReconnectTimer();
+    if (!shouldRunRef.current) {
+      fallbackInProgressRef.current = false;
+      return;
+    }
     setAvatarIssue(message);
     setConnectionStage("reconnecting");
     setState("connecting");
@@ -567,6 +573,8 @@ export function LiveVoiceCoach({
       closeResources();
       setError(cause instanceof Error ? cause.message : "Backup live voice could not start.");
       setState("error");
+    } finally {
+      fallbackInProgressRef.current = false;
     }
   }
 
@@ -770,13 +778,34 @@ export function LiveVoiceCoach({
         avatarClient.sendAudioData(pcmForAvatar(base64Audio, "audio/pcm;rate=16000"));
       },
       onError: (message) => {
-        if (mountedRef.current && shouldRunRef.current) setError(message);
+        if (!mountedRef.current || !shouldRunRef.current) return;
+        if (/quota|exceeds your.*limit|credits? exhausted/i.test(message)) {
+          void startBackupVoice(
+            "ElevenLabs voice quota is exhausted. Switched to the backup live voice automatically.",
+          );
+          return;
+        }
+        setError(message);
       },
       onDisconnect: (details) => {
-        if (!mountedRef.current || !shouldRunRef.current || details.reason === "user") return;
+        if (
+          !mountedRef.current ||
+          !shouldRunRef.current ||
+          details.reason === "user" ||
+          fallbackInProgressRef.current
+        ) return;
         clearStableSessionTimer();
         clearElevenLabsResponseTimer();
         elevenLabsConversationRef.current = null;
+        const disconnectMessage = details.reason === "error"
+          ? [details.message, details.closeReason, details.context.reason].filter(Boolean).join(" ")
+          : [details.closeReason, details.context?.reason].filter(Boolean).join(" ");
+        if (/quota|exceeds your.*limit|credits? exhausted/i.test(disconnectMessage)) {
+          void startBackupVoice(
+            "ElevenLabs voice quota is exhausted. Switched to the backup live voice automatically.",
+          );
+          return;
+        }
         scheduleReconnect("The ElevenLabs coach connection ended unexpectedly.");
       },
     });

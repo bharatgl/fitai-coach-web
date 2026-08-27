@@ -16,6 +16,11 @@ const voiceListResponse = z.object({
   voices: z.array(z.object({ voice_id: z.string() })).default([]),
 });
 const signedUrlResponse = z.object({ signed_url: z.string().url() });
+const subscriptionResponse = z.object({
+  character_count: z.number().nonnegative(),
+  character_limit: z.number().nonnegative(),
+  next_character_count_reset_unix: z.number().int().positive().nullable().optional(),
+});
 
 type ElevenLabsConfig = Pick<
   AppConfig,
@@ -23,6 +28,28 @@ type ElevenLabsConfig = Pick<
 >;
 
 let agentPromise: Promise<string> | undefined;
+let quotaCache: {
+  checkedAt: number;
+  exhausted: boolean;
+  retryAfterSeconds: number | null;
+} | undefined;
+
+export function elevenLabsQuotaAvailability(
+  subscription: z.infer<typeof subscriptionResponse>,
+  now = Date.now(),
+) {
+  const exhausted = subscription.character_limit > 0 &&
+    subscription.character_count >= subscription.character_limit;
+  const resetAt = subscription.next_character_count_reset_unix
+    ? subscription.next_character_count_reset_unix * 1_000
+    : null;
+  return {
+    exhausted,
+    retryAfterSeconds: exhausted && resetAt
+      ? Math.max(1, Math.ceil((resetAt - now) / 1_000))
+      : null,
+  };
+}
 
 async function elevenLabsRequest(
   config: ElevenLabsConfig,
@@ -217,6 +244,28 @@ async function provisionAgent(config: ElevenLabsConfig) {
   return agentResponse.parse(await response.json()).agent_id;
 }
 
+async function ensureQuotaAvailable(config: ElevenLabsConfig) {
+  const now = Date.now();
+  if (!quotaCache || now - quotaCache.checkedAt >= 60_000) {
+    const response = await elevenLabsRequest(config, "/v1/user/subscription");
+    const availability = elevenLabsQuotaAvailability(
+      subscriptionResponse.parse(await response.json()),
+      now,
+    );
+    quotaCache = {
+      checkedAt: now,
+      exhausted: availability.exhausted,
+      retryAfterSeconds: availability.retryAfterSeconds,
+    };
+  }
+  if (quotaCache.exhausted) {
+    throw Object.assign(
+      new Error("ElevenLabs voice quota is exhausted. Using the backup live voice."),
+      { statusCode: 429, retryAfterSeconds: quotaCache.retryAfterSeconds },
+    );
+  }
+}
+
 export function ensureElevenLabsCoachAgent(config: ElevenLabsConfig) {
   agentPromise ??= provisionAgent(config).catch((cause) => {
     agentPromise = undefined;
@@ -226,6 +275,7 @@ export function ensureElevenLabsCoachAgent(config: ElevenLabsConfig) {
 }
 
 export async function createElevenLabsSignedUrl(config: ElevenLabsConfig) {
+  await ensureQuotaAvailable(config);
   const agentId = await ensureElevenLabsCoachAgent(config);
   const response = await elevenLabsRequest(
     config,
@@ -236,4 +286,5 @@ export async function createElevenLabsSignedUrl(config: ElevenLabsConfig) {
 
 export function resetElevenLabsAgentForTests() {
   agentPromise = undefined;
+  quotaCache = undefined;
 }
