@@ -281,7 +281,7 @@ export default function FitAICoach({ user }: { user: CurrentUser }) {
           />
         )}
         {view === "coach" && (
-          <Coach initialMessages={dashboard.recentMessages} profile={dashboard.profile} />
+          <Coach initialMessages={dashboard.recentMessages} />
         )}
         {view === "plan" && (
           <Plan dashboard={dashboard} refresh={loadDashboard} onStart={startWorkout} />
@@ -661,21 +661,7 @@ function Today({
   );
 }
 
-const dietaryPreferenceLabels: Record<UserProfile["dietaryPreference"], string> = {
-  vegetarian: "Vegetarian",
-  non_vegetarian: "Non-vegetarian",
-  vegan: "Vegan",
-  eggetarian: "Eggetarian",
-  no_preference: "Diet not specified",
-};
-
-function Coach({
-  initialMessages,
-  profile,
-}: {
-  initialMessages: CoachMessage[];
-  profile: UserProfile;
-}) {
+function Coach({ initialMessages }: { initialMessages: CoachMessage[] }) {
   const [activeThread, setActiveThread] = useState<CoachThread | null>(null);
   const [messages, setMessages] = useState(initialMessages);
   const [draft, setDraft] = useState("");
@@ -879,9 +865,6 @@ function Coach({
             <div className="chat-header-copy">
               <strong>Coach</strong>
               <span>Your profile and conversation stay in context.</span>
-              <small className="coach-profile-context">
-                {dietaryPreferenceLabels[profile.dietaryPreference]} · {profile.primaryGoal}
-              </small>
             </div>
             <div className="chat-header-actions">
               {activeThread && <small>{activeThread.messageCount} messages</small>}
@@ -915,7 +898,11 @@ function Coach({
                     </form>
                   ) : (
                     <>
-                      {message.content && <CoachMessageContent content={message.content} />}
+                      {message.content && (
+                        message.role === "assistant"
+                          ? <CoachMessageContent content={message.content} />
+                          : <p>{message.content}</p>
+                      )}
                       <footer>
                         {message.editedAt && <small>Edited</small>}
                         {message.role === "user" && message.content && !message.id.startsWith("pending-") && (
