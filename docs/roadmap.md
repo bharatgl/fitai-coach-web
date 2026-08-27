@@ -75,10 +75,16 @@ data and can be tested before the next capability depends on it.
 - Add validated movement summaries to live AI coach context after device
   thresholds are calibrated.
 
-## 9. Voice experience
+## 9. Voice experience — implemented in code
 
 - Add explicit push-to-talk transcription and optional spoken responses.
 - Show recording state, provide text alternatives, and avoid background capture.
+- Keep microphone capture browser-managed and stop recognition on release or
+  navigation; no audio is uploaded to or stored by forgefit.space.
+- Degrade to the existing text composer when browser speech APIs are unavailable.
+- Plan the gated Gemini Live upgrade in
+  [`realtime-voice-coach.md`](realtime-voice-coach.md) before enabling continuous
+  audio or read-only live workout tools.
 
 ## 10. Production operations
 

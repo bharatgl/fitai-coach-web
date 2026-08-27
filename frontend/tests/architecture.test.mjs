@@ -44,6 +44,17 @@ test("shows a public landing page and protects the coaching workspace", async ()
   assert.match(coach, /Attach images or PDF/);
   assert.match(coach, /\/v1\/coach\/attachments/);
   assert.match(coach, /MessageAttachments/);
+  assert.match(coach, /Hold to talk/);
+  assert.match(coach, /speechSynthesis/);
+  assert.match(coach, /Voice input uses your browser&apos;s speech service/);
+  assert.match(coach, /Text input is always available/);
+  assert.match(coach, /visibilitychange/);
+  assert.match(coach, /recognitionRef\.current\?\.abort/);
+  assert.doesNotMatch(coach, /MediaRecorder|audio\/webm/);
+  assert.match(coach, /<svg width="20" height="20"/);
+  assert.match(coach, /className="attachment-button voice-input-button"/);
+  assert.match(coach, /Turn spoken coach replies off/);
+  assert.match(coach, /className="ui-visually-hidden"/);
   assert.match(coach, /maxCoachAttachmentBytes/);
   assert.match(coach, /name="dietaryPreference"/);
   assert.match(coach, /plan-overview/);
