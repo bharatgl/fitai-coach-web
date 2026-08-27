@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { GeneratedPlanDraft } from "@fitai/ai";
+import { planVolumeTargetsFor, type GeneratedPlanDraft } from "@fitai/ai";
 import type {
   PlannedWorkout,
   UserProfile,
@@ -48,6 +48,7 @@ export function validatePlanDraft(
   profile: UserProfile,
   catalog: ExerciseDefinition[],
 ) {
+  const volumeTargets = planVolumeTargetsFor(profile);
   const weekNumbers = draft.weeks.map((week) => week.weekNumber);
   if (new Set(weekNumbers).size !== 4 || ![1, 2, 3, 4].every((week) => weekNumbers.includes(week))) {
     throw new PlanValidationError("The plan must contain weeks 1 through 4 exactly once");
@@ -80,9 +81,27 @@ export function validatePlanDraft(
         throw new PlanValidationError(`${day.name} contains a duplicate exercise`);
       }
 
+      if (day.exercises.length < volumeTargets.minExercisesPerSession) {
+        throw new PlanValidationError(
+          `${day.name} needs at least ${volumeTargets.minExercisesPerSession} movements for this training level and session length`,
+        );
+      }
+      if (day.exercises.length > volumeTargets.maxExercisesPerSession) {
+        throw new PlanValidationError(
+          `${day.name} exceeds ${volumeTargets.maxExercisesPerSession} movements for this training level and session length`,
+        );
+      }
+
       const totalSets = day.exercises.reduce((sum, exercise) => sum + exercise.sets, 0);
-      if (totalSets > 30) {
-        throw new PlanValidationError(`${day.name} exceeds the safe volume limit`);
+      if (totalSets < volumeTargets.minWorkingSetsPerSession) {
+        throw new PlanValidationError(
+          `${day.name} needs at least ${volumeTargets.minWorkingSetsPerSession} working sets for this training level and session length`,
+        );
+      }
+      if (totalSets > volumeTargets.maxWorkingSetsPerSession) {
+        throw new PlanValidationError(
+          `${day.name} exceeds the ${volumeTargets.maxWorkingSetsPerSession}-set session limit`,
+        );
       }
 
       for (const exercise of day.exercises) {
@@ -166,6 +185,7 @@ export function materializePlan({
     userId,
     version,
     status: "active",
+    experienceLevel: profile.experienceLevel,
     title: draft.title,
     summary: draft.summary,
     startDate,
@@ -211,6 +231,7 @@ export function serializePlan(plan: WorkoutPlanDocument): WorkoutPlan {
     id: plan.id,
     version: plan.version,
     status: plan.status,
+    experienceLevel: plan.experienceLevel ?? null,
     title: plan.title,
     summary: plan.summary,
     startDate: plan.startDate.toISOString().slice(0, 10),

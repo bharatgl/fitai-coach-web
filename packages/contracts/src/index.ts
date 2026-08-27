@@ -352,6 +352,7 @@ export type WorkoutPlan = {
   id: string;
   version: number;
   status: "active" | "archived";
+  experienceLevel: ExperienceLevel | null;
   title: string;
   summary: string;
   startDate: string;

@@ -446,6 +446,7 @@ body{
 .plan-kicker b{background:rgb(255 255 255 / 8%);border:1px solid rgb(255 255 255 / 10%);border-radius:999px;color:#b8c2bc;font-size:.62rem;padding:.32rem .55rem;text-transform:uppercase}
 .plan-overview h1{color:#fff;font-family:var(--ui-font-display);font-size:clamp(1.55rem,3vw,2.35rem);font-weight:950;letter-spacing:-.045em;line-height:.95;margin:0;max-width:50rem;text-transform:uppercase}
 .plan-overview-copy>p{color:#aeb9b4;font-size:.72rem;line-height:1.5;margin:.55rem 0 0;max-width:45rem}
+.plan-overview-copy>.plan-profile-warning{background:rgb(185 239 50 / 10%);border:1px solid rgb(185 239 50 / 22%);border-radius:.65rem;color:#d8e9b1;margin-top:.8rem;max-width:48rem;padding:.55rem .7rem}
 .plan-overview-action{align-items:center;display:flex}
 .plan-generate.ui-button{min-height:2.6rem;white-space:nowrap}
 .plan-overview-meta{display:flex;gap:.5rem;grid-column:1/-1}
@@ -482,7 +483,7 @@ body{
 .plan-session-meta span+span{border-left:1px solid #eaede7}
 .plan-session-meta b{color:#18211f;font-size:.72rem}
 .plan-exercise-list{display:grid;list-style:none;margin:0;padding:.55rem 1.25rem}
-.plan-primary-session>.plan-exercise-list{grid-column:2;grid-row:2/5;padding:1rem 1.25rem}
+.plan-primary-session>.plan-exercise-list{align-content:start;gap:.7rem;grid-column:2;grid-row:2/5;grid-template-columns:repeat(2,minmax(0,1fr));padding:1rem 1.25rem}
 .plan-exercise-list li{align-items:center;border-bottom:1px solid #edf0eb;display:grid;gap:.7rem;grid-template-columns:1.65rem minmax(0,1fr) auto;padding:.72rem 0}
 .plan-exercise-list li:last-child{border-bottom:0}
 .exercise-index{color:#a1aaa5;font-family:var(--ui-font-display);font-size:.72rem;font-weight:900}
@@ -491,7 +492,9 @@ body{
 .plan-exercise-list li>b{color:#3f4945;font-size:.62rem;max-width:8.5rem;text-align:right}
 .plan-exercise-list .video-demo-button{font-size:.55rem;padding:.35rem .48rem}
 .plan-primary-session .exercise-name{align-items:start;display:grid;gap:.45rem}
-.plan-primary-session .video-demo-preview{align-items:stretch;background:rgb(255 255 255 / 4%);border-radius:.75rem;display:grid;gap:.35rem;grid-template-columns:1fr;padding:.35rem;width:12rem}
+.plan-primary-session>.plan-exercise-list>li{align-content:start;background:rgb(255 255 255 / 3%);border:1px solid var(--line);border-radius:.75rem;grid-template-columns:1.35rem minmax(0,1fr);padding:.6rem}
+.plan-primary-session>.plan-exercise-list>li>b{grid-column:2;text-align:left}
+.plan-primary-session .video-demo-preview{align-items:stretch;background:rgb(255 255 255 / 4%);border-radius:.75rem;display:grid;gap:.35rem;grid-template-columns:1fr;padding:.35rem;width:100%}
 .video-demo-thumbnail{background-position:center;background-size:cover;border-radius:.45rem;display:grid;flex:none;height:2.65rem;overflow:hidden;place-items:center;position:relative;width:4.7rem}
 .video-demo-thumbnail::after{background:rgb(3 5 12 / 28%);content:"";inset:0;position:absolute}
 .video-demo-thumbnail i{align-items:center;background:#ff0033;border-radius:50%;color:#fff;display:flex;font-size:.48rem;font-style:normal;height:1.35rem;justify-content:center;padding-left:.08rem;position:relative;width:1.35rem;z-index:1}
@@ -555,6 +558,8 @@ body{
   .plan-exercise-list{padding-inline:1rem}
   .plan-exercise-list li{align-items:start;grid-template-columns:1.5rem minmax(0,1fr)}
   .plan-exercise-list li>b{grid-column:2;text-align:left}
+  .plan-primary-session>.plan-exercise-list{display:flex;gap:.7rem;overflow-x:auto;padding-bottom:1.1rem;scroll-snap-type:x mandatory}
+  .plan-primary-session>.plan-exercise-list>li{flex:0 0 min(17rem,86vw);scroll-snap-align:start}
   .plan-session-footer{align-items:stretch;flex-direction:column;padding-inline:1rem}
   .plan-session-footer>small{max-width:none}
   .plan-session-footer .session-start{width:100%}
@@ -562,7 +567,7 @@ body{
   .plan-session-row-meta{display:none}
   .plan-session-row-detail{grid-template-columns:1fr}
   .plan-session-row-detail>.ui-button{width:100%}
-  .plan-primary-session .video-demo-preview{max-width:100%;padding:.3rem;width:11rem}
+  .plan-primary-session .video-demo-preview{max-width:100%;padding:.3rem;width:100%}
 }
 
 /* forgefit.space brand lockup */

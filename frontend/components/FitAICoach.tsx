@@ -582,7 +582,10 @@ function ProfileFields({ profile }: { profile?: UserProfile }) {
             defaultValue={profile?.trainingDaysPerWeek ?? 3}
           />
         </Field>
-        <Field label="Minutes per session">
+        <Field
+          label="Minutes per session"
+          hint="Advanced bodybuilding plans work best with 60–120 minutes when your recovery and schedule allow it."
+        >
           <input
             name="preferredSessionMinutes"
             type="number"
@@ -1423,6 +1426,11 @@ function Plan({
   const primarySession = selectedWeekSessions.find((workout) => workout.status === "in_progress")
     ?? selectedWeekSessions[0];
   const laterSessions = selectedWeekSessions.filter((workout) => workout.id !== primarySession?.id);
+  const profileLevel = dashboard.profile?.experienceLevel ?? "beginner";
+  const profileLevelLabel = `${profileLevel.charAt(0).toUpperCase()}${profileLevel.slice(1)}`;
+  const planNeedsRefresh = Boolean(
+    dashboard.activePlan && dashboard.activePlan.experienceLevel !== profileLevel,
+  );
 
   async function generate() {
     setGenerating(true);
@@ -1465,18 +1473,32 @@ function Plan({
             <div className="plan-kicker">
               <span>Active program</span>
               <b>Version {dashboard.activePlan.version}</b>
+              <b>{profileLevelLabel} profile</b>
             </div>
             <h1 id="plan-title">{dashboard.activePlan.title}</h1>
             <p>{dashboard.activePlan.summary}</p>
+            {planNeedsRefresh && (
+              <p className="plan-profile-warning" role="status">
+                This saved plan predates your current {profileLevelLabel.toLowerCase()} profile.
+                Rebuild it to apply the correct split, session length, and volume.
+              </p>
+            )}
           </div>
           <div className="plan-overview-action">
             <Button className="plan-generate" busy={generating} onClick={() => void generate()}>
-              {generating ? "Updating…" : "Update plan"}
+              {generating
+                ? "Updating…"
+                : planNeedsRefresh
+                  ? `Build ${profileLevelLabel.toLowerCase()} plan`
+                  : "Update plan"}
             </Button>
           </div>
           <div className="plan-overview-meta" aria-label="Program summary">
             <span><b>{dashboard.activePlan.durationWeeks}</b> week block</span>
             <span><b>{dashboard.activePlan.daysPerWeek}</b> sessions per week</span>
+            {dashboard.profile && (
+              <span><b>{dashboard.profile.preferredSessionMinutes}</b> min target</span>
+            )}
             <span><b>{totalExercises}</b> movements this week</span>
           </div>
         </section>

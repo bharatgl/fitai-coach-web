@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { generatedPlanSchema } from "../src/plan.js";
+import { generatedPlanSchema, planVolumeTargetsFor } from "../src/plan.js";
 
 const validPlan = {
   title: "Strength foundation",
@@ -32,4 +32,17 @@ test("rejects excessive sets before domain persistence", () => {
   const invalidPlan = structuredClone(validPlan);
   invalidPlan.weeks[0]!.days[0]!.exercises[0]!.sets = 20;
   assert.equal(generatedPlanSchema.safeParse(invalidPlan).success, false);
+});
+
+test("scales session volume for an advanced bodybuilding profile", () => {
+  assert.deepEqual(
+    planVolumeTargetsFor({ experienceLevel: "advanced", preferredSessionMinutes: 60 }),
+    {
+      minExercisesPerSession: 5,
+      maxExercisesPerSession: 7,
+      minWorkingSetsPerSession: 15,
+      maxWorkingSetsPerSession: 28,
+      targetSessionMinutes: { min: 48, max: 60 },
+    },
+  );
 });

@@ -128,6 +128,22 @@ test("rejects identical workouts assigned to different dates", () => {
   );
 });
 
+test("rejects beginner-sized sessions for an advanced hour-long profile", () => {
+  const advancedProfile = {
+    ...profile,
+    experienceLevel: "advanced" as const,
+    preferredSessionMinutes: 60,
+  };
+  assert.throws(
+    () => validatePlanDraft(
+      draft,
+      advancedProfile,
+      availableExercises(advancedProfile.equipment, advancedProfile.experienceLevel),
+    ),
+    /needs at least 5 movements/,
+  );
+});
+
 test("chooses the current or next Monday when no start date is supplied", () => {
   assert.equal(
     resolvePlanStartDate(undefined, new Date("2026-08-20T13:00:00.000Z")).toISOString(),

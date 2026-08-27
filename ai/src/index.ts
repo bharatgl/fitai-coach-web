@@ -14,9 +14,11 @@ export {
 export {
   generateAdaptivePlan,
   generatedPlanSchema,
+  planVolumeTargetsFor,
   type GeneratedPlanDraft,
   type GeneratePlanInput,
   type PlanCatalogExercise,
+  type PlanVolumeTargets,
 } from "./plan.js";
 export {
   AiProviderError,
