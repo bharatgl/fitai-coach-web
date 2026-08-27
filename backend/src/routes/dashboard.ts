@@ -9,6 +9,7 @@ import {
   type WorkoutPlanDocument,
 } from "../domain/plans.js";
 import { serializeProfile } from "../domain/profiles.js";
+import { serializeReadiness, type ReadinessDocument } from "../domain/readiness.js";
 import {
   calculateWorkoutProgress,
   serializeWorkoutSession,
@@ -26,6 +27,7 @@ export async function dashboardRoutes(app: FastifyInstance) {
 
     const [
       profile,
+      latestReadiness,
       activePlan,
       activeSession,
       recentSessions,
@@ -36,6 +38,12 @@ export async function dashboardRoutes(app: FastifyInstance) {
         database
           .collection("profiles")
           .findOne({ userId: user.id }, { projection: { _id: 0 } }),
+        database
+          .collection<ReadinessDocument>("readinessCheckIns")
+          .findOne(
+            { userId: user.id },
+            { projection: { _id: 0 }, sort: { date: -1, updatedAt: -1 } },
+          ),
         database
           .collection<WorkoutPlanDocument>("workoutPlans")
           .findOne(
@@ -85,6 +93,7 @@ export async function dashboardRoutes(app: FastifyInstance) {
 
     return {
       profile: profile ? serializeProfile(profile) : null,
+      latestReadiness: latestReadiness ? serializeReadiness(latestReadiness) : null,
       activePlan: activePlan ? serializePlan(activePlan) : null,
       upcomingWorkouts: upcomingWorkouts.map(serializeWorkout),
       activeSession: activeSession ? serializeWorkoutSession(activeSession) : null,

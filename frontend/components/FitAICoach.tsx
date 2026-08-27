@@ -30,8 +30,10 @@ import Image from "next/image";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { apiRequest } from "@/lib/api";
 import { BrandLockup } from "@/components/BrandLockup";
+import { CoachMessageContent } from "@/components/CoachMessageContent";
 import { ExerciseVideoButton } from "@/components/ExerciseVideo";
 import { MovementTracker } from "@/components/MovementTracker";
+import { ReadinessCheckIn } from "@/components/ReadinessCheckIn";
 
 type View = "today" | "coach" | "plan" | "history" | "profile" | "workout";
 type CurrentUser = { id: string; name: string; email: string };
@@ -271,6 +273,11 @@ export default function FitAICoach({ user }: { user: CurrentUser }) {
             activeSession={activeSession}
             onStart={startWorkout}
             onResume={() => setView("workout")}
+            onReadinessSaved={(checkIn) => {
+              setDashboard((current) => current
+                ? { ...current, latestReadiness: checkIn }
+                : current);
+            }}
           />
         )}
         {view === "coach" && (
@@ -572,11 +579,13 @@ function Today({
   activeSession,
   onStart,
   onResume,
+  onReadinessSaved,
 }: {
   dashboard: DashboardResponse;
   activeSession: WorkoutSession | null;
   onStart: (workoutId: string) => Promise<void>;
   onResume: () => void;
+  onReadinessSaved: (checkIn: NonNullable<DashboardResponse["latestReadiness"]>) => void;
 }) {
   const nextWorkout = dashboard.upcomingWorkouts[0];
   const [starting, setStarting] = useState(false);
@@ -602,6 +611,7 @@ function Today({
         title={<>Build momentum. <em>Own the session.</em></>}
         description="Your adaptive workout, live movement guidance, and performance history in one training system."
       />
+      <ReadinessCheckIn latest={dashboard.latestReadiness} onSaved={onReadinessSaved} />
       {activeSession || nextWorkout ? (
         <Card className="hero" tone="dark" padding="lg">
           <div className="hero-copy">
@@ -660,6 +670,7 @@ function Coach({ initialMessages }: { initialMessages: CoachMessage[] }) {
   const [error, setError] = useState("");
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState("");
+  const [showSuggestions, setShowSuggestions] = useState(false);
   const [pendingAttachments, setPendingAttachments] = useState<PendingCoachAttachment[]>([]);
   const attachmentInputRef = useRef<HTMLInputElement>(null);
   const pendingAttachmentsRef = useRef<PendingCoachAttachment[]>([]);
@@ -685,6 +696,11 @@ function Coach({ initialMessages }: { initialMessages: CoachMessage[] }) {
       prompt: "Help me choose one realistic nutrition habit that supports my current goal.",
     },
   ];
+
+  function selectTemplate(prompt: string) {
+    setDraft(prompt);
+    setShowSuggestions(false);
+  }
 
   useEffect(() => {
     pendingAttachmentsRef.current = pendingAttachments;
@@ -812,6 +828,7 @@ function Coach({ initialMessages }: { initialMessages: CoachMessage[] }) {
       ]);
       setActiveThread(response.thread);
       setDraft("");
+      setShowSuggestions(false);
       pendingAttachments.forEach((attachment) => {
         if (attachment.previewUrl) URL.revokeObjectURL(attachment.previewUrl);
       });
@@ -888,7 +905,11 @@ function Coach({ initialMessages }: { initialMessages: CoachMessage[] }) {
                     </form>
                   ) : (
                     <>
-                      {message.content && <p>{message.content}</p>}
+                      {message.content && (
+                        message.role === "assistant"
+                          ? <CoachMessageContent content={message.content} />
+                          : <p>{message.content}</p>
+                      )}
                       <footer>
                         {message.editedAt && <small>Edited</small>}
                         {message.role === "user" && message.content && !message.id.startsWith("pending-") && (
@@ -901,14 +922,25 @@ function Coach({ initialMessages }: { initialMessages: CoachMessage[] }) {
               </article>
             ))}
           </div>
-          <div className="coach-suggestions" aria-label="Suggested coach prompts">
-            {templates.map((template) => (
-              <button type="button" key={template.title} onClick={() => setDraft(template.prompt)}>
-                {template.title}
-              </button>
-            ))}
-          </div>
+          {messages.length === 0 && !loadingThreads && (
+            <div className="coach-suggestions" aria-label="Suggested coach prompts">
+              {templates.map((template) => (
+                <button type="button" key={template.title} onClick={() => selectTemplate(template.prompt)}>
+                  {template.title}
+                </button>
+              ))}
+            </div>
+          )}
           <form className="chat-composer" onSubmit={send}>
+            {messages.length > 0 && showSuggestions && (
+              <div className="coach-suggestions composer-suggestions" id="composer-suggestions" aria-label="Suggested coach prompts">
+                {templates.map((template) => (
+                  <button type="button" key={template.title} onClick={() => selectTemplate(template.prompt)}>
+                    {template.title}
+                  </button>
+                ))}
+              </div>
+            )}
             {pendingAttachments.length > 0 && (
               <div className="composer-attachments" aria-label="Selected attachments">
                 {pendingAttachments.map((attachment) => (
@@ -945,6 +977,18 @@ function Coach({ initialMessages }: { initialMessages: CoachMessage[] }) {
                 event.target.value = "";
               }}
             />
+            {messages.length > 0 && (
+              <button
+                className="prompt-toggle-button"
+                type="button"
+                aria-controls="composer-suggestions"
+                aria-expanded={showSuggestions}
+                onClick={() => setShowSuggestions((visible) => !visible)}
+              >
+                <span aria-hidden="true">✦</span>
+                <span>Prompts</span>
+              </button>
+            )}
             <button
               className="attachment-button"
               type="button"

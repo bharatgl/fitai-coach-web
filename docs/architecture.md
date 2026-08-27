@@ -46,10 +46,31 @@ also avoids cross-origin browser calls and keeps preview deployments simpler.
 
 1. The backend validates and persists the user's message.
 2. The AI package checks urgent and pain language before any model call.
-3. For normal coaching, it sends the profile and a bounded recent-history window
-   to the Gemini API.
-4. The model must return the declared structured schema.
-5. The backend persists the validated assistant message and returns it.
+3. For normal coaching, the backend removes account identifiers and builds a
+   bounded snapshot containing the training profile, active plan, exact next
+   workout prescription, active-session progress, five recent completed
+   sessions, and the latest dated self-reported readiness check-in.
+4. The model must return the declared structured schema, including 1–5 facts it
+   used from that supplied context. The backend renders those facts as an
+   auditable "Personalized from your data" section.
+5. The response contract forbids invented exercises or prescriptions and
+   requires workout reviews to contain specific priorities, targets, reasons,
+   and adjustment triggers. Deterministic checks bypass the model for dangerous
+   dehydration, purging, extreme-heat, diuretic, or performance-enhancing drug
+   protocols.
+6. The backend persists the validated assistant message and returns it.
+
+### Daily readiness check-in
+
+1. The browser sends a strict current-local-date check-in through the
+   authenticated same-origin proxy; user identity is always derived from the
+   signed backend token.
+2. MongoDB stores at most one check-in per user and date. The readiness band is
+   deterministically calculated from sleep quality, energy, soreness, stress,
+   and motivation; sleep hours, optional weight, and notes remain context rather
+   than diagnostic inputs.
+3. The dashboard returns only the serialized user-owned check-in. The score is
+   labelled self-reported and is never presented as a medical assessment.
 
 ### Adaptive plan generation
 
@@ -105,7 +126,7 @@ boundary.
 
 Auth.js owns its account/session collections. The backend owns `appUsers`,
 `profiles`, `exercises`, `workoutPlans`, `plannedWorkouts`, `workoutSessions`,
-`movementEvents`, `coachThreads`, and `coachMessages`. Both apps use the same
+`movementEvents`, `readinessCheckIns`, `coachThreads`, and `coachMessages`. Both apps use the same
 Atlas database initially, but the backend is the only component allowed to read
 or write fitness records.
 

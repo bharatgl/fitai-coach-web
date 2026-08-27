@@ -184,6 +184,42 @@ export type WorkoutProgress = {
   lastCompletedAt: string | null;
 };
 
+export type ReadinessStatus = "ready" | "steady" | "recover";
+
+export type ReadinessCheckIn = {
+  id: string;
+  date: string;
+  sleepHours: number;
+  sleepQuality: number;
+  energy: number;
+  soreness: number;
+  stress: number;
+  motivation: number;
+  bodyWeightKg: number | null;
+  notes: string;
+  score: number;
+  status: ReadinessStatus;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type SaveReadinessCheckInRequest = Pick<
+  ReadinessCheckIn,
+  | "date"
+  | "sleepHours"
+  | "sleepQuality"
+  | "energy"
+  | "soreness"
+  | "stress"
+  | "motivation"
+  | "bodyWeightKg"
+  | "notes"
+>;
+
+export type ReadinessCheckInResponse = {
+  checkIn: ReadinessCheckIn | null;
+};
+
 export type StartWorkoutResponse = { session: WorkoutSession };
 export type WorkoutSessionResponse = { session: WorkoutSession };
 
@@ -252,6 +288,7 @@ export type GeneratePlanResponse = {
 
 export type DashboardResponse = {
   profile: UserProfile | null;
+  latestReadiness: ReadinessCheckIn | null;
   activePlan: WorkoutPlan | null;
   upcomingWorkouts: PlannedWorkout[];
   activeSession: WorkoutSession | null;

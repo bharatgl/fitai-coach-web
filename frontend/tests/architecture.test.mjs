@@ -35,6 +35,9 @@ test("shows a public landing page and protects the coaching workspace", async ()
   assert.doesNotMatch(coach, /thread-menu-trigger/);
   assert.match(coach, /Your profile and conversation stay in context/);
   assert.match(coach, /className="coach-suggestions"/);
+  assert.match(coach, /messages\.length === 0 && !loadingThreads/);
+  assert.match(coach, /className="prompt-toggle-button"/);
+  assert.match(coach, /aria-expanded=\{showSuggestions\}/);
   assert.match(coach, /Save and resend/);
   assert.match(coach, /Attach images or PDF/);
   assert.match(coach, /\/v1\/coach\/attachments/);
@@ -93,8 +96,12 @@ test("uses the shared responsive design system", async () => {
   assert.match(styles, /\.plan-session-grid/);
   assert.match(styles, /\.plan-guide-grid/);
   assert.match(styles, /\.coach-suggestions/);
+  assert.match(styles, /\.chat-composer \.composer-suggestions/);
   assert.match(styles, /\.composer-attachments/);
   assert.match(styles, /\.message-attachment-image/);
+  assert.match(styles, /\.attachment-button\{[\s\S]*border-color:transparent[\s\S]*padding:0/);
+  assert.match(coach, /message\.role === "assistant"[\s\S]*CoachMessageContent/);
+  assert.match(styles, /\.messages \.coach-message-content p\{background:transparent/);
   assert.match(styles, /forgefit\.space dark glass system/);
   assert.match(styles, /\.sidebar[\s\S]*backdrop-filter:blur\(28px\)/);
   assert.match(styles, /\.sidebar nav button[\s\S]*border-radius:\.8rem/);
