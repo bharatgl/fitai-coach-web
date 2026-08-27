@@ -171,6 +171,10 @@ export async function dashboardRoutes(app: FastifyInstance) {
       upcomingWorkouts: upcomingWorkouts.map(serializeWorkout),
       activeSession: activeSession ? serializeWorkoutSession(activeSession) : null,
       recentSessions: recentSessions.map((session) => serializeWorkoutSession(session)),
+      completedSessionDates: progressSessions
+        .map((session) => session.completedAt)
+        .filter((date): date is Date => date !== null)
+        .map((date) => date.toISOString()),
       progress: calculateWorkoutProgress(progressSessions),
       recentMessages: messages.reverse().map((message) => ({
         id: String(message.id),

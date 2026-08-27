@@ -398,6 +398,7 @@ export type DashboardResponse = {
   upcomingWorkouts: PlannedWorkout[];
   activeSession: WorkoutSession | null;
   recentSessions: WorkoutSession[];
+  completedSessionDates: string[];
   progress: WorkoutProgress;
   recentMessages: CoachMessage[];
 };

@@ -49,6 +49,115 @@ export type GeneratePlanInput = {
   exercises: PlanCatalogExercise[];
 };
 
+const sessionTemplates = [
+  { name: "Push and quads", movements: ["push", "squat", "push", "lunge", "core", "carry", "pull", "hinge"] },
+  { name: "Pull and posterior", movements: ["pull", "hinge", "pull", "carry", "core", "squat", "push", "lunge"] },
+  { name: "Legs", movements: ["squat", "hinge", "lunge", "carry", "core", "pull", "push", "squat"] },
+  { name: "Chest and shoulders", movements: ["push", "push", "pull", "core", "lunge", "carry", "squat", "hinge"] },
+  { name: "Back and arms", movements: ["pull", "pull", "hinge", "core", "carry", "push", "lunge", "squat"] },
+  { name: "Lower body", movements: ["squat", "lunge", "hinge", "carry", "core", "pull", "push", "lunge"] },
+  { name: "Full body", movements: ["squat", "push", "pull", "hinge", "lunge", "core", "carry", "push"] },
+] as const;
+
+function spreadDayOffsets(trainingDays: number) {
+  if (trainingDays === 1) return [0];
+  return Array.from(
+    { length: trainingDays },
+    (_, index) => Math.round(index * (6 / (trainingDays - 1))),
+  );
+}
+
+/**
+ * Builds a profile-aware plan locally when the model is unavailable or returns
+ * malformed structured output. The same domain validator still runs before
+ * this draft can be persisted.
+ */
+export function buildDeterministicPlan(
+  profile: UserProfile,
+  exercises: PlanCatalogExercise[],
+): GeneratedPlanDraft {
+  const targets = planVolumeTargetsFor(profile);
+  const exerciseCount = Math.min(targets.minExercisesPerSession, exercises.length);
+  if (exerciseCount < targets.minExercisesPerSession) {
+    throw new Error("Not enough exercises to build a compatible training plan");
+  }
+
+  const dayOffsets = spreadDayOffsets(profile.trainingDaysPerWeek);
+  const level = `${profile.experienceLevel[0]?.toUpperCase()}${profile.experienceLevel.slice(1)}`;
+  const phase = `${profile.trainingPhase[0]?.toUpperCase()}${profile.trainingPhase.slice(1)}`;
+  const repRanges = ["8-12 reps", "10-12 reps", "6-10 reps", "10-15 reps"];
+
+  const weeks = Array.from({ length: profile.programDurationWeeks }, (_, weekIndex) => {
+    const blockWeek = weekIndex % 4;
+    const workingSetTarget = Math.min(
+      targets.maxWorkingSetsPerSession,
+      targets.minWorkingSetsPerSession + (blockWeek === 1 ? exerciseCount : blockWeek === 2 ? exerciseCount * 2 : 0),
+    );
+
+    return {
+      weekNumber: weekIndex + 1,
+      days: dayOffsets.map((dayOffset, dayIndex) => {
+        const template = sessionTemplates[dayIndex % sessionTemplates.length]!;
+        const rotation = (dayIndex * exerciseCount) % exercises.length;
+        const rotated = [...exercises.slice(rotation), ...exercises.slice(0, rotation)];
+        const selected: PlanCatalogExercise[] = [];
+        for (const movement of template.movements) {
+          if (selected.length >= exerciseCount) break;
+          const match = rotated.find(
+            (exercise) => exercise.movement === movement && !selected.some((item) => item.id === exercise.id),
+          );
+          if (match) selected.push(match);
+        }
+        for (const exercise of rotated) {
+          if (selected.length >= exerciseCount) break;
+          if (!selected.some((item) => item.id === exercise.id)) selected.push(exercise);
+        }
+
+        const baseSets = Math.floor(workingSetTarget / selected.length);
+        const additionalSets = workingSetTarget % selected.length;
+        return {
+          dayOffset,
+          name: template.name,
+          focus: [...new Set(selected.map((exercise) => exercise.movement))].join(", "),
+          estimatedMinutes: profile.preferredSessionMinutes,
+          exercises: selected.map((exercise, exerciseIndex) => ({
+            exerciseId: exercise.id,
+            sets: baseSets + (exerciseIndex < additionalSets ? 1 : 0),
+            repRange: exercise.movement === "carry"
+              ? `${30 + ((weekIndex + dayIndex) % 3) * 10}-${45 + ((weekIndex + dayIndex) % 3) * 10} seconds`
+              : repRanges[(blockWeek + dayIndex + exerciseIndex) % repRanges.length]!,
+            restSeconds: ["squat", "hinge", "push", "pull"].includes(exercise.movement) ? 120 : 60,
+            tempo: blockWeek === 3 ? "3-1-1" : null,
+            coachingNotes: exercise.guidance.slice(0, 300),
+          })),
+        };
+      }),
+    };
+  });
+
+  const progressionLabels = [
+    "Establish repeatable loads with two to three repetitions in reserve.",
+    "Add working volume while keeping technique and recovery stable.",
+    "Use the strongest recoverable loading of this block without training to failure.",
+    "Consolidate technique and manage fatigue before the next block.",
+  ];
+
+  return generatedPlanSchema.parse({
+    title: `${level} ${phase} Bodybuilding Plan`,
+    summary: `${profile.programDurationWeeks} weeks of profile-matched, periodized training across ${profile.trainingDaysPerWeek} weekly sessions.`,
+    rationale: [
+      `Uses ${profile.trainingDaysPerWeek} sessions of up to ${profile.preferredSessionMinutes} minutes.`,
+      `Matches the ${profile.experienceLevel} training level and ${profile.trainingPhase} phase.`,
+      "Keeps progression measurable while scheduling regular fatigue management.",
+    ],
+    weeklyProgression: Array.from(
+      { length: profile.programDurationWeeks },
+      (_, weekIndex) => `Week ${weekIndex + 1}: ${progressionLabels[weekIndex % progressionLabels.length]}`,
+    ),
+    weeks,
+  });
+}
+
 export type PlanVolumeTargets = {
   minExercisesPerSession: number;
   maxExercisesPerSession: number;

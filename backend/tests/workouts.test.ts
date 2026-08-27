@@ -3,6 +3,7 @@ import test from "node:test";
 import { availableExercises } from "../src/domain/exercise-catalog.js";
 import type { PlannedWorkoutDocument } from "../src/domain/plans.js";
 import {
+  abandonWorkoutSession,
   calculateWorkoutProgress,
   changeWorkoutStatus,
   chooseSubstitute,
@@ -87,6 +88,21 @@ test("tracks pause duration without counting it as active workout time", () => {
       .durationSeconds,
     480,
   );
+});
+
+test("does not report idle wall-clock time as training for an empty abandoned session", () => {
+  const started = createWorkoutSession(
+    workout,
+    "user-1",
+    new Date("2026-08-24T10:00:00.000Z"),
+  );
+  const abandoned = abandonWorkoutSession(
+    started,
+    "Opened accidentally.",
+    new Date("2026-08-24T16:30:00.000Z"),
+  );
+
+  assert.equal(serializeWorkoutSession(abandoned).durationSeconds, 0);
 });
 
 test("logs sets, calculates volume, and finishes with reflection", () => {

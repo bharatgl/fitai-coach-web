@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { GeneratedPlanDraft } from "@fitai/ai";
+import { buildDeterministicPlan, type GeneratedPlanDraft } from "@fitai/ai";
 import type { UserProfile } from "@fitai/contracts";
 import { availableExercises } from "../src/domain/exercise-catalog.js";
 import {
@@ -198,6 +198,25 @@ test("requires the complete configured program horizon", () => {
     ),
     /weeks 1 through 12/,
   );
+});
+
+test("validates the local fallback for a six-day advanced bodybuilding profile", () => {
+  const advancedProfile: UserProfile = {
+    ...profile,
+    experienceLevel: "advanced",
+    trainingPhase: "bulk",
+    programDurationWeeks: 12,
+    equipment: ["full gym"],
+    trainingDaysPerWeek: 6,
+    preferredSessionMinutes: 120,
+  };
+  const catalog = availableExercises(advancedProfile.equipment, advancedProfile.experienceLevel);
+  const fallback = buildDeterministicPlan(advancedProfile, catalog);
+
+  assert.doesNotThrow(() => validatePlanDraft(fallback, advancedProfile, catalog));
+  assert.equal(fallback.weeks.length, 12);
+  assert.equal(fallback.weeks[0]?.days.length, 6);
+  assert.ok(fallback.weeks[0]!.days.every((day) => day.exercises.length >= 5));
 });
 
 test("chooses the current or next Monday when no start date is supplied", () => {

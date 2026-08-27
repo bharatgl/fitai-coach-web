@@ -41,6 +41,9 @@ test("shows a public landing page and protects the coaching workspace", async ()
   assert.match(coach, /Voice first, with your profile and conversation in context/);
   assert.match(coach, /coachVoiceStyles\.voiceEntry/);
   assert.match(coach, /Talk to your coach/);
+  assert.match(coach, /className="floating-coach-agent"/);
+  assert.match(coach, /Open your live AI coach/);
+  assert.match(coach, /\/coach\/forge-coach-avatar\.webp/);
   assert.match(coach, /className="coach-suggestions"/);
   assert.match(coach, /messages\.length === 0 && !loadingThreads/);
   assert.match(coach, /prompt-toggle-button/);
@@ -136,6 +139,9 @@ test("shows a public landing page and protects the coaching workspace", async ()
   assert.match(coach, /Plan terms/);
   assert.match(coach, /Deload/);
   assert.match(coach, /className="session-status"/);
+  assert.match(coach, /className="history-filters"/);
+  assert.match(coach, /className="history-session-list"/);
+  assert.match(coach, /Stopped before first set/);
   assert.match(coach, /\/v1\/plans\/generate/);
   assert.match(coach, /\/v1\/workouts\/\$\{plannedWorkoutId\}\/start/);
   assert.match(coach, /activeSession=\{activeSession\}[\s\S]*onResume=\{\(\) => setView\("workout"\)\}/);

@@ -1,4 +1,4 @@
-import { generateAdaptivePlan } from "@fitai/ai";
+import { AiProviderError, buildDeterministicPlan, generateAdaptivePlan } from "@fitai/ai";
 import type { GeneratePlanResponse } from "@fitai/contracts";
 import type { FastifyInstance } from "fastify";
 import { MongoServerError } from "mongodb";
@@ -76,12 +76,24 @@ export async function planRoutes(app: FastifyInstance) {
 
       try {
         const config = getConfig();
-        const draft = await generateAdaptivePlan({
-          apiKey: config.GEMINI_API_KEY,
-          model: config.GEMINI_MODEL,
-          profile,
-          exercises,
-        });
+        let generationModel = config.GEMINI_MODEL;
+        let draft;
+        try {
+          draft = await generateAdaptivePlan({
+            apiKey: config.GEMINI_API_KEY,
+            model: config.GEMINI_MODEL,
+            profile,
+            exercises,
+          });
+        } catch (error) {
+          if (!(error instanceof AiProviderError)) throw error;
+          request.log.warn(
+            { reason: error.reason, error: error.message },
+            "AI plan generation failed; using the validated local planner",
+          );
+          draft = buildDeterministicPlan(profile, exercises);
+          generationModel = `local-fallback:${error.reason}`;
+        }
         const latestPlan = await database
           .collection<WorkoutPlanDocument>("workoutPlans")
           .findOne(
@@ -98,17 +110,26 @@ export async function planRoutes(app: FastifyInstance) {
             catalog: exercises,
             userId: user.id,
             version: (latestPlan?.version ?? 0) + 1,
-            model: config.GEMINI_MODEL,
+            model: generationModel,
             startDate,
           });
         } catch (error) {
           if (error instanceof PlanValidationError) {
             request.log.warn({ error: error.message }, "Generated plan failed validation");
-            return reply.code(502).send({
-              error: "The generated plan did not pass forgefit.space safety validation. Please retry.",
+            draft = buildDeterministicPlan(profile, exercises);
+            generationModel = "local-fallback:validation";
+            generated = materializePlan({
+              draft,
+              profile,
+              catalog: exercises,
+              userId: user.id,
+              version: (latestPlan?.version ?? 0) + 1,
+              model: generationModel,
+              startDate,
             });
+          } else {
+            throw error;
           }
-          throw error;
         }
 
         const client = await getMongoClient();

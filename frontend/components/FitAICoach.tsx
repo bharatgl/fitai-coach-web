@@ -749,6 +749,32 @@ function Today({
   const nextWorkout = dashboard.upcomingWorkouts[0];
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState("");
+  const today = new Date();
+  const startOfWeek = new Date(today);
+  startOfWeek.setHours(0, 0, 0, 0);
+  startOfWeek.setDate(today.getDate() - ((today.getDay() + 6) % 7));
+  const sessionsThisWeek = dashboard.completedSessionDates.filter((value) => {
+    const completedAt = new Date(value);
+    return Number.isFinite(completedAt.getTime()) && completedAt >= startOfWeek;
+  }).length;
+  const workoutExercises = activeSession
+    ? activeSession.exercises.map((exercise) => ({
+        name: exercise.name,
+        sets: exercise.prescribedSets,
+        reps: exercise.repRange,
+      }))
+    : nextWorkout?.exercises.map((exercise) => ({
+        name: exercise.name,
+        sets: exercise.sets,
+        reps: exercise.repRange,
+      })) ?? [];
+  const totalSets = activeSession?.totalSets
+    ?? nextWorkout?.exercises.reduce((sum, exercise) => sum + exercise.sets, 0)
+    ?? 0;
+  const scheduledLabel = nextWorkout
+    ? new Intl.DateTimeFormat("en", { weekday: "short", month: "short", day: "numeric" })
+        .format(new Date(nextWorkout.scheduledFor))
+    : null;
 
   async function start() {
     if (!nextWorkout) return;
@@ -764,59 +790,226 @@ function Today({
   }
 
   return (
-    <div className="wrap">
-      <PageHeader
-        eyebrow="Today's training"
-        title={<>Build momentum. <em>Own the session.</em></>}
-        description="Your adaptive workout, live movement guidance, and performance history in one training system."
-      />
-      <ReadinessCheckIn latest={dashboard.latestReadiness} onSaved={onReadinessSaved} />
+    <div className="wrap today-page">
+      <header className="today-heading">
+        <div>
+          <Eyebrow>{new Intl.DateTimeFormat("en", { weekday: "long", month: "long", day: "numeric" }).format(today)}</Eyebrow>
+          <h1>{activeSession ? "Keep the momentum going." : "Your training, ready to go."}</h1>
+          <p>{activeSession ? "Your session is saved. Jump back in when you’re ready." : "Everything you need for a focused session, without the guesswork."}</p>
+        </div>
+        <div className="today-week-chip" aria-label={`${sessionsThisWeek} workouts completed this week`}>
+          <span>THIS WEEK</span>
+          <strong>{sessionsThisWeek}</strong>
+          <small>{sessionsThisWeek === 1 ? "workout" : "workouts"} done</small>
+        </div>
+      </header>
+
+      <div className="today-primary-grid">
       {activeSession || nextWorkout ? (
-        <Card className="hero" tone="dark" padding="lg">
-          <div className="hero-copy">
-            <Eyebrow>{activeSession ? "Session in progress" : "Next session"}</Eyebrow>
+        <Card className="today-session-card" tone="dark" padding="lg">
+          <div className="today-session-topline">
+            <span className={`today-session-status${activeSession ? " is-live" : ""}`}>
+              <i /> {activeSession ? "In progress" : "Up next"}
+            </span>
+            <span>{activeSession ? "Progress saved" : scheduledLabel}</span>
+          </div>
+          <div className="today-session-copy">
+            <Eyebrow>{activeSession ? "Continue session" : "Today’s workout"}</Eyebrow>
             <h2>{activeSession?.name ?? nextWorkout?.name}</h2>
-            <p>{activeSession ? `${activeSession.totalSets} sets recorded` : nextWorkout?.focus}</p>
-            <div className="hero-metrics" aria-label="Workout overview">
-              <span>
-                <b>{activeSession ? Math.max(1, Math.round(activeSession.durationSeconds / 60)) : nextWorkout?.estimatedMinutes}</b>
-                <small>minutes</small>
-              </span>
-              <span>
-                <b>{activeSession?.exercises.length ?? nextWorkout?.exercises.length}</b>
-                <small>movements</small>
-              </span>
-              <span>
-                <b>{activeSession?.totalSets ?? nextWorkout?.exercises.reduce((sum, exercise) => sum + exercise.sets, 0)}</b>
-                <small>{activeSession ? "sets done" : "work sets"}</small>
-              </span>
+            <p>{activeSession ? `${activeSession.totalSets} sets completed so far` : nextWorkout?.focus}</p>
+          </div>
+          <div className="today-session-metrics" aria-label="Workout overview">
+            <span>
+              <b>{activeSession ? Math.max(1, Math.round(activeSession.durationSeconds / 60)) : nextWorkout?.estimatedMinutes}</b>
+              <small>min</small>
+            </span>
+            <span>
+              <b>{workoutExercises.length}</b>
+              <small>moves</small>
+            </span>
+            <span>
+              <b>{totalSets}</b>
+              <small>{activeSession ? "sets done" : "work sets"}</small>
+            </span>
+          </div>
+          <div className="today-exercise-preview">
+            <div className="today-section-label">
+              <span>{activeSession ? "Session movements" : "First up"}</span>
+              <small>{workoutExercises.length} total</small>
             </div>
+            <ol>
+              {workoutExercises.slice(0, 3).map((exercise, index) => (
+                <li key={`${exercise.name}-${index}`}>
+                  <span>{String(index + 1).padStart(2, "0")}</span>
+                  <strong>{exercise.name}</strong>
+                  <small>{exercise.sets} × {exercise.reps}</small>
+                </li>
+              ))}
+            </ol>
+          </div>
+          <div className="today-session-action">
             <Button
               size="lg"
               busy={starting}
               onClick={activeSession ? onResume : () => void start()}
             >
-              {activeSession ? "Resume workout" : starting ? "Starting…" : "Start workout"}
+              {activeSession ? "Resume workout" : starting ? "Starting…" : "Start today’s workout"}
             </Button>
+            <small>{activeSession ? "Continue exactly where you stopped" : "Your progress saves automatically"}</small>
             {error && <small className="form-error" role="alert">{error}</small>}
-          </div>
-          <div className="performance-visual" aria-hidden="true">
-            <span className="performance-orbit" />
-            <span className="performance-orbit orbit-two" />
-            <div className="barbell">
-              <i /><i /><b /><i /><i />
-            </div>
-            <strong>MOVE</strong>
           </div>
         </Card>
       ) : (
-        <Card className="empty-state" padding="lg">
+        <Card className="empty-state today-session-card" padding="lg">
           <Eyebrow>No active workout</Eyebrow>
           <h2>Your profile is ready.</h2>
           <p>Generate your first adaptive plan to see the next workout here.</p>
         </Card>
       )}
+        <aside className="today-side-stack">
+          <ReadinessCheckIn latest={dashboard.latestReadiness} onSaved={onReadinessSaved} />
+          <Card className="today-progress-card" padding="md">
+            <div className="today-section-label">
+              <span>All-time progress</span>
+              <small>Keep showing up</small>
+            </div>
+            <dl>
+              <div><dt>Sessions</dt><dd>{dashboard.progress.completedSessions}</dd></div>
+              <div><dt>Sets</dt><dd>{dashboard.progress.completedSets}</dd></div>
+              <div><dt>Volume</dt><dd>{Math.round(dashboard.progress.totalVolumeKg).toLocaleString()} <small>kg</small></dd></div>
+            </dl>
+          </Card>
+        </aside>
+      </div>
+      <ActivityCalendar completedSessionDates={dashboard.completedSessionDates} />
     </div>
+  );
+}
+
+function localDateKey(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function ActivityCalendar({ completedSessionDates }: { completedSessionDates: string[] }) {
+  const now = new Date();
+  const currentMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  const [visibleMonth, setVisibleMonth] = useState(currentMonth);
+  const sessionsByDay = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const value of completedSessionDates) {
+      const completedAt = new Date(value);
+      if (Number.isNaN(completedAt.getTime())) continue;
+      const key = localDateKey(completedAt);
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+    return counts;
+  }, [completedSessionDates]);
+  const activityTimestamps = completedSessionDates
+    .map((value) => new Date(value).getTime())
+    .filter(Number.isFinite);
+  const earliestActivity = activityTimestamps.length > 0
+    ? new Date(Math.min(...activityTimestamps))
+    : currentMonth;
+  const earliestMonthTime = new Date(
+    earliestActivity.getFullYear(),
+    earliestActivity.getMonth(),
+    1,
+  ).getTime();
+  const firstWeekday = (visibleMonth.getDay() + 6) % 7;
+  const daysInMonth = new Date(
+    visibleMonth.getFullYear(),
+    visibleMonth.getMonth() + 1,
+    0,
+  ).getDate();
+  const days = Array.from({ length: firstWeekday + daysInMonth }, (_, index) => {
+    if (index < firstWeekday) return null;
+    return new Date(visibleMonth.getFullYear(), visibleMonth.getMonth(), index - firstWeekday + 1);
+  });
+  while (days.length % 7 !== 0) days.push(null);
+
+  const visibleActivity = days.reduce(
+    (summary, date) => {
+      if (!date) return summary;
+      const count = sessionsByDay.get(localDateKey(date)) ?? 0;
+      if (count > 0) summary.activeDays += 1;
+      summary.sessions += count;
+      return summary;
+    },
+    { activeDays: 0, sessions: 0 },
+  );
+  const canGoPrevious = visibleMonth.getTime() > earliestMonthTime;
+  const canGoNext = visibleMonth.getTime() < currentMonth.getTime();
+  const monthLabel = new Intl.DateTimeFormat("en", { month: "long", year: "numeric" }).format(visibleMonth);
+  const fullDateFormatter = new Intl.DateTimeFormat("en", { dateStyle: "full" });
+  const todayKey = localDateKey(now);
+
+  function changeMonth(offset: number) {
+    setVisibleMonth((month) => new Date(month.getFullYear(), month.getMonth() + offset, 1));
+  }
+
+  return (
+    <section className="activity-calendar" aria-labelledby="activity-calendar-title">
+      <header className="activity-calendar-header">
+        <div>
+          <Eyebrow>Training consistency</Eyebrow>
+          <h2 id="activity-calendar-title">Activity calendar</h2>
+          <p>Completed workouts light up each active day.</p>
+        </div>
+        <div className="activity-calendar-summary" aria-label={`${visibleActivity.activeDays} active days and ${visibleActivity.sessions} sessions this month`}>
+          <span><b>{visibleActivity.activeDays}</b> active days</span>
+          <span><b>{visibleActivity.sessions}</b> sessions</span>
+        </div>
+      </header>
+      <div className="activity-calendar-toolbar">
+        <strong aria-live="polite">{monthLabel}</strong>
+        <div>
+          <button
+            aria-label="Show previous month"
+            disabled={!canGoPrevious}
+            onClick={() => changeMonth(-1)}
+            type="button"
+          >
+            ←
+          </button>
+          <button
+            aria-label="Show next month"
+            disabled={!canGoNext}
+            onClick={() => changeMonth(1)}
+            type="button"
+          >
+            →
+          </button>
+        </div>
+      </div>
+      <div className="activity-calendar-grid" role="group" aria-label={monthLabel}>
+        {(["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as const).map((day) => (
+          <span className="activity-calendar-weekday" key={day}>{day}</span>
+        ))}
+        {days.map((date, index) => {
+          if (!date) return <span aria-hidden="true" className="activity-calendar-day is-empty" key={`empty-${index}`} />;
+          const key = localDateKey(date);
+          const count = sessionsByDay.get(key) ?? 0;
+          const sessionLabel = count === 1 ? "1 session" : `${count} sessions`;
+          return (
+            <time
+              aria-label={`${fullDateFormatter.format(date)}; ${sessionLabel}`}
+              className={`activity-calendar-day${count > 0 ? " is-active" : ""}${key === todayKey ? " is-today" : ""}`}
+              dateTime={key}
+              key={key}
+            >
+              <span>{date.getDate()}</span>
+              {count > 0 && <b>{count}<small>{count === 1 ? " session" : " sessions"}</small></b>}
+            </time>
+          );
+        })}
+      </div>
+      {completedSessionDates.length === 0 && (
+        <p className="activity-calendar-empty">Finish your first workout to start your activity streak.</p>
+      )}
+    </section>
   );
 }
 
@@ -1386,6 +1579,32 @@ function Coach({
           {voiceError && <small className="form-error voice-error" role="alert">{voiceError}</small>}
           {error && <small className="form-error" role="alert">{error}</small>}
         </Card>
+        {activeThread && (
+          <button
+            className="floating-coach-agent"
+            type="button"
+            onClick={() => setLiveVoiceOpen(true)}
+            aria-label="Open your live AI coach"
+            aria-haspopup="dialog"
+            aria-expanded={liveVoiceOpen}
+          >
+            <span className="floating-coach-agent-copy">
+              <small><i aria-hidden="true" /> AI COACH ONLINE</small>
+              <strong>Talk to your coach</strong>
+              <span>Voice · visual · remembers you</span>
+            </span>
+            <span className="floating-coach-agent-avatar" aria-hidden="true">
+              <Image
+                src="/coach/forge-coach-avatar.webp"
+                alt=""
+                width={82}
+                height={123}
+                sizes="82px"
+              />
+              <b><span className="live-voice-wave"><i /><i /><i /></span></b>
+            </span>
+          </button>
+        )}
       </section>
     </div>
   );
@@ -2217,40 +2436,160 @@ function ExerciseLogger({
 }
 
 function History({ dashboard }: { dashboard: DashboardResponse }) {
+  const [filter, setFilter] = useState<"all" | "completed" | "abandoned">("all");
   const completed = useMemo(
     () => dashboard.recentSessions.filter((session) => session.status === "completed"),
     [dashboard.recentSessions],
   );
+  const abandoned = useMemo(
+    () => dashboard.recentSessions.filter((session) => session.status === "abandoned"),
+    [dashboard.recentSessions],
+  );
+  const visibleSessions = useMemo(
+    () => dashboard.recentSessions.filter((session) => filter === "all" || session.status === filter),
+    [dashboard.recentSessions, filter],
+  );
+  const hasCompletedWork = dashboard.progress.completedSessions > 0;
+  const dateFormatter = useMemo(
+    () => new Intl.DateTimeFormat("en", { dateStyle: "medium", timeStyle: "short" }),
+    [],
+  );
+  const monthFormatter = useMemo(
+    () => new Intl.DateTimeFormat("en", { month: "short" }),
+    [],
+  );
+
   return (
-    <div className="wrap">
-      <PageHeader eyebrow="Performance history" title={<>Proof of work. <em>Built rep by rep.</em></>} description="Track consistency, effort, and recorded training volume over time." />
-      <section className="history">
-        <Card className="stats" padding="md">
-          <Eyebrow>Lifetime progress</Eyebrow>
-          <div><b>{dashboard.progress.completedSessions}</b><small>completed sessions</small></div>
-          <div><b>{dashboard.progress.completedSets}</b><small>completed sets</small></div>
-          <div><b>{dashboard.progress.totalVolumeKg.toLocaleString()}</b><small>kilograms of recorded volume</small></div>
-          <div><b>{dashboard.progress.averageEffort ?? "—"}</b><small>average session RPE</small></div>
-        </Card>
-        <Card className="session-list" padding="md">
-          {dashboard.recentSessions.map((session) => (
-            <article key={session.id}>
-              <span>
-                <b>{session.name}</b>
-                <small>{new Intl.DateTimeFormat("en", { dateStyle: "medium", timeStyle: "short" }).format(new Date(session.startedAt))}</small>
-              </span>
-              <StatusBadge
-                className="session-status"
-                tone={session.status === "completed" ? "success" : session.status === "abandoned" ? "danger" : "warning"}
+    <div className="wrap history-page">
+      <header className="history-header">
+        <div>
+          <Eyebrow>Training log</Eyebrow>
+          <h1>History</h1>
+          <p>Review completed work, actual sets, effort, and notes.</p>
+        </div>
+        {dashboard.progress.lastCompletedAt && (
+          <span className="history-last-trained">
+            Last trained
+            <b>{new Intl.DateTimeFormat("en", { month: "short", day: "numeric" }).format(new Date(dashboard.progress.lastCompletedAt))}</b>
+          </span>
+        )}
+      </header>
+
+      {hasCompletedWork ? (
+        <section className="history-summary" aria-label="Lifetime training summary">
+          <article><b>{dashboard.progress.completedSessions}</b><span>Sessions</span></article>
+          <article><b>{dashboard.progress.completedSets}</b><span>Working sets</span></article>
+          <article><b>{dashboard.progress.totalVolumeKg.toLocaleString()}</b><span>Volume kg</span></article>
+          <article><b>{dashboard.progress.averageEffort ?? "—"}</b><span>Average RPE</span></article>
+        </section>
+      ) : (
+        <section className="history-empty-summary">
+          <span aria-hidden="true">01</span>
+          <div>
+            <strong>No completed training yet</strong>
+            <p>Stopped starts stay in your log for context, but they do not count toward progress. Finish one workout to begin your baseline.</p>
+          </div>
+        </section>
+      )}
+
+      <section className="history-log">
+        <header className="history-log-header">
+          <div>
+            <h2>Recent sessions</h2>
+            <p>Open a session to inspect the work that was actually recorded.</p>
+          </div>
+          <div className="history-filters" aria-label="Filter training history">
+            {([
+              ["all", "All", dashboard.recentSessions.length],
+              ["completed", "Completed", completed.length],
+              ["abandoned", "Stopped", abandoned.length],
+            ] as const).map(([value, label, count]) => (
+              <button
+                aria-pressed={filter === value}
+                key={value}
+                onClick={() => setFilter(value)}
+                type="button"
               >
-                {session.status}
-              </StatusBadge>
-              <small>{session.totalSets} sets · {session.totalVolumeKg} kg · {formatDuration(session.durationSeconds)}</small>
-              {session.reflection && <p>{session.reflection}</p>}
-            </article>
-          ))}
-          {completed.length === 0 && dashboard.recentSessions.length === 0 && <p>No sessions recorded yet.</p>}
-        </Card>
+                {label} <span>{count}</span>
+              </button>
+            ))}
+          </div>
+        </header>
+
+        <div className="history-session-list">
+          {visibleSessions.map((session) => {
+            const startedAt = new Date(session.startedAt);
+            const loggedExercises = session.exercises.filter((exercise) => exercise.sets.length > 0);
+            const stoppedEmpty = session.status === "abandoned" && session.totalSets === 0;
+            const statusLabel = session.status === "abandoned"
+              ? "Stopped"
+              : session.status === "completed"
+                ? "Completed"
+                : session.status === "paused"
+                  ? "Paused"
+                  : "In progress";
+            return (
+              <details className={`history-session is-${session.status}`} key={session.id}>
+                <summary>
+                  <time dateTime={session.startedAt}>
+                    <b>{startedAt.getDate()}</b>
+                    <span>{monthFormatter.format(startedAt)}</span>
+                  </time>
+                  <span className="history-session-name">
+                    <strong>{session.name}</strong>
+                    <small>{dateFormatter.format(startedAt)}</small>
+                  </span>
+                  <span className="history-session-metrics">
+                    {stoppedEmpty
+                      ? "Stopped before first set"
+                      : `${session.totalSets} sets · ${session.totalVolumeKg.toLocaleString()} kg · ${formatDuration(session.durationSeconds)}`}
+                  </span>
+                  <StatusBadge
+                    className="session-status"
+                    tone={session.status === "completed" ? "success" : session.status === "abandoned" ? "danger" : "warning"}
+                  >
+                    {statusLabel}
+                  </StatusBadge>
+                  <b className="history-session-toggle" aria-hidden="true">+</b>
+                </summary>
+                <div className="history-session-detail">
+                  {loggedExercises.length > 0 ? (
+                    <div className="history-exercise-log">
+                      {loggedExercises.map((exercise) => (
+                        <article key={exercise.exerciseId}>
+                          <span>
+                            <strong>{exercise.name}</strong>
+                            <small>{exercise.sets.length} {exercise.sets.length === 1 ? "set" : "sets"}</small>
+                          </span>
+                          <div>
+                            {exercise.sets.map((set) => (
+                              <span key={set.id}>S{set.setNumber} · {set.reps} × {set.loadKg} kg · RPE {set.effortRpe}</span>
+                            ))}
+                          </div>
+                        </article>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="history-no-work">No sets were recorded in this session.</p>
+                  )}
+                  {(session.reflection || session.perceivedEffort) && (
+                    <aside>
+                      <small>Session note</small>
+                      <p>{session.reflection || "No written reflection."}</p>
+                      {session.perceivedEffort && <b>Session RPE {session.perceivedEffort}</b>}
+                    </aside>
+                  )}
+                </div>
+              </details>
+            );
+          })}
+          {visibleSessions.length === 0 && (
+            <div className="history-filter-empty">
+              <strong>No {filter === "all" ? "recent" : filter} sessions</strong>
+              <p>Your matching sessions will appear here after training.</p>
+            </div>
+          )}
+        </div>
       </section>
     </div>
   );

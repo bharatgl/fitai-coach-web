@@ -12,6 +12,7 @@ export {
   type CoachSafetyResult,
 } from "./safety.js";
 export {
+  buildDeterministicPlan,
   generateAdaptivePlan,
   generatedPlanSchema,
   planVolumeTargetsFor,

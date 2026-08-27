@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { generatedPlanSchema, planVolumeTargetsFor } from "../src/plan.js";
+import { buildDeterministicPlan, generatedPlanSchema, planVolumeTargetsFor } from "../src/plan.js";
 
 const validPlan = {
   title: "Strength foundation",
@@ -68,4 +68,41 @@ test("reduces accessory volume before intensity during an advanced cut", () => {
   assert.equal(targets.minExercisesPerSession, 5);
   assert.equal(targets.minWorkingSetsPerSession, 12);
   assert.equal(targets.maxWorkingSetsPerSession, 24);
+});
+
+test("builds a complete advanced fallback when structured generation fails", () => {
+  const plan = buildDeterministicPlan(
+    {
+      userId: "athlete-1",
+      email: "athlete@example.com",
+      displayName: "Athlete",
+      experienceLevel: "advanced",
+      gender: "prefer_not_to_say",
+      age: 30,
+      heightCm: 178,
+      weightKg: 82,
+      dietaryPreference: "no_preference",
+      primaryGoal: "Natural bodybuilding",
+      trainingPhase: "bulk",
+      programDurationWeeks: 12,
+      equipment: ["full gym"],
+      trainingDaysPerWeek: 6,
+      preferredSessionMinutes: 120,
+      movementNotes: "",
+      bodyConsiderations: "",
+      onboardingCompletedAt: "2026-08-20T00:00:00.000Z",
+    },
+    Array.from({ length: 12 }, (_, index) => ({
+      id: `exercise-${index}`,
+      name: `Exercise ${index}`,
+      movement: ["squat", "hinge", "push", "pull", "lunge", "core", "carry"][index % 7]!,
+      requiredEquipment: [],
+      guidance: "Use controlled technique and stop before form changes.",
+    })),
+  );
+
+  assert.equal(plan.weeks.length, 12);
+  assert.equal(plan.weeks[0]?.days.length, 6);
+  assert.equal(plan.weeks[0]?.days[0]?.exercises.length, 5);
+  assert.match(plan.title, /^Advanced Bulk/);
 });

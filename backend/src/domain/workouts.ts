@@ -357,7 +357,10 @@ export function serializeWorkoutSession(
     pausedAt: session.pausedAt?.toISOString() ?? null,
     completedAt: session.completedAt?.toISOString() ?? null,
     pausedDurationSeconds: session.pausedDurationSeconds,
-    durationSeconds: durationSeconds(session, now),
+    durationSeconds:
+      session.status === "abandoned" && session.totalSets === 0
+        ? 0
+        : durationSeconds(session, now),
     reflection: session.reflection,
     perceivedEffort: session.perceivedEffort,
     totalSets: session.totalSets,
