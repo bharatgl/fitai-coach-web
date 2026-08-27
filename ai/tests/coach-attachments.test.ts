@@ -75,6 +75,9 @@ test("includes exact training context and enforces personalized response detail"
   assert.match(coachSystemPrompt, /Never invent exercises/);
   assert.match(coachSystemPrompt, /Avoid vague filler/);
   assert.match(coachSystemPrompt, /personalizationEvidence/);
+  assert.match(coachSystemPrompt, /must not be requested again/);
+  assert.match(coachSystemPrompt, /Never ask about dietary preference when a specific value is already supplied/);
+  assert.match(coachSystemPrompt, /## Starting targets/);
 });
 
 test("renders an auditable personalization evidence section", () => {

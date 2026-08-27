@@ -24,18 +24,19 @@ export function parseCoachMessage(content: string): CoachMessageBlock[] {
       index += 1;
       continue;
     }
-    const heading = line.match(/^#{1,3}\s+(.+)$/);
+    const heading = line.match(/^#{1,4}\s+(.+)$/)
+      ?? line.match(/^\*\*([^*]+)\*\*:?$/);
     if (heading) {
       flushParagraph();
       blocks.push({ kind: "heading", text: heading[1]!.trim() });
       index += 1;
       continue;
     }
-    if (line.startsWith("- ")) {
+    if (/^[-*•]\s+/.test(line)) {
       flushParagraph();
       const items: string[] = [];
-      while (index < lines.length && lines[index]!.trim().startsWith("- ")) {
-        items.push(lines[index]!.trim().slice(2).trim());
+      while (index < lines.length && /^[-*•]\s+/.test(lines[index]!.trim())) {
+        items.push(lines[index]!.trim().replace(/^[-*•]\s+/, "").trim());
         index += 1;
       }
       blocks.push({ kind: "bullets", items });
@@ -70,7 +71,10 @@ export function CoachMessageContent({ content }: { content: string }) {
   return (
     <div className="coach-message-content">
       {parseCoachMessage(content).map((block, index) => {
-        if (block.kind === "heading") return <h3 key={index}>{inlineContent(block.text)}</h3>;
+        if (block.kind === "heading") {
+          const isEvidence = block.text.toLowerCase() === "personalized from your data";
+          return <h3 className={isEvidence ? "coach-evidence-heading" : undefined} key={index}>{inlineContent(block.text)}</h3>;
+        }
         if (block.kind === "bullets") {
           return <ul key={index}>{block.items.map((item, itemIndex) => <li key={`${item}-${itemIndex}`}>{inlineContent(item)}</li>)}</ul>;
         }

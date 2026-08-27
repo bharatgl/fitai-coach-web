@@ -21,6 +21,7 @@ test("removes account identity from the profile sent to the model", () => {
   });
 
   assert.equal(context?.primaryGoal, "Bodybuilding");
+  assert.equal(context?.dietaryPreference, "vegetarian");
   assert.equal(context && "email" in context, false);
   assert.equal(context && "userId" in context, false);
   assert.equal(context && "displayName" in context, false);

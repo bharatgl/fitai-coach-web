@@ -20,3 +20,22 @@ Personalized from your data
     { kind: "bullets", items: ["Readiness is 54/100.", "Legs are still sore."] },
   ]);
 });
+
+test("accepts compact heading and bullet variants from model output", () => {
+  const blocks = parseCoachMessage(`**Meal plan**
+
+• Breakfast: tofu scramble and toast
+* Lunch: lentil rice bowl
+
+## Prep and swaps
+
+1) Batch-cook lentils
+2. Swap tofu for tempeh`);
+
+  assert.deepEqual(blocks, [
+    { kind: "heading", text: "Meal plan" },
+    { kind: "bullets", items: ["Breakfast: tofu scramble and toast", "Lunch: lentil rice bowl"] },
+    { kind: "heading", text: "Prep and swaps" },
+    { kind: "steps", items: ["Batch-cook lentils", "Swap tofu for tempeh"] },
+  ]);
+});
