@@ -16,7 +16,7 @@ import {
   LiveCoachCamera,
   type CaptureLiveCameraFrame,
 } from "@/components/LiveCoachCamera";
-import { apiRequest } from "@/lib/api";
+import { ApiRequestError, apiRequest } from "@/lib/api";
 import {
   decodeLiveServerMessage,
   type LiveMovementSignal,
@@ -153,7 +153,9 @@ export function LiveVoiceCoach({
   const setupTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const elevenLabsResponseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const stableSessionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reconnectAttemptRef = useRef(0);
+  const elevenLabsConnectionIdRef = useRef(0);
   const connectedAtRef = useRef(0);
   const resumptionHandleRef = useRef<string | null>(null);
   const pendingMovementSignalRef = useRef<LiveMovementSignal | null>(null);
@@ -215,6 +217,11 @@ export function LiveVoiceCoach({
     reconnectTimerRef.current = null;
   }, []);
 
+  const clearStableSessionTimer = useCallback(() => {
+    if (stableSessionTimerRef.current) clearTimeout(stableSessionTimerRef.current);
+    stableSessionTimerRef.current = null;
+  }, []);
+
   const clearElevenLabsResponseTimer = useCallback(() => {
     if (elevenLabsResponseTimerRef.current) clearTimeout(elevenLabsResponseTimerRef.current);
     elevenLabsResponseTimerRef.current = null;
@@ -232,6 +239,7 @@ export function LiveVoiceCoach({
     shouldRunRef.current = false;
     clearSetupTimer();
     clearReconnectTimer();
+    clearStableSessionTimer();
     clearElevenLabsResponseTimer();
     captureNodeRef.current?.disconnect();
     captureSourceRef.current?.disconnect();
@@ -264,7 +272,7 @@ export function LiveVoiceCoach({
     const audioContext = audioContextRef.current;
     audioContextRef.current = null;
     if (audioContext && audioContext.state !== "closed") void audioContext.close();
-  }, [clearElevenLabsResponseTimer, clearPlayback, clearReconnectTimer, clearSetupTimer]);
+  }, [clearElevenLabsResponseTimer, clearPlayback, clearReconnectTimer, clearSetupTimer, clearStableSessionTimer]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -506,6 +514,10 @@ export function LiveVoiceCoach({
     }
     const attempt = reconnectAttemptRef.current + 1;
     if (attempt > 3) {
+      if (voiceProviderRef.current === "elevenlabs") {
+        void startBackupVoice(`${reason} Switched to backup voice after three reconnect attempts.`);
+        return;
+      }
       closeResources();
       setError(`${reason} Automatic reconnection was unsuccessful. Please retry.`);
       setState("error");
@@ -517,10 +529,45 @@ export function LiveVoiceCoach({
     setError(`Connection interrupted. Reconnecting automatically (${attempt}/3)…`);
     reconnectTimerRef.current = setTimeout(() => {
       reconnectTimerRef.current = null;
-      void (voiceProviderRef.current === "elevenlabs"
+      const provider = voiceProviderRef.current;
+      void (provider === "elevenlabs"
         ? connectElevenLabs(true)
-        : connectSocket(true));
+        : connectSocket(true)).catch((cause) => {
+          if (!shouldRunRef.current) return;
+          if (provider === "elevenlabs" && cause instanceof ApiRequestError && cause.status === 429) {
+            const wait = cause.retryAfterSeconds == null
+              ? "briefly"
+              : `for about ${cause.retryAfterSeconds} seconds`;
+            void startBackupVoice(
+              `Natural voice reached its connection limit and is cooling down ${wait}. Backup voice is active for this session.`,
+            );
+            return;
+          }
+          scheduleReconnect(cause instanceof Error ? cause.message : reason);
+        });
     }, 500 * 2 ** (attempt - 1));
+  }
+
+  async function startBackupVoice(message: string) {
+    if (!shouldRunRef.current) return;
+    clearReconnectTimer();
+    clearStableSessionTimer();
+    clearElevenLabsResponseTimer();
+    elevenLabsConnectionIdRef.current += 1;
+    const conversation = elevenLabsConversationRef.current;
+    elevenLabsConversationRef.current = null;
+    if (conversation) await conversation.endSession().catch(() => undefined);
+    if (!shouldRunRef.current) return;
+    setAvatarIssue(message);
+    setConnectionStage("reconnecting");
+    setState("connecting");
+    try {
+      await startGeminiFallback();
+    } catch (cause) {
+      closeResources();
+      setError(cause instanceof Error ? cause.message : "Backup live voice could not start.");
+      setState("error");
+    }
   }
 
   async function connectAvatar() {
@@ -641,6 +688,8 @@ export function LiveVoiceCoach({
 
   async function connectElevenLabs(reconnecting: boolean) {
     if (!shouldRunRef.current) return;
+    const connectionId = elevenLabsConnectionIdRef.current + 1;
+    elevenLabsConnectionIdRef.current = connectionId;
     voiceProviderRef.current = "elevenlabs";
     setConnectionStage(reconnecting ? "reconnecting" : "authorizing");
     const credentials = await apiRequest<ElevenLabsCoachSessionResponse>(
@@ -677,7 +726,18 @@ export function LiveVoiceCoach({
       onConnect: () => {
         if (!mountedRef.current || !shouldRunRef.current) return;
         connectedAtRef.current = Date.now();
-        reconnectAttemptRef.current = 0;
+        clearStableSessionTimer();
+        stableSessionTimerRef.current = setTimeout(() => {
+          if (
+            mountedRef.current &&
+            shouldRunRef.current &&
+            voiceProviderRef.current === "elevenlabs" &&
+            elevenLabsConnectionIdRef.current === connectionId &&
+            elevenLabsConversationRef.current?.isOpen()
+          ) {
+            reconnectAttemptRef.current = 0;
+          }
+        }, 30_000);
         setError("");
         setState("listening");
         armElevenLabsResponseTimer();
@@ -714,6 +774,7 @@ export function LiveVoiceCoach({
       },
       onDisconnect: (details) => {
         if (!mountedRef.current || !shouldRunRef.current || details.reason === "user") return;
+        clearStableSessionTimer();
         clearElevenLabsResponseTimer();
         elevenLabsConversationRef.current = null;
         scheduleReconnect("The ElevenLabs coach connection ended unexpectedly.");
