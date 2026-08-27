@@ -9,6 +9,7 @@ import type { PoseLandmarker } from "@mediapipe/tasks-vision";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { apiRequest } from "@/lib/api";
 import type { LiveMovementSignal } from "@/lib/live-voice";
+import { createPoseRuntime } from "@/lib/mediapipe-runtime";
 import {
   createRepDetector,
   measureMovement,
@@ -16,9 +17,6 @@ import {
   movementRuntimeSettings,
   type MovementProfile,
 } from "@/lib/movement-tracking";
-
-const WASM_PATH = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/wasm";
-const MODEL_PATH = "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task";
 
 type CameraStatus = "off" | "starting" | "preview" | "tracking" | "error";
 type TrackableExercise = {
@@ -179,10 +177,7 @@ export function LiveCoachCamera({
       }
 
       setFeedback("Loading on-device movement tracking…");
-      const { DrawingUtils, FilesetResolver, PoseLandmarker } = await import("@mediapipe/tasks-vision");
-      const vision = await FilesetResolver.forVisionTasks(WASM_PATH);
-      const landmarker = await PoseLandmarker.createFromOptions(vision, {
-        baseOptions: { modelAssetPath: MODEL_PATH },
+      const { DrawingUtils, PoseLandmarker, landmarker } = await createPoseRuntime({
         runningMode: "VIDEO",
         numPoses: 1,
         minPoseDetectionConfidence: selected.profile.confidenceThreshold,
