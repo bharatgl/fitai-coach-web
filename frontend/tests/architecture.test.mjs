@@ -70,7 +70,14 @@ test("shows a public landing page and protects the coaching workspace", async ()
   assert.match(liveVoice, /Reconnecting without losing context/);
   assert.match(liveVoice, /movementSignalText/);
   assert.match(liveVoice, /decodeLiveServerMessage/);
+  assert.match(liveVoice, /import\("simli-client\/dist\/client"\)/);
+  assert.match(liveVoice, /\/v1\/coach\/live-avatar-token/);
+  assert.match(liveVoice, /pcmForAvatar/);
+  assert.match(liveVoice, /<video/);
+  assert.match(liveVoice, /playsInline/);
   assert.match(liveVoice, /\/coach\/forge-coach-avatar\.webp/);
+  assert.match(liveVoice, /credentials\.voiceName/);
+  assert.doesNotMatch(liveVoice, /voiceName: "Kore"/);
   assert.match(liveVoice, /Your coach is here/);
   assert.match(liveVoice, /live-coach-utterance/);
   assert.doesNotMatch(liveVoice, /live-voice-orb|live-voice-captions/);
@@ -140,6 +147,7 @@ test("uses the shared responsive design system", async () => {
   assert.match(coach, /aria-current=/);
   assert.match(styles, /env\(safe-area-inset-bottom\)/);
   assert.match(styles, /@media\(max-width:380px\)/);
+  assert.match(styles, /@media\(min-width:48rem\)\{\.live-voice-backdrop/);
   assert.match(styles, /\.coach-workspace/);
   assert.match(styles, /\.plan-session-grid/);
   assert.match(styles, /\.plan-guide-grid/);

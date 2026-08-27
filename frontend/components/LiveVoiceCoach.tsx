@@ -2,6 +2,7 @@
 
 import type {
   CoachThreadDetail,
+  LiveCoachAvatarTokenResponse,
   LiveCoachSnapshotResponse,
   LiveCoachTokenResponse,
 } from "@fitai/contracts";
@@ -16,7 +17,7 @@ import {
 } from "@/lib/live-voice";
 
 type LiveState = "idle" | "connecting" | "listening" | "speaking" | "ending" | "error";
-type ConnectionStage = "microphone" | "authorizing" | "socket" | "setup" | "reconnecting";
+type ConnectionStage = "microphone" | "avatar" | "authorizing" | "socket" | "setup" | "reconnecting";
 
 type LiveVoiceCoachProps = {
   threadId: string;
@@ -27,6 +28,13 @@ type LiveVoiceCoachProps = {
 };
 
 type FunctionCall = { id?: string; name?: string; args?: Record<string, unknown> };
+type AvatarClient = {
+  ClearBuffer: () => void;
+  on: (event: "error" | "speaking" | "silent" | "start" | "startup_error", callback: (message?: string) => void) => void;
+  sendAudioData: (audio: Uint8Array) => void;
+  start: () => Promise<void>;
+  stop: () => Promise<void>;
+};
 type LiveServerMessage = {
   setupComplete?: Record<string, never>;
   serverContent?: {
@@ -68,8 +76,28 @@ function decodePcm(data: string) {
   return samples;
 }
 
+function pcmForAvatar(data: string, mimeType?: string) {
+  const input = decodePcm(data);
+  if (!input.length) return new Uint8Array();
+  const sourceRate = sampleRateFromMimeType(mimeType);
+  const targetRate = 16_000;
+  const outputLength = Math.max(1, Math.floor(input.length * targetRate / sourceRate));
+  const bytes = new Uint8Array(outputLength * 2);
+  const view = new DataView(bytes.buffer);
+  for (let index = 0; index < outputLength; index += 1) {
+    const sourcePosition = index * sourceRate / targetRate;
+    const before = Math.min(input.length - 1, Math.floor(sourcePosition));
+    const after = Math.min(input.length - 1, before + 1);
+    const mix = sourcePosition - before;
+    const sample = input[before] * (1 - mix) + input[after] * mix;
+    view.setInt16(index * 2, Math.round(Math.max(-1, Math.min(1, sample)) * 0x7fff), true);
+  }
+  return bytes;
+}
+
 function sessionLabel(state: LiveState, stage: ConnectionStage) {
   if (state === "connecting" && stage === "microphone") return "Waiting for microphone access…";
+  if (state === "connecting" && stage === "avatar") return "Bringing your coach on screen…";
   if (state === "connecting" && stage === "authorizing") return "Authorizing your live coach…";
   if (state === "connecting" && stage === "socket") return "Opening the live audio channel…";
   if (state === "connecting" && stage === "setup") return "Preparing your personalized coach…";
@@ -91,11 +119,16 @@ export function LiveVoiceCoach({
   const [state, setState] = useState<LiveState>("idle");
   const [connectionStage, setConnectionStage] = useState<ConnectionStage>("microphone");
   const [error, setError] = useState("");
+  const [avatarIssue, setAvatarIssue] = useState("");
+  const [avatarReady, setAvatarReady] = useState(false);
   const [userCaption, setUserCaption] = useState("");
   const [coachCaption, setCoachCaption] = useState("");
   const socketRef = useRef<WebSocket | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
+  const avatarAudioRef = useRef<HTMLAudioElement | null>(null);
+  const avatarClientRef = useRef<AvatarClient | null>(null);
+  const avatarVideoRef = useRef<HTMLVideoElement | null>(null);
   const captureNodeRef = useRef<AudioWorkletNode | null>(null);
   const captureSourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const outputSourcesRef = useRef(new Set<AudioBufferSourceNode>());
@@ -142,6 +175,14 @@ export function LiveVoiceCoach({
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
     clearPlayback();
+    const avatarClient = avatarClientRef.current;
+    avatarClientRef.current = null;
+    if (avatarClient) void avatarClient.stop().catch(() => undefined);
+    const avatarVideo = avatarVideoRef.current;
+    const avatarAudio = avatarAudioRef.current;
+    if (avatarVideo) avatarVideo.srcObject = null;
+    if (avatarAudio) avatarAudio.srcObject = null;
+    if (mountedRef.current) setAvatarReady(false);
     const socket = socketRef.current;
     socketRef.current = null;
     if (socket) {
@@ -195,6 +236,12 @@ export function LiveVoiceCoach({
   }, [movementSignal]);
 
   function playAudio(data: string, mimeType?: string) {
+    const avatarClient = avatarClientRef.current;
+    if (avatarClient) {
+      avatarClient.sendAudioData(pcmForAvatar(data, mimeType));
+      setState("speaking");
+      return;
+    }
     const audioContext = audioContextRef.current;
     if (!audioContext || audioContext.state === "closed") return;
     const samples = decodePcm(data);
@@ -299,6 +346,7 @@ export function LiveVoiceCoach({
     }
     const content = message.serverContent;
     if (content?.interrupted) {
+      avatarClientRef.current?.ClearBuffer();
       clearPlayback();
       setState("listening");
     }
@@ -387,6 +435,78 @@ export function LiveVoiceCoach({
     }, 500 * 2 ** (attempt - 1));
   }
 
+  async function connectAvatar() {
+    const videoElement = avatarVideoRef.current;
+    const audioElement = avatarAudioRef.current;
+    if (!videoElement || !audioElement) return false;
+    setConnectionStage("avatar");
+    setAvatarIssue("");
+    try {
+      const credentials = await apiRequest<LiveCoachAvatarTokenResponse>(
+        "/v1/coach/live-avatar-token",
+        { method: "POST", signal: AbortSignal.timeout(20_000) },
+      );
+      if (!shouldRunRef.current) return false;
+      const { LogLevel, SimliClient } = await import("simli-client/dist/client");
+      const client = new SimliClient(
+        credentials.sessionToken,
+        videoElement,
+        audioElement,
+        null,
+        LogLevel.INFO,
+        "livekit",
+      ) as AvatarClient;
+      avatarClientRef.current = client;
+      client.on("start", () => {
+        if (!mountedRef.current || avatarClientRef.current !== client) return;
+        setAvatarReady(true);
+        setAvatarIssue("");
+        void audioElement.play().catch(() => undefined);
+      });
+      client.on("speaking", () => {
+        if (mountedRef.current && avatarClientRef.current === client) setState("speaking");
+      });
+      client.on("silent", () => {
+        if (mountedRef.current && avatarClientRef.current === client) setState("listening");
+      });
+      const failAvatar = (message?: string) => {
+        if (!mountedRef.current || avatarClientRef.current !== client) return;
+        avatarClientRef.current = null;
+        void client.stop().catch(() => undefined);
+        setAvatarReady(false);
+        setAvatarIssue(message || "Photoreal coach video disconnected; voice remains available.");
+      };
+      client.on("error", failAvatar);
+      client.on("startup_error", failAvatar);
+      let timeout: ReturnType<typeof setTimeout> | undefined;
+      try {
+        await Promise.race([
+          client.start(),
+          new Promise<never>((_, reject) => {
+            timeout = setTimeout(
+              () => reject(new Error("Photoreal coach video took too long to connect.")),
+              20_000,
+            );
+          }),
+        ]);
+      } finally {
+        if (timeout) clearTimeout(timeout);
+      }
+      return avatarClientRef.current === client;
+    } catch (cause) {
+      const client = avatarClientRef.current;
+      avatarClientRef.current = null;
+      if (client) void client.stop().catch(() => undefined);
+      if (mountedRef.current) {
+        setAvatarReady(false);
+        setAvatarIssue(cause instanceof Error
+          ? `${cause.message} Voice-only mode is still available.`
+          : "Photoreal coach video is unavailable. Voice-only mode is still available.");
+      }
+      return false;
+    }
+  }
+
   async function connectSocket(reconnecting: boolean) {
     if (!shouldRunRef.current) return;
     setConnectionStage(reconnecting ? "reconnecting" : "authorizing");
@@ -418,7 +538,7 @@ export function LiveVoiceCoach({
             generationConfig: {
               responseModalities: ["AUDIO"],
               speechConfig: {
-                voiceConfig: { prebuiltVoiceConfig: { voiceName: "Kore" } },
+                voiceConfig: { prebuiltVoiceConfig: { voiceName: credentials.voiceName } },
               },
               thinkingConfig: { thinkingLevel: "LOW" },
             },
@@ -476,6 +596,7 @@ export function LiveVoiceCoach({
   async function startSession() {
     if (state !== "idle" && state !== "error") return;
     setError("");
+    setAvatarIssue("");
     setUserCaption("");
     setCoachCaption("");
     setupCompleteRef.current = false;
@@ -501,6 +622,8 @@ export function LiveVoiceCoach({
         return;
       }
       streamRef.current = stream;
+      await connectAvatar();
+      if (!shouldRunRef.current) return;
       await connectSocket(false);
     } catch (cause) {
       closeResources();
@@ -537,15 +660,28 @@ export function LiveVoiceCoach({
             <div className="live-coach-stage">
               <div className={`live-coach-presence is-${state}`} aria-hidden="true">
                 <div className="live-coach-light"><i /><i /></div>
-                <Image
-                  className="live-coach-avatar"
-                  src="/coach/forge-coach-avatar.webp"
-                  alt=""
-                  width={682}
-                  height={1024}
-                  priority
-                  sizes="(max-width: 767px) 70vw, 25rem"
+                {/* The avatar video is muted; the live transcript is rendered beside it. */}
+                <video
+                  ref={avatarVideoRef}
+                  className={`live-coach-video${avatarReady ? " is-ready" : ""}`}
+                  autoPlay
+                  muted
+                  playsInline
                 />
+                {/* The provider audio is transcribed into the visible live-caption region. */}
+                {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+                <audio ref={avatarAudioRef} autoPlay />
+                {!avatarReady && (
+                  <Image
+                    className="live-coach-avatar"
+                    src="/coach/forge-coach-avatar.webp"
+                    alt=""
+                    width={682}
+                    height={1024}
+                    priority
+                    sizes="(max-width: 767px) 70vw, 25rem"
+                  />
+                )}
                 <div className="live-coach-presence-badge">
                   <i /> {state === "speaking" ? "Speaking" : state === "listening" ? "Listening" : "Ready"}
                 </div>
@@ -570,6 +706,7 @@ export function LiveVoiceCoach({
                   </ul>
                 )}
                 {error && <p className="form-error" role="alert">{error}</p>}
+                {avatarIssue && <p className="live-avatar-notice" role="status">{avatarIssue}</p>}
                 <div className="live-voice-controls">
                   {state === "idle" || state === "error" ? (
                     <button className="live-voice-primary" type="button" onClick={() => void startSession()}>

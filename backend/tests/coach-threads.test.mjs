@@ -27,4 +27,7 @@ test("persists isolated coach conversations with management routes", async () =>
   assert.match(source, /maxAttachmentBytes = 5 \* 1024 \* 1024/);
   assert.match(source, /messageId: userMessage\.id/);
   assert.match(source, /dataBase64: Buffer\.from/);
+  assert.match(source, /post\(\s*"\/v1\/coach\/live-avatar-token"/);
+  assert.match(source, /https:\/\/api\.simli\.ai\/compose\/token/);
+  assert.match(source, /"x-simli-api-key": config\.SIMLI_API_KEY/);
 });

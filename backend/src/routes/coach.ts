@@ -12,6 +12,7 @@ import type {
   CoachThreadDetail,
   CoachThreadListResponse,
   CreateCoachThreadResponse,
+  LiveCoachAvatarTokenResponse,
   LiveCoachSnapshotResponse,
   LiveCoachTokenResponse,
   UploadCoachAttachmentResponse,
@@ -82,6 +83,7 @@ const attachmentMimeTypes = [
 const maxAttachmentBytes = 5 * 1024 * 1024;
 const maxAttachmentsPerMessage = 3;
 const attachmentLifetimeMs = 60 * 60 * 1000;
+const simliTokenResponse = z.object({ session_token: z.string().min(1) });
 
 const coachInput = z
   .object({
@@ -557,6 +559,62 @@ async function loadMessageAttachments(database: Db, userId: string, messageId: s
 
 export async function coachRoutes(app: FastifyInstance) {
   app.post(
+    "/v1/coach/live-avatar-token",
+    { config: { rateLimit: { max: 6, timeWindow: "1 minute" } } },
+    async (request, reply): Promise<LiveCoachAvatarTokenResponse | void> => {
+      await authenticate(request);
+      const config = getConfig();
+      if (!config.SIMLI_API_KEY || !config.SIMLI_FACE_ID) {
+        await reply.code(503).send({
+          message: "Photoreal coach video is not configured.",
+        });
+        return;
+      }
+
+      let response: Response;
+      try {
+        response = await fetch("https://api.simli.ai/compose/token", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-simli-api-key": config.SIMLI_API_KEY,
+          },
+          body: JSON.stringify({
+            faceId: config.SIMLI_FACE_ID,
+            handleSilence: true,
+            maxSessionLength: 1_800,
+            maxIdleTime: 180,
+            model: "fasttalk",
+          }),
+          signal: AbortSignal.timeout(15_000),
+        });
+      } catch (cause) {
+        request.log.warn({ cause }, "Simli session token request could not complete");
+        await reply.code(502).send({
+          message: "The photoreal coach provider could not be reached.",
+        });
+        return;
+      }
+      if (!response.ok) {
+        request.log.warn({ status: response.status }, "Simli session token request failed");
+        await reply.code(502).send({
+          message: "The photoreal coach provider is temporarily unavailable.",
+        });
+        return;
+      }
+      const parsed = simliTokenResponse.safeParse(await response.json());
+      if (!parsed.success) {
+        request.log.warn("Simli returned an invalid session token response");
+        await reply.code(502).send({
+          message: "The photoreal coach provider returned an invalid response.",
+        });
+        return;
+      }
+      return { sessionToken: parsed.data.session_token };
+    },
+  );
+
+  app.post(
     "/v1/coach/live-token",
     { config: { rateLimit: { max: 6, timeWindow: "1 minute" } } },
     async (request): Promise<LiveCoachTokenResponse> => {
@@ -582,7 +640,11 @@ export async function coachRoutes(app: FastifyInstance) {
         model: config.GEMINI_LIVE_MODEL,
         systemInstruction: liveCoachInstruction(snapshot),
       });
-      return { ...token, initialHistory: compactLiveHistory(history) };
+      return {
+        ...token,
+        voiceName: config.GEMINI_LIVE_VOICE,
+        initialHistory: compactLiveHistory(history),
+      };
     },
   );
 
