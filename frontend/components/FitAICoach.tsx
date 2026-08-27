@@ -670,6 +670,7 @@ function Coach({ initialMessages }: { initialMessages: CoachMessage[] }) {
   const [error, setError] = useState("");
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState("");
+  const [showSuggestions, setShowSuggestions] = useState(false);
   const [pendingAttachments, setPendingAttachments] = useState<PendingCoachAttachment[]>([]);
   const attachmentInputRef = useRef<HTMLInputElement>(null);
   const pendingAttachmentsRef = useRef<PendingCoachAttachment[]>([]);
@@ -695,6 +696,11 @@ function Coach({ initialMessages }: { initialMessages: CoachMessage[] }) {
       prompt: "Help me choose one realistic nutrition habit that supports my current goal.",
     },
   ];
+
+  function selectTemplate(prompt: string) {
+    setDraft(prompt);
+    setShowSuggestions(false);
+  }
 
   useEffect(() => {
     pendingAttachmentsRef.current = pendingAttachments;
@@ -822,6 +828,7 @@ function Coach({ initialMessages }: { initialMessages: CoachMessage[] }) {
       ]);
       setActiveThread(response.thread);
       setDraft("");
+      setShowSuggestions(false);
       pendingAttachments.forEach((attachment) => {
         if (attachment.previewUrl) URL.revokeObjectURL(attachment.previewUrl);
       });
@@ -918,13 +925,22 @@ function Coach({ initialMessages }: { initialMessages: CoachMessage[] }) {
           {messages.length === 0 && !loadingThreads && (
             <div className="coach-suggestions" aria-label="Suggested coach prompts">
               {templates.map((template) => (
-                <button type="button" key={template.title} onClick={() => setDraft(template.prompt)}>
+                <button type="button" key={template.title} onClick={() => selectTemplate(template.prompt)}>
                   {template.title}
                 </button>
               ))}
             </div>
           )}
           <form className="chat-composer" onSubmit={send}>
+            {messages.length > 0 && showSuggestions && (
+              <div className="coach-suggestions composer-suggestions" id="composer-suggestions" aria-label="Suggested coach prompts">
+                {templates.map((template) => (
+                  <button type="button" key={template.title} onClick={() => selectTemplate(template.prompt)}>
+                    {template.title}
+                  </button>
+                ))}
+              </div>
+            )}
             {pendingAttachments.length > 0 && (
               <div className="composer-attachments" aria-label="Selected attachments">
                 {pendingAttachments.map((attachment) => (
@@ -961,6 +977,18 @@ function Coach({ initialMessages }: { initialMessages: CoachMessage[] }) {
                 event.target.value = "";
               }}
             />
+            {messages.length > 0 && (
+              <button
+                className="prompt-toggle-button"
+                type="button"
+                aria-controls="composer-suggestions"
+                aria-expanded={showSuggestions}
+                onClick={() => setShowSuggestions((visible) => !visible)}
+              >
+                <span aria-hidden="true">✦</span>
+                <span>Prompts</span>
+              </button>
+            )}
             <button
               className="attachment-button"
               type="button"
