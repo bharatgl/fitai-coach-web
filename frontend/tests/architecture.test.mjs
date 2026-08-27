@@ -95,6 +95,7 @@ test("uses the shared responsive design system", async () => {
   assert.match(styles, /\.coach-suggestions/);
   assert.match(styles, /\.composer-attachments/);
   assert.match(styles, /\.message-attachment-image/);
+  assert.match(styles, /\.attachment-button\{[\s\S]*border-color:transparent[\s\S]*padding:0/);
   assert.match(coach, /message\.role === "assistant"[\s\S]*CoachMessageContent/);
   assert.match(styles, /\.messages \.coach-message-content p\{background:transparent/);
   assert.match(styles, /forgefit\.space dark glass system/);

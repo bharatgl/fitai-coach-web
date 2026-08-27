@@ -857,9 +857,9 @@ select option{background:#111426;color:#f7f8ff}
 .composer-attachment strong{color:#f4f7ff;font-size:.68rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .composer-attachment small{color:#929db3;font-size:.58rem}
 .chat .chat-composer .attachment-button,.chat .chat-composer .attachment-remove{background:transparent;border:1px solid transparent;box-shadow:none;color:#aeb8ca;transform:none}
-.chat .chat-composer .attachment-button{border-color:rgb(255 255 255 / 9%);height:2.65rem;width:2.65rem}
-.chat .chat-composer .attachment-button svg{height:1.2rem;width:1.2rem}
-.chat .chat-composer .attachment-button:hover:not(:disabled),.chat .chat-composer .attachment-button:focus-visible{background:rgb(200 255 75 / 9%);border-color:rgb(200 255 75 / 24%);box-shadow:none;color:#d4ff72;transform:none}
+.chat .chat-composer .attachment-button{align-items:center;border-color:transparent;border-radius:.6rem;display:flex;height:2.4rem;justify-content:center;padding:0;width:2.4rem}
+.chat .chat-composer .attachment-button svg{display:block;height:1.15rem;width:1.15rem}
+.chat .chat-composer .attachment-button:hover:not(:disabled),.chat .chat-composer .attachment-button:focus-visible{background:rgb(200 255 75 / 8%);border-color:transparent;box-shadow:none;color:#d4ff72;transform:none}
 .chat .chat-composer .attachment-remove{border-radius:.45rem;height:1.8rem;padding:.4rem;width:1.8rem}
 .chat .chat-composer .attachment-remove svg{height:1rem;width:1rem}
 .chat .chat-composer .attachment-remove:hover:not(:disabled),.chat .chat-composer .attachment-remove:focus-visible{background:rgb(255 91 120 / 11%);border-color:rgb(255 91 120 / 18%);box-shadow:none;color:#ff91a4;transform:none}
@@ -881,6 +881,7 @@ select option{background:#111426;color:#f7f8ff}
 
 @media(max-width:600px){
   .chat .chat-composer{gap:.35rem;padding:.4rem}
+  .chat .chat-composer .attachment-button{height:2.75rem;width:2.75rem}
   .composer-attachment{flex-basis:12rem}
   .message-attachment-image{max-width:min(13.75rem,72vw)}
 }
