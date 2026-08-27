@@ -94,7 +94,7 @@ export function buildElevenLabsCoachAgentConfig(config: ElevenLabsConfig) {
     tags: ["forgefit", "coach", "india"],
     conversation_config: {
       agent: {
-        first_message: "Hi {{user_name}}. What do you need help deciding or doing today?",
+        first_message: "Hi {{user_name}}. What's on your mind?",
         language: "en",
         disable_first_message_interruptions: false,
         dynamic_variables: {

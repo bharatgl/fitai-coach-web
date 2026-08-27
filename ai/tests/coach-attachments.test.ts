@@ -85,6 +85,9 @@ test("includes exact training context and enforces personalized response detail"
   assert.match(coachBehaviorContract, /without agreeing automatically/);
   assert.match(coachBehaviorContract, /Never tease, flirt, use sarcasm/);
   assert.match(coachBehaviorContract, /Use the recent conversation to avoid repetition/);
+  assert.match(coachBehaviorContract, /latest explicit statement about their current intent and timing/);
+  assert.match(coachBehaviorContract, /Allow ordinary conversation/);
+  assert.match(coachBehaviorContract, /will train tomorrow or later/);
 });
 
 test("includes only compact validated movement aggregates in coach context", () => {
