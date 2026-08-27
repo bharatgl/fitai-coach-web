@@ -12,6 +12,7 @@ import type {
   CoachThreadDetail,
   CoachThreadListResponse,
   CreateCoachThreadResponse,
+  ElevenLabsCoachSessionResponse,
   LiveCoachAvatarTokenResponse,
   LiveCoachSnapshotResponse,
   LiveCoachTokenResponse,
@@ -36,6 +37,7 @@ import {
 import type { PlannedWorkoutDocument, WorkoutPlanDocument } from "../domain/plans.js";
 import type { ReadinessDocument } from "../domain/readiness.js";
 import type { WorkoutSessionDocument } from "../domain/workouts.js";
+import { createElevenLabsSignedUrl } from "../services/elevenlabs.js";
 import { syncAuthenticatedUser } from "../users.js";
 
 type CoachThreadDocument = {
@@ -132,6 +134,7 @@ const liveTurnInput = z.object({
   sessionId: z.string().trim().min(1).max(100).optional(),
   userTranscript: z.string().trim().min(1).max(2_000),
   assistantTranscript: z.string().trim().min(1).max(4_000),
+  provider: z.enum(["gemini", "elevenlabs"]).default("gemini"),
 });
 
 function notFound(message: string): never {
@@ -619,6 +622,54 @@ export async function coachRoutes(app: FastifyInstance) {
   );
 
   app.post(
+    "/v1/coach/elevenlabs-session",
+    { config: { rateLimit: { max: 6, timeWindow: "1 minute" } } },
+    async (request, reply): Promise<ElevenLabsCoachSessionResponse | void> => {
+      const user = await authenticate(request);
+      const input = liveTokenInput.parse(request.body);
+      await syncAuthenticatedUser(user);
+      const database = await getDatabase();
+      await requireThread(database, user.id, input.threadId);
+      const [snapshot, history] = await Promise.all([
+        loadLiveCoachSnapshot(database, user.id, input.sessionId),
+        database.collection<CoachMessageDocument>("coachMessages")
+          .find(
+            { userId: user.id, threadId: input.threadId },
+            { projection: { _id: 0, role: 1, content: 1 } },
+          )
+          .sort({ createdAt: -1 })
+          .limit(80)
+          .toArray(),
+      ]);
+      try {
+        const { agentId, signedUrl } = await createElevenLabsSignedUrl(getConfig());
+        const userName = user.name.trim() || "there";
+        const chronologicalHistory = compactLiveHistory(history)
+          .map((turn) => `${turn.role === "user" ? "Member" : "Coach"}: ${turn.text}`)
+          .join("\n");
+        return {
+          signedUrl,
+          agentId,
+          userName,
+          dynamicVariables: {
+            user_name: userName,
+            member_context: JSON.stringify(snapshot),
+            conversation_history: chronologicalHistory || "No earlier conversation was supplied.",
+          },
+        };
+      } catch (cause) {
+        request.log.warn({ cause }, "ElevenLabs coach session could not be created");
+        const statusCode = cause && typeof cause === "object" && "statusCode" in cause
+          ? Number(cause.statusCode)
+          : 502;
+        await reply.code(statusCode === 503 ? 503 : 502).send({
+          message: cause instanceof Error ? cause.message : "ElevenLabs voice is unavailable.",
+        });
+      }
+    },
+  );
+
+  app.post(
     "/v1/coach/live-token",
     { config: { rateLimit: { max: 6, timeWindow: "1 minute" } } },
     async (request): Promise<LiveCoachTokenResponse> => {
@@ -692,7 +743,9 @@ export async function coachRoutes(app: FastifyInstance) {
           role: "assistant",
           content: input.assistantTranscript,
           safetyCategory: safety?.safetyCategory ?? "none",
-          model: getConfig().GEMINI_LIVE_MODEL,
+          model: input.provider === "elevenlabs"
+            ? `elevenlabs:${getConfig().ELEVENLABS_LLM_MODEL}`
+            : getConfig().GEMINI_LIVE_MODEL,
           createdAt: new Date(now.getTime() + 1),
         },
       ]);

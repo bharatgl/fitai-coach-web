@@ -109,6 +109,17 @@ export type LiveCoachAvatarTokenResponse = {
   sessionToken: string;
 };
 
+export type ElevenLabsCoachSessionResponse = {
+  signedUrl: string;
+  agentId: string;
+  userName: string;
+  dynamicVariables: {
+    user_name: string;
+    member_context: string;
+    conversation_history: string;
+  };
+};
+
 export type LiveCoachSnapshotResponse = {
   capturedAt: string;
   profile: Record<string, unknown> | null;
@@ -121,6 +132,7 @@ export type SaveLiveCoachTurnRequest = {
   sessionId?: string;
   userTranscript: string;
   assistantTranscript: string;
+  provider?: "gemini" | "elevenlabs";
 };
 
 export type ExerciseVideo = {

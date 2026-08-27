@@ -1,21 +1,27 @@
 # Real-time voice coach
 
-ForgeFit now has an optional low-latency native-audio session in addition to
-text chat and composer dictation. Its interaction model follows the useful parts
-of Vapi's web-call UX: explicit call lifecycle, visible listening/speaking state,
-one current utterance, interruption, and tool-backed application context. The
-idle state uses a lightweight human preview; an active configured session swaps
-it for a photoreal, lip-synced WebRTC avatar rather than a local cartoon model.
+ForgeFit now uses an authenticated ElevenLabs conversational agent as the primary
+live voice coach, with the previous Gemini Live path retained as an automatic
+fallback. The interaction has an explicit call lifecycle, visible listening and
+speaking state, interruption, and tool-backed application context. The idle state
+uses a lightweight human preview; an active configured session swaps it for a
+photoreal, lip-synced WebRTC avatar rather than a local cartoon model.
 
 ## Implemented locally
 
-- `POST /v1/coach/live-token` provisions a one-use, 30-minute Gemini Live token
-  for the authenticated member and current coach thread.
+- `POST /v1/coach/elevenlabs-session` provisions or updates the private ForgeFit
+  agent, returns a short-lived signed URL, and supplies the authenticated member's
+  name, profile/training snapshot, and bounded chronological thread history as
+  dynamic variables.
+- The agent greets the member by name and uses a natural male Indian-English
+  voice (`ForgeFit Neel` by default) that matches the male coach avatar.
+- `POST /v1/coach/live-token` remains as the one-use Gemini Live fallback when
+  ElevenLabs is temporarily unavailable.
 - `GET /v1/coach/live-snapshot` returns a redacted profile, current plan,
   readiness, active-session sets, recent sessions, and compact movement data.
-- The lazily loaded browser client sends 16 kHz mono PCM over a raw WebSocket,
-  receives native PCM audio, clears queued playback on interruption, and closes
-  microphone, audio, and network resources on stop or backgrounding.
+- The lazily loaded official ElevenLabs browser client uses an authenticated
+  WebSocket, supports interruption, and closes microphone, audio, and network
+  resources on stop or backgrounding.
 - Completed user and coach transcripts are saved through
   `POST /v1/coach/live-turns` into the same ongoing text thread.
 - Each new socket is seeded with a bounded chronological window from that
@@ -26,13 +32,13 @@ it for a photoreal, lip-synced WebRTC avatar rather than a local cartoon model.
   as compact text signals; raw frames and landmarks remain in the browser.
 - `POST /v1/coach/live-avatar-token` creates a short-lived Simli session on the
   authenticated backend, keeping `SIMLI_API_KEY` out of the browser.
-- The live surface lazy-loads `simli-client`, resamples Gemini's native 24 kHz
-  PCM response to Simli's 16 kHz PCM input, and swaps the idle preview for the
-  provider's lip-synced WebRTC video. Voice-only mode remains available when
-  the avatar provider is not configured or temporarily unavailable.
-- The coach uses the backend-configured `GEMINI_LIVE_VOICE` (`Charon` by
-  default), keeping the male character and voice presentation consistent. Its
-  spoken instruction defaults to natural Indian English and mirrors Hindi,
+- The live surface forwards ElevenLabs 16 kHz PCM callbacks to Simli and mutes
+  duplicate local playback while the lip-synced avatar is active. Gemini's native
+  24 kHz PCM is still resampled on the fallback path. Voice-only mode remains
+  available when the avatar provider is unavailable.
+- The primary coach uses the backend-configured `ELEVENLABS_VOICE_ID`, or the
+  selected male Indian-English default. The Gemini fallback uses
+  `GEMINI_LIVE_VOICE` (`Charon` by default). Both prompts mirror Hindi,
   Punjabi, or Hinglish when the member uses those languages.
 - The call layout is mobile-first and expands into a two-column coach stage at
   48rem.
@@ -42,14 +48,15 @@ it for a photoreal, lip-synced WebRTC avatar rather than a local cartoon model.
 
 ```text
 Authenticated browser
-  |-- POST /api/backend/coach/live-token
-  |     -> authenticated backend creates a one-use, short-lived Gemini token
+  |-- POST /api/backend/coach/elevenlabs-session
+  |     -> authenticated backend returns a short-lived signed agent URL
+  |     -> name + profile + plan + recent thread become dynamic variables
   |
   |-- POST /api/backend/coach/live-avatar-token
   |     -> authenticated backend creates a short-lived Simli session token
   |
   |-- audio (only while the live session is explicitly active)
-  |     -> direct WebSocket to Gemini Live using the ephemeral token
+  |     -> authenticated WebSocket to the private ElevenLabs agent
   |
   |-- authenticated tool request: get_live_workout_snapshot
   |     -> same-origin backend proxy
@@ -59,17 +66,16 @@ Authenticated browser
   |-- on-device movement signal (corrective or every third rep)
   |     -> exercise, rep, duration, ROM, confidence, and local cue only
   |
-  |-- streamed Gemini PCM response
-  |     -> resampled to 16 kHz PCM and sent to Simli only while active
+  |-- streamed ElevenLabs PCM response
+  |     -> sent to Simli for lip sync only while active
   |
   `-- lip-synced WebRTC avatar video/audio + visible transcript
 ```
 
-The browser-to-Gemini connection avoids routing high-frequency PCM audio
-through the application containers. The permanent `GEMINI_API_KEY` and
-`SIMLI_API_KEY` stay in the backend. The backend provisions short-lived tokens constrained to the
-reviewed model, native-audio response modality, and personalized instruction;
-the instruction stays inside the server-created token constraint.
+High-frequency audio does not pass through the application containers. Permanent
+`ELEVENLABS_API_KEY`, `GEMINI_API_KEY`, and `SIMLI_API_KEY` values stay in the
+backend. The ElevenLabs agent is private and browser sessions use short-lived
+signed URLs; the member sees only their own name and coaching context.
 
 ## Real-time workout data
 
@@ -114,8 +120,9 @@ must remain read-only until separate authorization and confirmation UX exists.
 
 ## Lightweight browser implementation
 
-- Use a raw WebSocket plus a small `AudioWorklet`; dynamically import the avatar
-  SDK only after a member explicitly starts live coaching.
+- Dynamically import both the ElevenLabs browser client and avatar SDK only after
+  a member explicitly starts live coaching. The raw WebSocket and `AudioWorklet`
+  remain isolated to the Gemini fallback.
 - Load the live-voice module only after the user selects **Start live coach**.
 - Resample microphone input to 16 kHz mono PCM in the worklet and send short
   chunks. Keep playback buffering bounded and discard it immediately on barge-in.
@@ -130,12 +137,12 @@ must remain read-only until separate authorization and confirmation UX exists.
 
 ## Delivery status
 
-1. Done: authenticated ephemeral-token endpoint with rate limiting and fixed
-   model/audio constraints.
+1. Done: authenticated ElevenLabs signed-session endpoint plus Gemini
+   ephemeral-token fallback, both rate limited and server configured.
 2. Done: read-only live-workout snapshot endpoint with authenticated ownership
    and redacted context builders.
-3. Done: lazily loaded microphone worklet, raw WebSocket client, native audio
-   playback, visible transcript, and interruption handling.
+3. Done: lazily loaded ElevenLabs client, fallback microphone worklet/raw
+   WebSocket, visible transcript, and interruption handling.
 4. Partial: transcript persistence is done; the pre-response deterministic
    safety gate remains required before deployment.
 5. Done: context-window compression, bounded initial thread history,

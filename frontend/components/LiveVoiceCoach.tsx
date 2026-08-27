@@ -2,10 +2,12 @@
 
 import type {
   CoachThreadDetail,
+  ElevenLabsCoachSessionResponse,
   LiveCoachAvatarTokenResponse,
   LiveCoachSnapshotResponse,
   LiveCoachTokenResponse,
 } from "@fitai/contracts";
+import type { Conversation as ElevenLabsConversation } from "@elevenlabs/client";
 import Image from "next/image";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { apiRequest } from "@/lib/api";
@@ -17,7 +19,7 @@ import {
 } from "@/lib/live-voice";
 
 type LiveState = "idle" | "connecting" | "listening" | "speaking" | "ending" | "error";
-type ConnectionStage = "microphone" | "avatar" | "authorizing" | "socket" | "setup" | "reconnecting";
+type ConnectionStage = "microphone" | "avatar" | "authorizing" | "elevenlabs" | "socket" | "setup" | "reconnecting";
 
 type LiveVoiceCoachProps = {
   threadId: string;
@@ -99,6 +101,7 @@ function sessionLabel(state: LiveState, stage: ConnectionStage) {
   if (state === "connecting" && stage === "microphone") return "Waiting for microphone access…";
   if (state === "connecting" && stage === "avatar") return "Bringing your coach on screen…";
   if (state === "connecting" && stage === "authorizing") return "Authorizing your live coach…";
+  if (state === "connecting" && stage === "elevenlabs") return "Connecting your natural voice coach…";
   if (state === "connecting" && stage === "socket") return "Opening the live audio channel…";
   if (state === "connecting" && stage === "setup") return "Preparing your personalized coach…";
   if (state === "connecting" && stage === "reconnecting") return "Reconnecting without losing context…";
@@ -124,6 +127,8 @@ export function LiveVoiceCoach({
   const [userCaption, setUserCaption] = useState("");
   const [coachCaption, setCoachCaption] = useState("");
   const socketRef = useRef<WebSocket | null>(null);
+  const elevenLabsConversationRef = useRef<ElevenLabsConversation | null>(null);
+  const voiceProviderRef = useRef<"elevenlabs" | "gemini">("elevenlabs");
   const streamRef = useRef<MediaStream | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const avatarAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -178,6 +183,9 @@ export function LiveVoiceCoach({
     const avatarClient = avatarClientRef.current;
     avatarClientRef.current = null;
     if (avatarClient) void avatarClient.stop().catch(() => undefined);
+    const elevenLabsConversation = elevenLabsConversationRef.current;
+    elevenLabsConversationRef.current = null;
+    if (elevenLabsConversation) void elevenLabsConversation.endSession().catch(() => undefined);
     const avatarVideo = avatarVideoRef.current;
     const avatarAudio = avatarAudioRef.current;
     if (avatarVideo) avatarVideo.srcObject = null;
@@ -227,6 +235,12 @@ export function LiveVoiceCoach({
     ) return;
     lastMovementSignalIdRef.current = movementSignal.id;
     pendingMovementSignalRef.current = movementSignal;
+    const elevenLabsConversation = elevenLabsConversationRef.current;
+    if (elevenLabsConversation?.isOpen()) {
+      elevenLabsConversation.sendContextualUpdate(movementSignalText(movementSignal));
+      pendingMovementSignalRef.current = null;
+      return;
+    }
     const socket = socketRef.current;
     if (!setupCompleteRef.current || !socket || socket.readyState !== WebSocket.OPEN) return;
     socket.send(JSON.stringify({
@@ -276,6 +290,7 @@ export function LiveVoiceCoach({
           sessionId: activeSessionId ?? undefined,
           userTranscript,
           assistantTranscript,
+          provider: voiceProviderRef.current,
         }),
       });
       if (mountedRef.current) onThreadUpdate(detail);
@@ -431,7 +446,9 @@ export function LiveVoiceCoach({
     setError(`Connection interrupted. Reconnecting automatically (${attempt}/3)…`);
     reconnectTimerRef.current = setTimeout(() => {
       reconnectTimerRef.current = null;
-      void connectSocket(true);
+      void (voiceProviderRef.current === "elevenlabs"
+        ? connectElevenLabs(true)
+        : connectSocket(true));
     }, 500 * 2 ** (attempt - 1));
   }
 
@@ -474,6 +491,7 @@ export function LiveVoiceCoach({
         avatarClientRef.current = null;
         void client.stop().catch(() => undefined);
         setAvatarReady(false);
+        elevenLabsConversationRef.current?.setVolume({ volume: 1 });
         setAvatarIssue(message || "Photoreal coach video disconnected; voice remains available.");
       };
       client.on("error", failAvatar);
@@ -505,6 +523,112 @@ export function LiveVoiceCoach({
       }
       return false;
     }
+  }
+
+  async function connectElevenLabs(reconnecting: boolean) {
+    if (!shouldRunRef.current) return;
+    voiceProviderRef.current = "elevenlabs";
+    setConnectionStage(reconnecting ? "reconnecting" : "authorizing");
+    const credentials = await apiRequest<ElevenLabsCoachSessionResponse>(
+      "/v1/coach/elevenlabs-session",
+      {
+        method: "POST",
+        signal: AbortSignal.timeout(40_000),
+        body: JSON.stringify({ threadId, sessionId: activeSessionId ?? undefined }),
+      },
+    );
+    if (!shouldRunRef.current) return;
+    setConnectionStage("elevenlabs");
+    const { Conversation } = await import("@elevenlabs/client");
+    const conversation = await Conversation.startSession({
+      signedUrl: credentials.signedUrl,
+      connectionType: "websocket",
+      textOnly: false,
+      dynamicVariables: credentials.dynamicVariables,
+      onConversationCreated: (createdConversation) => {
+        elevenLabsConversationRef.current = createdConversation;
+        createdConversation.setVolume({ volume: avatarClientRef.current ? 0 : 1 });
+      },
+      clientTools: {
+        get_live_workout_snapshot: async () => {
+          const query = activeSessionId ? `?sessionId=${encodeURIComponent(activeSessionId)}` : "";
+          return JSON.stringify(
+            await apiRequest<LiveCoachSnapshotResponse>(`/v1/coach/live-snapshot${query}`),
+          );
+        },
+      },
+      onConnect: () => {
+        if (!mountedRef.current || !shouldRunRef.current) return;
+        connectedAtRef.current = Date.now();
+        reconnectAttemptRef.current = 0;
+        setError("");
+        setState("listening");
+      },
+      onModeChange: ({ mode }) => {
+        if (mountedRef.current && shouldRunRef.current) {
+          setState(mode === "speaking" ? "speaking" : "listening");
+        }
+      },
+      onMessage: ({ role, message }) => {
+        if (!mountedRef.current || !message.trim()) return;
+        if (role === "user") {
+          userTurnRef.current = message.trim();
+          coachTurnRef.current = "";
+          setCoachCaption("");
+          setUserCaption(userTurnRef.current);
+          return;
+        }
+        coachTurnRef.current = message.trim();
+        setUserCaption("");
+        setCoachCaption(coachTurnRef.current);
+        void saveCompletedTurn();
+      },
+      onAudio: (base64Audio) => {
+        const avatarClient = avatarClientRef.current;
+        if (!avatarClient) return;
+        avatarClient.sendAudioData(pcmForAvatar(base64Audio, "audio/pcm;rate=16000"));
+      },
+      onError: (message) => {
+        if (mountedRef.current && shouldRunRef.current) setError(message);
+      },
+      onDisconnect: (details) => {
+        if (!mountedRef.current || !shouldRunRef.current || details.reason === "user") return;
+        elevenLabsConversationRef.current = null;
+        scheduleReconnect("The ElevenLabs coach connection ended unexpectedly.");
+      },
+    });
+    if (!shouldRunRef.current) {
+      await conversation.endSession();
+      return;
+    }
+    elevenLabsConversationRef.current = conversation;
+    conversation.setVolume({ volume: avatarClientRef.current ? 0 : 1 });
+    const pendingMovement = pendingMovementSignalRef.current;
+    if (pendingMovement) {
+      conversation.sendContextualUpdate(movementSignalText(pendingMovement));
+      pendingMovementSignalRef.current = null;
+    }
+  }
+
+  async function startGeminiFallback() {
+    voiceProviderRef.current = "gemini";
+    setConnectionStage("microphone");
+    const AudioContextClass = window.AudioContext;
+    if (!AudioContextClass || !navigator.mediaDevices?.getUserMedia) {
+      throw new Error("Live voice needs microphone and Web Audio support in this browser.");
+    }
+    const audioContext = new AudioContextClass();
+    audioContextRef.current = audioContext;
+    await audioContext.resume();
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+    });
+    if (!shouldRunRef.current) {
+      stream.getTracks().forEach((track) => track.stop());
+      return;
+    }
+    streamRef.current = stream;
+    await connectSocket(false);
   }
 
   async function connectSocket(reconnecting: boolean) {
@@ -607,24 +731,17 @@ export function LiveVoiceCoach({
     setConnectionStage("microphone");
     setState("connecting");
     try {
-      const AudioContextClass = window.AudioContext;
-      if (!AudioContextClass || !navigator.mediaDevices?.getUserMedia) {
-        throw new Error("Live voice needs microphone and Web Audio support in this browser.");
-      }
-      const audioContext = new AudioContextClass();
-      audioContextRef.current = audioContext;
-      await audioContext.resume();
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
-      });
-      if (!shouldRunRef.current) {
-        stream.getTracks().forEach((track) => track.stop());
-        return;
-      }
-      streamRef.current = stream;
       await connectAvatar();
       if (!shouldRunRef.current) return;
-      await connectSocket(false);
+      try {
+        await connectElevenLabs(false);
+      } catch (cause) {
+        if (!shouldRunRef.current) return;
+        setAvatarIssue(cause instanceof Error
+          ? `${cause.message} Using the backup live voice.`
+          : "ElevenLabs is unavailable. Using the backup live voice.");
+        await startGeminiFallback();
+      }
     } catch (cause) {
       closeResources();
       const timedOut = cause instanceof DOMException && cause.name === "TimeoutError";

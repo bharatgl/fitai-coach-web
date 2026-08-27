@@ -62,6 +62,10 @@ test("shows a public landing page and protects the coaching workspace", async ()
   assert.match(liveVoice, /get_live_workout_snapshot/);
   assert.match(liveVoice, /interrupted/);
   assert.match(liveVoice, /\/v1\/coach\/live-turns/);
+  assert.match(liveVoice, /\/v1\/coach\/elevenlabs-session/);
+  assert.match(liveVoice, /import\("@elevenlabs\/client"\)/);
+  assert.match(liveVoice, /dynamicVariables: credentials\.dynamicVariables/);
+  assert.match(liveVoice, /provider: voiceProviderRef\.current/);
   assert.match(liveVoice, /AbortSignal\.timeout\(25_000\)/);
   assert.match(liveVoice, /did not finish setup/);
   assert.match(liveVoice, /sessionResumption/);
@@ -73,6 +77,7 @@ test("shows a public landing page and protects the coaching workspace", async ()
   assert.match(liveVoice, /import\("simli-client\/dist\/client"\)/);
   assert.match(liveVoice, /\/v1\/coach\/live-avatar-token/);
   assert.match(liveVoice, /pcmForAvatar/);
+  assert.match(liveVoice, /avatarClient\.sendAudioData/);
   assert.match(liveVoice, /<video/);
   assert.match(liveVoice, /playsInline/);
   assert.match(liveVoice, /\/coach\/forge-coach-avatar\.webp/);

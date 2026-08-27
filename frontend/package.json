@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@auth/mongodb-adapter": "3.11.3",
+    "@elevenlabs/client": "^1.23.0",
     "@fitai/contracts": "0.1.0",
     "@fitai/ui": "0.1.0",
     "@fontsource-variable/manrope": "^5.3.0",
