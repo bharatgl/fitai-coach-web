@@ -1,4 +1,4 @@
-import type { DashboardResponse } from "@fitai/contracts";
+import type { DashboardResponse, PlanHistoryEntry } from "@fitai/contracts";
 import type { FastifyInstance } from "fastify";
 import { authenticate } from "../auth.js";
 import { getDatabase } from "../db.js";
@@ -17,6 +17,42 @@ import {
 } from "../domain/workouts.js";
 import { syncAuthenticatedUser } from "../users.js";
 
+function roundedAverage(values: number[]) {
+  if (values.length === 0) return 0;
+  return Number((values.reduce((sum, value) => sum + value, 0) / values.length).toFixed(1));
+}
+
+function summarizePlanHistory(
+  plan: WorkoutPlanDocument,
+  workouts: PlannedWorkoutDocument[],
+  completedSessions: WorkoutSessionDocument[],
+): PlanHistoryEntry {
+  const sets = workouts.map((workout) =>
+    workout.exercises.reduce((sum, exercise) => sum + exercise.sets, 0),
+  );
+  const efforts = completedSessions
+    .map((session) => session.perceivedEffort)
+    .filter((effort): effort is number => effort !== null);
+  return {
+    plan: serializePlan(plan),
+    workoutCount: workouts.length,
+    averageSessionMinutes: roundedAverage(workouts.map((workout) => workout.estimatedMinutes)),
+    averageMovementsPerSession: roundedAverage(workouts.map((workout) => workout.exercises.length)),
+    averageSetsPerSession: roundedAverage(sets),
+    weeklyWorkingSets: Number(
+      (sets.reduce((sum, value) => sum + value, 0) / Math.max(1, plan.durationWeeks)).toFixed(1),
+    ),
+    completedSessions: completedSessions.length,
+    completionRate: workouts.length === 0
+      ? 0
+      : Math.round((completedSessions.length / workouts.length) * 100),
+    totalVolumeKg: Number(
+      completedSessions.reduce((sum, session) => sum + session.totalVolumeKg, 0).toFixed(1),
+    ),
+    averageEffort: efforts.length > 0 ? roundedAverage(efforts) : null,
+  };
+}
+
 export async function dashboardRoutes(app: FastifyInstance) {
   app.get("/v1/dashboard", async (request): Promise<DashboardResponse> => {
     const user = await authenticate(request);
@@ -32,6 +68,7 @@ export async function dashboardRoutes(app: FastifyInstance) {
       activeSession,
       recentSessions,
       progressSessions,
+      historyPlans,
       messages,
     ] =
       await Promise.all([
@@ -67,12 +104,43 @@ export async function dashboardRoutes(app: FastifyInstance) {
           .limit(500)
           .toArray(),
         database
+          .collection<WorkoutPlanDocument>("workoutPlans")
+          .find({ userId: user.id }, { projection: { _id: 0 } })
+          .sort({ version: -1 })
+          .limit(20)
+          .toArray(),
+        database
           .collection("coachMessages")
           .find({ userId: user.id }, { projection: { _id: 0 } })
           .sort({ createdAt: -1 })
           .limit(20)
           .toArray(),
       ]);
+
+    const historyWorkouts = historyPlans.length > 0
+      ? await database
+          .collection<PlannedWorkoutDocument>("plannedWorkouts")
+          .find(
+            { userId: user.id, planId: { $in: historyPlans.map((plan) => plan.id) } },
+            { projection: { _id: 0 } },
+          )
+          .sort({ weekNumber: 1, dayOffset: 1 })
+          .toArray()
+      : [];
+    const historyWorkoutsByPlan = new Map<string, PlannedWorkoutDocument[]>();
+    for (const workout of historyWorkouts) {
+      historyWorkoutsByPlan.set(workout.planId, [
+        ...(historyWorkoutsByPlan.get(workout.planId) ?? []),
+        workout,
+      ]);
+    }
+    const completedSessionsByPlan = new Map<string, WorkoutSessionDocument[]>();
+    for (const session of progressSessions) {
+      completedSessionsByPlan.set(session.planId, [
+        ...(completedSessionsByPlan.get(session.planId) ?? []),
+        session,
+      ]);
+    }
 
     const upcomingWorkouts = activePlan
       ? await database
@@ -95,6 +163,11 @@ export async function dashboardRoutes(app: FastifyInstance) {
       profile: profile ? serializeProfile(profile) : null,
       latestReadiness: latestReadiness ? serializeReadiness(latestReadiness) : null,
       activePlan: activePlan ? serializePlan(activePlan) : null,
+      planHistory: historyPlans.map((plan) => summarizePlanHistory(
+        plan,
+        historyWorkoutsByPlan.get(plan.id) ?? [],
+        completedSessionsByPlan.get(plan.id) ?? [],
+      )),
       upcomingWorkouts: upcomingWorkouts.map(serializeWorkout),
       activeSession: activeSession ? serializeWorkoutSession(activeSession) : null,
       recentSessions: recentSessions.map((session) => serializeWorkoutSession(session)),

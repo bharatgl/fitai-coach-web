@@ -186,6 +186,7 @@ export function materializePlan({
     version,
     status: "active",
     experienceLevel: profile.experienceLevel,
+    restoredFromVersion: null,
     title: draft.title,
     summary: draft.summary,
     startDate,
@@ -232,6 +233,7 @@ export function serializePlan(plan: WorkoutPlanDocument): WorkoutPlan {
     version: plan.version,
     status: plan.status,
     experienceLevel: plan.experienceLevel ?? null,
+    restoredFromVersion: plan.restoredFromVersion ?? null,
     title: plan.title,
     summary: plan.summary,
     startDate: plan.startDate.toISOString().slice(0, 10),
@@ -241,6 +243,64 @@ export function serializePlan(plan: WorkoutPlanDocument): WorkoutPlan {
     weeklyProgression: plan.weeklyProgression,
     createdAt: plan.createdAt.toISOString(),
   };
+}
+
+export function restorePlanVersion({
+  sourcePlan,
+  sourceWorkouts,
+  userId,
+  version,
+  startDate,
+  now = new Date(),
+}: {
+  sourcePlan: WorkoutPlanDocument;
+  sourceWorkouts: PlannedWorkoutDocument[];
+  userId: string;
+  version: number;
+  startDate: Date;
+  now?: Date;
+}) {
+  if (sourcePlan.userId !== userId || sourceWorkouts.some((workout) => workout.userId !== userId)) {
+    throw new PlanValidationError("Plan version not found");
+  }
+  if (sourceWorkouts.length === 0) {
+    throw new PlanValidationError("This plan version has no workouts to restore");
+  }
+
+  const planId = randomUUID();
+  const plan: WorkoutPlanDocument = {
+    ...sourcePlan,
+    id: planId,
+    userId,
+    version,
+    status: "active",
+    restoredFromVersion: sourcePlan.version,
+    startDate,
+    createdAt: now,
+  };
+  const workouts = [...sourceWorkouts]
+    .sort((left, right) => left.weekNumber - right.weekNumber || left.dayOffset - right.dayOffset)
+    .map((sourceWorkout) => {
+      const scheduledFor = new Date(startDate);
+      scheduledFor.setUTCDate(
+        startDate.getUTCDate() + (sourceWorkout.weekNumber - 1) * 7 + sourceWorkout.dayOffset,
+      );
+      return {
+        ...sourceWorkout,
+        id: randomUUID(),
+        planId,
+        userId,
+        scheduledFor,
+        exercises: sourceWorkout.exercises.map((exercise) => ({
+          ...exercise,
+          video: exercise.video ? { ...exercise.video } : null,
+        })),
+        status: "planned" as const,
+        createdAt: now,
+      } satisfies PlannedWorkoutDocument;
+    });
+
+  return { plan, workouts };
 }
 
 export function serializeWorkout(workout: PlannedWorkoutDocument): PlannedWorkout {

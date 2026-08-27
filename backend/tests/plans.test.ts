@@ -7,6 +7,7 @@ import {
   materializePlan,
   PlanValidationError,
   resolvePlanStartDate,
+  restorePlanVersion,
   validatePlanDraft,
 } from "../src/domain/plans.js";
 
@@ -93,10 +94,45 @@ test("materializes four weeks of dated workouts from a validated plan", () => {
   assert.equal(generated.workouts[7]?.scheduledFor.toISOString(), "2026-09-17T00:00:00.000Z");
   assert.equal(generated.workouts[0]?.exercises[0]?.name, "Goblet Squat");
   assert.equal(generated.workouts[0]?.exercises[0]?.video?.provider, "youtube");
+  assert.equal(generated.plan.restoredFromVersion, null);
   assert.notEqual(
     generated.workouts[0]?.exercises[0]?.repRange,
     generated.workouts[2]?.exercises[0]?.repRange,
   );
+});
+
+test("restores an archived plan as a new immutable version with fresh dates", () => {
+  const catalog = availableExercises(profile.equipment, profile.experienceLevel);
+  const generated = materializePlan({
+    draft,
+    profile,
+    catalog,
+    userId: profile.userId,
+    version: 2,
+    model: "test-model",
+    startDate: new Date("2026-08-24T00:00:00.000Z"),
+    now: new Date("2026-08-20T00:00:00.000Z"),
+  });
+  generated.plan.status = "archived";
+  generated.workouts.forEach((workout) => { workout.status = "skipped"; });
+
+  const restored = restorePlanVersion({
+    sourcePlan: generated.plan,
+    sourceWorkouts: generated.workouts,
+    userId: profile.userId,
+    version: 5,
+    startDate: new Date("2026-09-07T00:00:00.000Z"),
+    now: new Date("2026-09-01T00:00:00.000Z"),
+  });
+
+  assert.equal(restored.plan.version, 5);
+  assert.equal(restored.plan.status, "active");
+  assert.equal(restored.plan.restoredFromVersion, 2);
+  assert.notEqual(restored.plan.id, generated.plan.id);
+  assert.equal(restored.workouts[0]?.scheduledFor.toISOString(), "2026-09-07T00:00:00.000Z");
+  assert.equal(restored.workouts[0]?.status, "planned");
+  assert.notEqual(restored.workouts[0]?.id, generated.workouts[0]?.id);
+  assert.equal(generated.workouts[0]?.status, "skipped");
 });
 
 test("rejects plans that reference unavailable exercises", () => {

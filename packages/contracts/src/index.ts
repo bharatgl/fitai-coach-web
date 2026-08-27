@@ -353,6 +353,7 @@ export type WorkoutPlan = {
   version: number;
   status: "active" | "archived";
   experienceLevel: ExperienceLevel | null;
+  restoredFromVersion: number | null;
   title: string;
   summary: string;
   startDate: string;
@@ -361,6 +362,19 @@ export type WorkoutPlan = {
   rationale: string[];
   weeklyProgression: string[];
   createdAt: string;
+};
+
+export type PlanHistoryEntry = {
+  plan: WorkoutPlan;
+  workoutCount: number;
+  averageSessionMinutes: number;
+  averageMovementsPerSession: number;
+  averageSetsPerSession: number;
+  weeklyWorkingSets: number;
+  completedSessions: number;
+  completionRate: number;
+  totalVolumeKg: number;
+  averageEffort: number | null;
 };
 
 export type GeneratePlanRequest = {
@@ -376,6 +390,7 @@ export type DashboardResponse = {
   profile: UserProfile | null;
   latestReadiness: ReadinessCheckIn | null;
   activePlan: WorkoutPlan | null;
+  planHistory: PlanHistoryEntry[];
   upcomingWorkouts: PlannedWorkout[];
   activeSession: WorkoutSession | null;
   recentSessions: WorkoutSession[];

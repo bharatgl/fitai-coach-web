@@ -11,6 +11,7 @@ import {
   materializePlan,
   PlanValidationError,
   resolvePlanStartDate,
+  restorePlanVersion,
   serializePlan,
   serializeWorkout,
   type PlannedWorkoutDocument,
@@ -144,6 +145,92 @@ export async function planRoutes(app: FastifyInstance) {
       } finally {
         await locks.deleteOne({ userId: user.id });
       }
+    },
+  );
+
+  app.post(
+    "/v1/plans/:id/restore",
+    { config: { rateLimit: { max: 5, timeWindow: "10 minutes" } } },
+    async (request, reply) => {
+      const user = await authenticate(request);
+      const { id } = z.object({ id: z.string().min(1).max(100) }).parse(request.params);
+      await syncAuthenticatedUser(user);
+      const database = await getDatabase();
+      const activeWorkout = await database.collection("workoutSessions").findOne(
+        { userId: user.id, status: { $in: ["active", "paused"] } },
+        { projection: { _id: 1 } },
+      );
+      if (activeWorkout) {
+        return reply.code(409).send({
+          error: "Finish or abandon your active workout before restoring a plan",
+        });
+      }
+
+      const sourcePlan = await database
+        .collection<WorkoutPlanDocument>("workoutPlans")
+        .findOne({ id, userId: user.id }, { projection: { _id: 0 } });
+      if (!sourcePlan) {
+        return reply.code(404).send({ error: "Plan version not found" });
+      }
+      const sourceWorkouts = await database
+        .collection<PlannedWorkoutDocument>("plannedWorkouts")
+        .find({ planId: id, userId: user.id }, { projection: { _id: 0 } })
+        .sort({ weekNumber: 1, dayOffset: 1 })
+        .toArray();
+      const latestPlan = await database
+        .collection<WorkoutPlanDocument>("workoutPlans")
+        .findOne(
+          { userId: user.id },
+          { projection: { _id: 0 }, sort: { version: -1 } },
+        );
+
+      let restored;
+      try {
+        restored = restorePlanVersion({
+          sourcePlan,
+          sourceWorkouts,
+          userId: user.id,
+          version: (latestPlan?.version ?? 0) + 1,
+          startDate: resolvePlanStartDate(undefined),
+        });
+      } catch (error) {
+        if (error instanceof PlanValidationError) {
+          return reply.code(409).send({ error: error.message });
+        }
+        throw error;
+      }
+
+      const client = await getMongoClient();
+      await client.withSession(async (session) => {
+        await session.withTransaction(async () => {
+          await database
+            .collection<WorkoutPlanDocument>("workoutPlans")
+            .updateMany(
+              { userId: user.id, status: "active" },
+              { $set: { status: "archived" } },
+              { session },
+            );
+          await database
+            .collection<PlannedWorkoutDocument>("plannedWorkouts")
+            .updateMany(
+              { userId: user.id, status: "planned" },
+              { $set: { status: "skipped" } },
+              { session },
+            );
+          await database
+            .collection<WorkoutPlanDocument>("workoutPlans")
+            .insertOne(restored.plan, { session });
+          await database
+            .collection<PlannedWorkoutDocument>("plannedWorkouts")
+            .insertMany(restored.workouts, { session });
+        });
+      });
+
+      const response: GeneratePlanResponse = {
+        plan: serializePlan(restored.plan),
+        workouts: restored.workouts.map(serializeWorkout),
+      };
+      return reply.code(201).send(response);
     },
   );
 }

@@ -10,6 +10,7 @@ import type {
   CreateCoachThreadResponse,
   DashboardResponse,
   GeneratePlanResponse,
+  PlanHistoryEntry,
   PlannedWorkout,
   StartWorkoutResponse,
   UploadCoachAttachmentResponse,
@@ -1378,6 +1379,143 @@ function PlanGuide() {
   );
 }
 
+function PlanVersionCard({
+  entry,
+  label,
+}: {
+  entry: PlanHistoryEntry;
+  label: string;
+}) {
+  const level = entry.plan.experienceLevel
+    ? `${entry.plan.experienceLevel.charAt(0).toUpperCase()}${entry.plan.experienceLevel.slice(1)}`
+    : "Legacy";
+  return (
+    <article className="plan-version-card">
+      <header>
+        <span>{label}</span>
+        <b>V{entry.plan.version}</b>
+      </header>
+      <h3>{entry.plan.title}</h3>
+      <p>{level} · {entry.plan.daysPerWeek} days/week</p>
+      <dl>
+        <div><dt>Avg. session</dt><dd>{entry.averageSessionMinutes} min</dd></div>
+        <div><dt>Movements</dt><dd>{entry.averageMovementsPerSession}/session</dd></div>
+        <div><dt>Working sets</dt><dd>{entry.weeklyWorkingSets}/week</dd></div>
+        <div><dt>Completion</dt><dd>{entry.completionRate}%</dd></div>
+        <div><dt>Logged volume</dt><dd>{Math.round(entry.totalVolumeKg).toLocaleString()} kg</dd></div>
+        <div><dt>Avg. effort</dt><dd>{entry.averageEffort ?? "—"}</dd></div>
+      </dl>
+    </article>
+  );
+}
+
+function PlanHistory({
+  history,
+  activePlanId,
+  compareId,
+  restoringId,
+  optimizing,
+  hasActiveWorkout,
+  onCompare,
+  onRestore,
+  onOptimize,
+}: {
+  history: PlanHistoryEntry[];
+  activePlanId: string;
+  compareId: string;
+  restoringId: string;
+  optimizing: boolean;
+  hasActiveWorkout: boolean;
+  onCompare: (planId: string) => void;
+  onRestore: (planId: string) => Promise<void>;
+  onOptimize: () => Promise<void>;
+}) {
+  const current = history.find((entry) => entry.plan.id === activePlanId) ?? history[0];
+  const archived = history.filter((entry) => entry.plan.id !== current?.plan.id);
+  const comparison = archived.find((entry) => entry.plan.id === compareId) ?? archived[0];
+  if (!current) return null;
+
+  return (
+    <section className="plan-history" aria-labelledby="plan-history-title">
+      <header className="plan-history-header">
+        <div>
+          <Eyebrow>Plan evolution</Eyebrow>
+          <h2 id="plan-history-title">Version history</h2>
+          <p>Compare training load and adherence, restore an older structure, or generate a new optimized version.</p>
+        </div>
+        <Button
+          variant="secondary"
+          busy={optimizing}
+          disabled={hasActiveWorkout}
+          onClick={() => void onOptimize()}
+        >
+          {optimizing ? "Optimizing…" : "Optimize current"}
+        </Button>
+      </header>
+
+      {comparison ? (
+        <div className="plan-history-comparison" aria-label="Plan version comparison">
+          <PlanVersionCard entry={current} label="Current" />
+          <span className="plan-history-versus" aria-hidden="true">VS</span>
+          <PlanVersionCard entry={comparison} label="Compare" />
+        </div>
+      ) : (
+        <p className="plan-history-first">Your next generated plan will appear here for comparison.</p>
+      )}
+
+      <div className="plan-history-list">
+        {history.map((entry) => {
+          const isActive = entry.plan.id === activePlanId;
+          return (
+            <article className={isActive ? "is-active" : ""} key={entry.plan.id}>
+              <div className="plan-history-version">
+                <b>V{entry.plan.version}</b>
+                <span>{isActive ? "Active" : "Archived"}</span>
+              </div>
+              <div className="plan-history-copy">
+                <strong>{entry.plan.title}</strong>
+                <small>
+                  {new Intl.DateTimeFormat("en", { day: "numeric", month: "short", year: "numeric" }).format(new Date(entry.plan.createdAt))}
+                  {entry.plan.restoredFromVersion ? ` · restored from V${entry.plan.restoredFromVersion}` : ""}
+                </small>
+              </div>
+              <div className="plan-history-quick-metrics">
+                <span><b>{entry.averageMovementsPerSession}</b> movements</span>
+                <span><b>{entry.averageSetsPerSession}</b> sets/session</span>
+                <span><b>{entry.completionRate}%</b> complete</span>
+              </div>
+              <div className="plan-history-actions">
+                {!isActive && (
+                  <Button size="sm" variant="ghost" onClick={() => onCompare(entry.plan.id)}>
+                    Compare
+                  </Button>
+                )}
+                {!isActive && (
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    busy={restoringId === entry.plan.id}
+                    disabled={Boolean(restoringId) || hasActiveWorkout}
+                    onClick={() => void onRestore(entry.plan.id)}
+                  >
+                    {restoringId === entry.plan.id ? "Restoring…" : "Restore as new"}
+                  </Button>
+                )}
+              </div>
+            </article>
+          );
+        })}
+      </div>
+      <small className="plan-history-guidance">
+        Prefer the plan you can complete consistently; more planned volume is not automatically better.
+      </small>
+      {hasActiveWorkout && (
+        <small className="plan-history-note">Finish or abandon the active workout before changing plan versions.</small>
+      )}
+    </section>
+  );
+}
+
 function Plan({
   dashboard,
   activeSession,
@@ -1393,6 +1531,8 @@ function Plan({
 }) {
   const [generating, setGenerating] = useState(false);
   const [startingId, setStartingId] = useState("");
+  const [restoringId, setRestoringId] = useState("");
+  const [comparePlanId, setComparePlanId] = useState("");
   const [error, setError] = useState("");
   const [selectedWeekNumber, setSelectedWeekNumber] = useState(1);
   const weeklyWorkouts = useMemo(() => {
@@ -1462,6 +1602,23 @@ function Plan({
       setError(cause instanceof Error ? cause.message : "Unable to start this workout");
     } finally {
       setStartingId("");
+    }
+  }
+
+  async function restore(planId: string) {
+    setRestoringId(planId);
+    setError("");
+    try {
+      await apiRequest<GeneratePlanResponse>(`/v1/plans/${planId}/restore`, {
+        method: "POST",
+        body: JSON.stringify({}),
+      });
+      setSelectedWeekNumber(1);
+      await refresh();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Unable to restore this plan version");
+    } finally {
+      setRestoringId("");
     }
   }
 
@@ -1683,6 +1840,19 @@ function Plan({
             )}
           </section>
         </section>
+      )}
+      {dashboard.activePlan && (
+        <PlanHistory
+          history={dashboard.planHistory ?? []}
+          activePlanId={dashboard.activePlan.id}
+          compareId={comparePlanId}
+          restoringId={restoringId}
+          optimizing={generating}
+          hasActiveWorkout={Boolean(activeSession)}
+          onCompare={setComparePlanId}
+          onRestore={restore}
+          onOptimize={generate}
+        />
       )}
       {dashboard.activePlan && <PlanGuide />}
       {weeklyWorkouts.length === 0 && (
