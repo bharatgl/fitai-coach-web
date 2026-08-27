@@ -117,6 +117,9 @@ test("shows a public landing page and protects the coaching workspace", async ()
   assert.match(coach, /className="ui-visually-hidden"/);
   assert.match(coach, /maxCoachAttachmentBytes/);
   assert.match(coach, /name="dietaryPreference"/);
+  assert.match(coach, /name="trainingPhase"/);
+  assert.match(coach, /name="programDurationWeeks"/);
+  assert.match(coach, /12 weeks · periodized/);
   assert.match(coach, /plan-overview/);
   assert.match(coach, /plan-week-tabs/);
   assert.match(coach, /plan-primary-session/);

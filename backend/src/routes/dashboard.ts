@@ -155,7 +155,7 @@ export async function dashboardRoutes(app: FastifyInstance) {
             { projection: { _id: 0 } },
           )
           .sort({ weekNumber: 1, dayOffset: 1 })
-          .limit(28)
+          .limit(84)
           .toArray()
       : [];
 

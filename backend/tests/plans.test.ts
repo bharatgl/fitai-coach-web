@@ -22,6 +22,8 @@ const profile: UserProfile = {
   weightKg: 72,
   dietaryPreference: "no_preference",
   primaryGoal: "Build general strength",
+  trainingPhase: "general",
+  programDurationWeeks: 4,
   equipment: ["dumbbells"],
   trainingDaysPerWeek: 2,
   preferredSessionMinutes: 35,
@@ -177,6 +179,24 @@ test("rejects beginner-sized sessions for an advanced hour-long profile", () => 
       availableExercises(advancedProfile.equipment, advancedProfile.experienceLevel),
     ),
     /needs at least 5 movements/,
+  );
+});
+
+test("requires the complete configured program horizon", () => {
+  const longProfile = {
+    ...profile,
+    experienceLevel: "advanced" as const,
+    trainingPhase: "bulk" as const,
+    programDurationWeeks: 12 as const,
+    preferredSessionMinutes: 60,
+  };
+  assert.throws(
+    () => validatePlanDraft(
+      draft,
+      longProfile,
+      availableExercises(longProfile.equipment, longProfile.experienceLevel),
+    ),
+    /weeks 1 through 12/,
   );
 });
 

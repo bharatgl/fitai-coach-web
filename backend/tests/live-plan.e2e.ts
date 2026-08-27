@@ -16,6 +16,8 @@ try {
     experienceLevel: "beginner",
     dietaryPreference: "no_preference",
     primaryGoal: "Build general strength safely",
+    trainingPhase: "general",
+    programDurationWeeks: 4,
     equipment: ["dumbbells"],
     trainingDaysPerWeek: 2,
     preferredSessionMinutes: 35,

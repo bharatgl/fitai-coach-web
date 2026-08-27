@@ -1,4 +1,5 @@
 export type ExperienceLevel = "beginner" | "intermediate" | "advanced";
+export type TrainingPhase = "cut" | "bulk" | "recomposition" | "general";
 export type Gender = "woman" | "man" | "non_binary" | "prefer_not_to_say";
 export type DietaryPreference =
   | "vegetarian"
@@ -18,6 +19,8 @@ export type UserProfile = {
   weightKg: number | null;
   dietaryPreference: DietaryPreference;
   primaryGoal: string;
+  trainingPhase: TrainingPhase;
+  programDurationWeeks: 4 | 8 | 12;
   equipment: string[];
   trainingDaysPerWeek: number;
   preferredSessionMinutes: number;
@@ -353,6 +356,7 @@ export type WorkoutPlan = {
   version: number;
   status: "active" | "archived";
   experienceLevel: ExperienceLevel | null;
+  trainingPhase: TrainingPhase | null;
   restoredFromVersion: number | null;
   title: string;
   summary: string;

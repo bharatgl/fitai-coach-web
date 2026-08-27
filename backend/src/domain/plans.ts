@@ -50,8 +50,22 @@ export function validatePlanDraft(
 ) {
   const volumeTargets = planVolumeTargetsFor(profile);
   const weekNumbers = draft.weeks.map((week) => week.weekNumber);
-  if (new Set(weekNumbers).size !== 4 || ![1, 2, 3, 4].every((week) => weekNumbers.includes(week))) {
-    throw new PlanValidationError("The plan must contain weeks 1 through 4 exactly once");
+  const expectedWeeks = Array.from(
+    { length: profile.programDurationWeeks },
+    (_, index) => index + 1,
+  );
+  if (
+    new Set(weekNumbers).size !== profile.programDurationWeeks
+    || !expectedWeeks.every((week) => weekNumbers.includes(week))
+  ) {
+    throw new PlanValidationError(
+      `The plan must contain weeks 1 through ${profile.programDurationWeeks} exactly once`,
+    );
+  }
+  if (draft.weeklyProgression.length !== profile.programDurationWeeks) {
+    throw new PlanValidationError(
+      `The plan needs one progression note for each of its ${profile.programDurationWeeks} weeks`,
+    );
   }
 
   const allowed = new Set(catalog.map((exercise) => exercise.id));
@@ -186,11 +200,12 @@ export function materializePlan({
     version,
     status: "active",
     experienceLevel: profile.experienceLevel,
+    trainingPhase: profile.trainingPhase,
     restoredFromVersion: null,
     title: draft.title,
     summary: draft.summary,
     startDate,
-    durationWeeks: 4,
+    durationWeeks: profile.programDurationWeeks,
     daysPerWeek: profile.trainingDaysPerWeek,
     rationale: draft.rationale,
     weeklyProgression: draft.weeklyProgression,
@@ -233,6 +248,7 @@ export function serializePlan(plan: WorkoutPlanDocument): WorkoutPlan {
     version: plan.version,
     status: plan.status,
     experienceLevel: plan.experienceLevel ?? null,
+    trainingPhase: plan.trainingPhase ?? null,
     restoredFromVersion: plan.restoredFromVersion ?? null,
     title: plan.title,
     summary: plan.summary,

@@ -473,6 +473,8 @@ function Onboarding({ user, onSaved }: { user: CurrentUser; onSaved: () => Promi
           weightKg: optionalNumber(form.get("weightKg")),
           dietaryPreference: form.get("dietaryPreference"),
           primaryGoal: form.get("primaryGoal"),
+          trainingPhase: form.get("trainingPhase"),
+          programDurationWeeks: Number(form.get("programDurationWeeks")),
           equipment: String(form.get("equipment") ?? "")
             .split(",")
             .map((item) => item.trim())
@@ -513,11 +515,29 @@ function optionalNumber(value: FormDataEntryValue | null) {
 }
 
 function ProfileFields({ profile }: { profile?: UserProfile }) {
+  const initialLevel = profile?.experienceLevel ?? "beginner";
+  const recommendedDuration = (level: UserProfile["experienceLevel"]): 4 | 8 | 12 => {
+    if (level === "advanced") return 12;
+    if (level === "intermediate") return 8;
+    return 4;
+  };
+  const [experienceLevel, setExperienceLevel] = useState(initialLevel);
+  const [programDurationWeeks, setProgramDurationWeeks] = useState<4 | 8 | 12>(
+    profile?.programDurationWeeks ?? recommendedDuration(initialLevel),
+  );
   return (
     <>
       <div className="form-row">
         <Field label="Experience level">
-          <select name="experienceLevel" defaultValue={profile?.experienceLevel ?? "beginner"}>
+          <select
+            name="experienceLevel"
+            value={experienceLevel}
+            onChange={(event) => {
+              const nextLevel = event.target.value as UserProfile["experienceLevel"];
+              setExperienceLevel(nextLevel);
+              setProgramDurationWeeks(recommendedDuration(nextLevel));
+            }}
+          >
             <option value="beginner">Beginner</option>
             <option value="intermediate">Intermediate</option>
             <option value="advanced">Advanced</option>
@@ -566,6 +586,33 @@ function ProfileFields({ profile }: { profile?: UserProfile }) {
           placeholder="Build strength"
         />
       </Field>
+      <div className="form-row">
+        <Field
+          label="Training phase"
+          hint="This changes exercise selection, volume, progression, and recovery—not just the plan title."
+        >
+          <select name="trainingPhase" defaultValue={profile?.trainingPhase ?? "general"}>
+            <option value="bulk">Lean bulk / build muscle</option>
+            <option value="cut">Cut / fat loss</option>
+            <option value="recomposition">Body recomposition</option>
+            <option value="general">General performance</option>
+          </select>
+        </Field>
+        <Field
+          label="Program length"
+          hint="Advanced athletes typically need multiple mesocycles instead of one short block."
+        >
+          <select
+            name="programDurationWeeks"
+            value={programDurationWeeks}
+            onChange={(event) => setProgramDurationWeeks(Number(event.target.value) as 4 | 8 | 12)}
+          >
+            <option value={4}>4 weeks · foundation</option>
+            <option value={8}>8 weeks · progressive</option>
+            <option value={12}>12 weeks · periodized</option>
+          </select>
+        </Field>
+      </div>
       <Field label="Available equipment" hint="Separate multiple items with commas.">
         <input
           name="equipment"
@@ -648,6 +695,8 @@ function ProfileSettings({
           weightKg: optionalNumber(form.get("weightKg")),
           dietaryPreference: form.get("dietaryPreference"),
           primaryGoal: form.get("primaryGoal"),
+          trainingPhase: form.get("trainingPhase"),
+          programDurationWeeks: Number(form.get("programDurationWeeks")),
           equipment: String(form.get("equipment") ?? "")
             .split(",")
             .map((item) => item.trim())
@@ -1389,6 +1438,13 @@ function PlanVersionCard({
   const level = entry.plan.experienceLevel
     ? `${entry.plan.experienceLevel.charAt(0).toUpperCase()}${entry.plan.experienceLevel.slice(1)}`
     : "Legacy";
+  const phase = entry.plan.trainingPhase
+    ? entry.plan.trainingPhase === "bulk"
+      ? "Lean bulk"
+      : entry.plan.trainingPhase === "cut"
+        ? "Cut"
+        : `${entry.plan.trainingPhase.charAt(0).toUpperCase()}${entry.plan.trainingPhase.slice(1)}`
+    : "Unspecified phase";
   return (
     <article className="plan-version-card">
       <header>
@@ -1396,7 +1452,7 @@ function PlanVersionCard({
         <b>V{entry.plan.version}</b>
       </header>
       <h3>{entry.plan.title}</h3>
-      <p>{level} · {entry.plan.daysPerWeek} days/week</p>
+      <p>{level} · {phase} · {entry.plan.durationWeeks} weeks · {entry.plan.daysPerWeek} days/week</p>
       <dl>
         <div><dt>Avg. session</dt><dd>{entry.averageSessionMinutes} min</dd></div>
         <div><dt>Movements</dt><dd>{entry.averageMovementsPerSession}/session</dd></div>
@@ -1568,8 +1624,18 @@ function Plan({
   const laterSessions = selectedWeekSessions.filter((workout) => workout.id !== primarySession?.id);
   const profileLevel = dashboard.profile?.experienceLevel ?? "beginner";
   const profileLevelLabel = `${profileLevel.charAt(0).toUpperCase()}${profileLevel.slice(1)}`;
+  const profilePhase = dashboard.profile?.trainingPhase ?? "general";
+  const profilePhaseLabel = profilePhase === "bulk"
+    ? "Lean bulk"
+    : profilePhase === "cut"
+      ? "Cut"
+      : `${profilePhase.charAt(0).toUpperCase()}${profilePhase.slice(1)}`;
   const planNeedsRefresh = Boolean(
-    dashboard.activePlan && dashboard.activePlan.experienceLevel !== profileLevel,
+    dashboard.activePlan && dashboard.profile && (
+      dashboard.activePlan.experienceLevel !== profileLevel
+      || dashboard.activePlan.trainingPhase !== dashboard.profile.trainingPhase
+      || dashboard.activePlan.durationWeeks !== dashboard.profile.programDurationWeeks
+    ),
   );
 
   async function generate() {
@@ -1631,13 +1697,14 @@ function Plan({
               <span>Active program</span>
               <b>Version {dashboard.activePlan.version}</b>
               <b>{profileLevelLabel} profile</b>
+              <b>{profilePhaseLabel}</b>
             </div>
             <h1 id="plan-title">{dashboard.activePlan.title}</h1>
             <p>{dashboard.activePlan.summary}</p>
             {planNeedsRefresh && (
               <p className="plan-profile-warning" role="status">
-                This saved plan predates your current {profileLevelLabel.toLowerCase()} profile.
-                Rebuild it to apply the correct split, session length, and volume.
+                This saved plan does not match your current {profileLevelLabel.toLowerCase()} {profilePhaseLabel.toLowerCase()} setup.
+                Rebuild it to apply the correct duration, mesocycles, split, and volume.
               </p>
             )}
           </div>
@@ -1663,7 +1730,7 @@ function Plan({
         <PageHeader
           eyebrow="Training plan"
           title={<>Build your first <em>training block.</em></>}
-          description="Generate four weeks of structured sessions around your goal, equipment, and available time."
+          description="Generate a phase-specific program around your goal, experience, equipment, and available time."
           actions={
             <Button busy={generating} onClick={() => void generate()}>
               {generating ? "Designing your plan…" : "Generate my plan"}
@@ -1858,7 +1925,7 @@ function Plan({
       {weeklyWorkouts.length === 0 && (
         <Card className="empty-state" padding="lg">
           <h2>No plan generated yet.</h2>
-          <p>Generate a four-week plan after reviewing your profile information.</p>
+          <p>Generate a periodized plan after reviewing your training phase and profile.</p>
         </Card>
       )}
     </div>

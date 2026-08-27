@@ -19,6 +19,8 @@ const profileInput = z.object({
     "no_preference",
   ]),
   primaryGoal: z.string().trim().min(2).max(120),
+  trainingPhase: z.enum(["cut", "bulk", "recomposition", "general"]),
+  programDurationWeeks: z.union([z.literal(4), z.literal(8), z.literal(12)]),
   equipment: z.array(z.string().trim().min(1).max(60)).max(30),
   trainingDaysPerWeek: z.number().int().min(1).max(7),
   preferredSessionMinutes: z.number().int().min(10).max(180),
