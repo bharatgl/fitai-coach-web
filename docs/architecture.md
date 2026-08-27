@@ -84,6 +84,20 @@ also avoids cross-origin browser calls and keeps preview deployments simpler.
 5. A MongoDB transaction archives the previous plan and inserts the new version
    plus all scheduled workouts atomically.
 
+### Exercise library
+
+1. The backend bundles all 1,324 non-media exercise records imported from the
+   MIT-licensed Exercises Dataset used by OpenGym.
+2. Public, rate-limited `GET /v1/exercises` and `GET /v1/exercises/:id` routes
+   provide search, equipment/body-part/target filters, pagination, English
+   instructions, and source provenance without a database round trip.
+3. Gym Visual thumbnails and GIFs are excluded because cloning the upstream
+   repository does not grant ForgeFit a commercial media license.
+4. The large reference library remains separate from the reviewed planning
+   catalog. An exercise becomes eligible for AI plans only after ForgeFit adds
+   safety guidance, equipment mapping, experience requirements, and a licensed
+   or curated demonstration.
+
 ### Workout execution and adaptation
 
 1. Starting a scheduled workout creates one user-owned execution session and
@@ -125,7 +139,7 @@ boundary.
 ## MongoDB ownership
 
 Auth.js owns its account/session collections. The backend owns `appUsers`,
-`profiles`, `exercises`, `workoutPlans`, `plannedWorkouts`, `workoutSessions`,
+`profiles`, `workoutPlans`, `plannedWorkouts`, `workoutSessions`,
 `movementEvents`, `readinessCheckIns`, `coachThreads`, and `coachMessages`. Both apps use the same
 Atlas database initially, but the backend is the only component allowed to read
 or write fitness records.

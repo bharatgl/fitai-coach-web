@@ -153,6 +153,39 @@ export type ExerciseVideo = {
   channel: string;
 };
 
+export type ExerciseLibraryItem = {
+  id: string;
+  sourceId: string;
+  name: string;
+  bodyPart: string;
+  equipment: string;
+  target: string;
+  muscleGroup: string;
+  secondaryMuscles: string[];
+  instructions: string[];
+};
+
+export type ExerciseLibrarySource = {
+  name: string;
+  repository: string;
+  commit: string;
+  license: string;
+  importedFields: string;
+};
+
+export type ExerciseLibraryResponse = {
+  items: ExerciseLibraryItem[];
+  total: number;
+  offset: number;
+  limit: number;
+  filters: {
+    bodyParts: string[];
+    equipment: string[];
+    targets: string[];
+  };
+  source: ExerciseLibrarySource;
+};
+
 export type PlanExercise = {
   exerciseId: string;
   name: string;

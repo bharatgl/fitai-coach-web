@@ -143,6 +143,10 @@ camera calibration on physical devices.
 
 ### Bodybuilding foundation — required for a real hypertrophy product
 
+- Imported the full 1,324-exercise OpenGym source library as searchable,
+  paginated MIT metadata with English instructions and pinned provenance. The
+  restricted Gym Visual images/GIFs are intentionally excluded, and imported
+  entries remain plan-ineligible until ForgeFit review is complete.
 - Replace the free-text-only goal with a versioned training phase:
   `muscle_gain`, `fat_loss`, `recomposition`, `maintenance`, or supervised
   `contest_prep`, including start date, optional target date, and member intent.

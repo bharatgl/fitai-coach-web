@@ -9,6 +9,7 @@
     "test": "npm run build && node --import tsx --test tests/*.test.ts tests/*.test.mjs",
     "test:e2e:plan": "node --env-file-if-exists=.env --import tsx tests/live-plan.e2e.ts",
     "test:e2e:workout": "node --env-file-if-exists=.env --import tsx tests/live-workout.e2e.ts",
+    "exercises:import": "node scripts/import-exercise-library.mjs",
     "agent:provision": "node --env-file-if-exists=.env --import tsx src/scripts/provision-elevenlabs-coach.ts",
     "lint": "eslint src tests",
     "typecheck": "tsc --noEmit"
