@@ -5,6 +5,7 @@ import type {
   LiveCoachSnapshotResponse,
   LiveCoachTokenResponse,
 } from "@fitai/contracts";
+import Image from "next/image";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { apiRequest } from "@/lib/api";
 import {
@@ -303,11 +304,16 @@ export function LiveVoiceCoach({
     }
     const inputText = content?.inputTranscription?.text;
     if (inputText) {
+      if (!userTurnRef.current) {
+        setUserCaption("");
+        setCoachCaption("");
+      }
       userTurnRef.current += inputText;
       setUserCaption(userTurnRef.current.trim());
     }
     const outputText = content?.outputTranscription?.text;
     if (outputText) {
+      if (!coachTurnRef.current) setUserCaption("");
       coachTurnRef.current += outputText;
       setCoachCaption(coachTurnRef.current.trim());
     }
@@ -512,40 +518,72 @@ export function LiveVoiceCoach({
     setState("idle");
   }
 
+  const isSessionActive = state !== "idle" && state !== "error";
+  const activeCaption = state === "speaking" ? coachCaption : userCaption || coachCaption;
+  const captionOwner = state === "speaking" || (!userCaption && coachCaption) ? "YOUR COACH" : "YOU";
+
   return (
     <div className="live-voice-backdrop" role="presentation" onMouseDown={(event) => {
       if (event.target === event.currentTarget && state === "idle") onClose();
     }}>
-          <section className="live-voice-panel" role="dialog" aria-modal="true" aria-labelledby="live-voice-title">
+          <section className={`live-voice-panel is-${state}`} role="dialog" aria-modal="true" aria-labelledby="live-voice-title">
             <header>
               <div>
-                <small>REAL-TIME COACH</small>
-                <h2 id="live-voice-title">Talk naturally. Interrupt anytime.</h2>
+                <small>LIVE COACHING SESSION</small>
+                <h2 id="live-voice-title">Your coach is here.</h2>
               </div>
               <button type="button" onClick={() => { endSession(); onClose(); }} aria-label="Close live voice">×</button>
             </header>
-            <div className={`live-voice-orb is-${state}`} aria-hidden="true">
-              <span /><span /><b>AI</b>
+            <div className="live-coach-stage">
+              <div className={`live-coach-presence is-${state}`} aria-hidden="true">
+                <div className="live-coach-light"><i /><i /></div>
+                <Image
+                  className="live-coach-avatar"
+                  src="/coach/forge-coach-avatar.webp"
+                  alt=""
+                  width={682}
+                  height={1024}
+                  priority
+                  sizes="(max-width: 767px) 70vw, 25rem"
+                />
+                <div className="live-coach-presence-badge">
+                  <i /> {state === "speaking" ? "Speaking" : state === "listening" ? "Listening" : "Ready"}
+                </div>
+              </div>
+              <div className="live-coach-session">
+                <p className="live-voice-state" aria-live="polite">
+                  <i aria-hidden="true" />
+                  {sessionLabel(state, connectionStage)}
+                </p>
+                <div className="live-coach-utterance" aria-live="polite">
+                  <small>{activeCaption ? captionOwner : "PRIVATE, PERSONALIZED COACHING"}</small>
+                  <p>{activeCaption || "I know your profile, plan, and recent conversations. When you're ready, let's talk."}</p>
+                  {state === "speaking" && (
+                    <span className="live-coach-speaking-wave" aria-hidden="true"><i /><i /><i /><i /><i /></span>
+                  )}
+                </div>
+                {!isSessionActive && (
+                  <ul className="live-coach-context" aria-label="Live coach capabilities">
+                    <li><i>✓</i><span><b>Remembers you</b>Your goals and past coaching stay in context.</span></li>
+                    <li><i>✓</i><span><b>Workout aware</b>Receives live form cues from your tracker.</span></li>
+                    <li><i>✓</i><span><b>Natural conversation</b>Speak freely and interrupt at any time.</span></li>
+                  </ul>
+                )}
+                {error && <p className="form-error" role="alert">{error}</p>}
+                <div className="live-voice-controls">
+                  {state === "idle" || state === "error" ? (
+                    <button className="live-voice-primary" type="button" onClick={() => void startSession()}>
+                      <span className="live-voice-button-icon" aria-hidden="true">●</span> Talk to your coach
+                    </button>
+                  ) : (
+                    <button className="live-voice-end" type="button" onClick={endSession}>
+                      Finish coaching session
+                    </button>
+                  )}
+                </div>
+              </div>
             </div>
-            <p className="live-voice-state" aria-live="polite">{sessionLabel(state, connectionStage)}</p>
-            <div className="live-voice-captions" aria-live="polite">
-              {userCaption && <p><small>YOU</small>{userCaption}</p>}
-              {coachCaption && <p><small>COACH</small>{coachCaption}</p>}
-              {!userCaption && !coachCaption && <p className="is-empty">Your conversation stays in this coach thread.</p>}
-            </div>
-            {error && <p className="form-error" role="alert">{error}</p>}
-            <div className="live-voice-controls">
-              {state === "idle" || state === "error" ? (
-                <button className="live-voice-primary" type="button" onClick={() => void startSession()}>
-                  <span aria-hidden="true">●</span> Start live session
-                </button>
-              ) : (
-                <button className="live-voice-end" type="button" onClick={endSession}>
-                  End session
-                </button>
-              )}
-            </div>
-            <small className="live-voice-privacy">Microphone audio streams only while this session is active. During workout tracking, only compact rep and range-of-motion estimates are shared with the coach; camera frames remain on this device.</small>
+            <footer className="live-voice-privacy"><span aria-hidden="true">◆</span> Audio streams only during this session. Camera frames stay on your device.</footer>
           </section>
     </div>
   );

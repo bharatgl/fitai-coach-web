@@ -3,7 +3,9 @@
 ForgeFit now has an optional low-latency native-audio session in addition to
 text chat and composer dictation. Its interaction model follows the useful parts
 of Vapi's web-call UX: explicit call lifecycle, visible listening/speaking state,
-live transcripts, interruption, and tool-backed application context.
+one current utterance, interruption, and tool-backed application context. The
+call surface uses a lightweight 3D-rendered human coach stage rather than chat
+bubbles or an abstract assistant orb.
 
 ## Implemented locally
 
@@ -22,6 +24,9 @@ live transcripts, interruption, and tool-backed application context.
 - The workout screen can open the same live coach while MediaPipe tracks a
   supported movement locally. Corrective and periodic rep summaries are sent
   as compact text signals; raw frames and landmarks remain in the browser.
+- The live surface presents one active speaker at a time around a 75 KB
+  transparent WebP coach asset. Listening, speaking, connecting, and reduced-
+  motion states are handled in CSS without a WebGL runtime.
 - Browser `speechSynthesis` is no longer presented as a voice-agent feature.
 
 ## Recommended architecture

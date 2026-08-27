@@ -70,6 +70,11 @@ test("shows a public landing page and protects the coaching workspace", async ()
   assert.match(liveVoice, /Reconnecting without losing context/);
   assert.match(liveVoice, /movementSignalText/);
   assert.match(liveVoice, /decodeLiveServerMessage/);
+  assert.match(liveVoice, /\/coach\/forge-coach-avatar\.webp/);
+  assert.match(liveVoice, /Your coach is here/);
+  assert.match(liveVoice, /live-coach-utterance/);
+  assert.doesNotMatch(liveVoice, /live-voice-orb|live-voice-captions/);
+  await access(new URL("../public/coach/forge-coach-avatar.webp", import.meta.url));
   assert.doesNotMatch(liveVoice, /JSON\.parse\(String\(event\.data\)\)/);
   assert.match(liveVoiceProtocol, /data instanceof Blob/);
   assert.match(liveVoiceProtocol, /await data\.text\(\)/);
