@@ -40,8 +40,11 @@ import {
 import { apiRequest } from "@/lib/api";
 import {
   collectSpeechTranscript,
+  prepareCoachSpeech,
+  selectNaturalSpeechVoice,
   speechRecognitionConstructor,
   speechRecognitionErrorMessage,
+  splitSpeechIntoChunks,
   type BrowserSpeechRecognition,
   type SpeechRecognitionConstructor,
 } from "@/lib/voice";
@@ -777,6 +780,7 @@ function Coach({
   const attachmentInputRef = useRef<HTMLInputElement>(null);
   const pendingAttachmentsRef = useRef<PendingCoachAttachment[]>([]);
   const recognitionRef = useRef<BrowserSpeechRecognition | null>(null);
+  const speechVoiceRef = useRef<SpeechSynthesisVoice | null>(null);
   const voiceBaseDraftRef = useRef("");
   const voiceSupported = useSyncExternalStore(
     subscribeToStaticBrowserCapability,
@@ -825,6 +829,19 @@ function Coach({
       if (attachment.previewUrl) URL.revokeObjectURL(attachment.previewUrl);
     });
   }, []);
+
+  useEffect(() => {
+    if (!speechOutputSupported) return;
+    const refreshSpeechVoice = () => {
+      speechVoiceRef.current = selectNaturalSpeechVoice(
+        window.speechSynthesis.getVoices(),
+        navigator.language || "en-US",
+      );
+    };
+    refreshSpeechVoice();
+    window.speechSynthesis.addEventListener("voiceschanged", refreshSpeechVoice);
+    return () => window.speechSynthesis.removeEventListener("voiceschanged", refreshSpeechVoice);
+  }, [speechOutputSupported]);
 
   useEffect(() => {
     const stopForBackground = () => {
@@ -902,11 +919,29 @@ function Coach({
 
   function speakCoachReply(content: string) {
     if (!spokenReplies || !speechOutputSupported || !content.trim()) return;
+    setVoiceError("");
     window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(content);
-    utterance.lang = navigator.language || "en-US";
-    utterance.rate = 0.95;
-    window.speechSynthesis.speak(utterance);
+    const locale = navigator.language || "en-US";
+    const voice = speechVoiceRef.current ?? selectNaturalSpeechVoice(
+      window.speechSynthesis.getVoices(),
+      locale,
+    );
+    speechVoiceRef.current = voice;
+    const spokenText = prepareCoachSpeech(content);
+    for (const chunk of splitSpeechIntoChunks(spokenText)) {
+      const utterance = new SpeechSynthesisUtterance(chunk);
+      utterance.lang = voice?.lang || locale;
+      utterance.voice = voice;
+      utterance.rate = 0.96;
+      utterance.pitch = 1;
+      utterance.volume = 1;
+      utterance.onerror = (event) => {
+        if (event.error !== "canceled" && event.error !== "interrupted") {
+          setVoiceError("Spoken reply stopped. The complete answer is still available on screen.");
+        }
+      };
+      window.speechSynthesis.speak(utterance);
+    }
   }
 
   useEffect(() => {

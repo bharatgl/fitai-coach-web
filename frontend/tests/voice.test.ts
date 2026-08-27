@@ -3,8 +3,11 @@ import test from "node:test";
 import { readFile } from "node:fs/promises";
 import {
   collectSpeechTranscript,
+  prepareCoachSpeech,
+  selectNaturalSpeechVoice,
   speechRecognitionConstructor,
   speechRecognitionErrorMessage,
+  splitSpeechIntoChunks,
   type BrowserSpeechRecognition,
   type SpeechRecognitionConstructor,
 } from "../lib/voice.js";
@@ -58,6 +61,42 @@ test("turns browser speech failures into actionable text fallbacks", () => {
   assert.match(speechRecognitionErrorMessage("no-speech"), /No speech was detected/);
   assert.match(speechRecognitionErrorMessage("audio-capture"), /No microphone/);
   assert.match(speechRecognitionErrorMessage("network"), /speech service is unavailable/);
+});
+
+test("prefers a natural voice in the requested language", () => {
+  const voices = [
+    { name: "English Compact", lang: "en-US", default: true, localService: true },
+    { name: "Google UK English Female", lang: "en-GB", localService: false },
+    { name: "Samantha Enhanced", lang: "en-US", localService: true },
+    { name: "Amelie", lang: "fr-FR", localService: true },
+  ];
+
+  assert.equal(selectNaturalSpeechVoice(voices, "en-US")?.name, "Samantha Enhanced");
+  assert.equal(selectNaturalSpeechVoice(voices, "fr-FR")?.name, "Amelie");
+});
+
+test("turns structured coach output into concise conversational speech", () => {
+  const speech = prepareCoachSpeech(`## Action plan
+- **Warm up:** Move for 5 minutes
+- Keep the final set near RPE 8
+
+## Personalized from your data
+- Advanced trainee
+- Six sessions per week`);
+
+  assert.equal(speech, "Action plan. Warm up: Move for 5 minutes. Keep the final set near R P E 8.");
+  assert.doesNotMatch(speech, /Personalized from your data|\*\*|##/);
+});
+
+test("chunks long spoken replies at readable boundaries", () => {
+  const chunks = splitSpeechIntoChunks(
+    "First sentence gives the priority. Second sentence explains the working sets. Third sentence covers the adjustment.",
+    55,
+  );
+
+  assert.ok(chunks.length > 1);
+  assert.ok(chunks.every((chunk) => chunk.length <= 55));
+  assert.equal(chunks.join(" "), "First sentence gives the priority. Second sentence explains the working sets. Third sentence covers the adjustment.");
 });
 
 test("keeps the implemented voice fallback out of the client dependency graph", async () => {
