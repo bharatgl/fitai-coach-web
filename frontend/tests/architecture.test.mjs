@@ -3,7 +3,7 @@ import { access, readFile } from "node:fs/promises";
 import test from "node:test";
 
 test("shows a public landing page and protects the coaching workspace", async () => {
-  const [page, landing, landingStyles, tokenFactory, apiClient, coach, movementTracker, liveVoice] = await Promise.all([
+  const [page, landing, landingStyles, tokenFactory, apiClient, coach, movementTracker, liveVoice, liveVoiceProtocol] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../components/LandingPage.tsx", import.meta.url), "utf8"),
     readFile(new URL("../components/LandingPage.module.css", import.meta.url), "utf8"),
@@ -12,6 +12,7 @@ test("shows a public landing page and protects the coaching workspace", async ()
     readFile(new URL("../components/FitAICoach.tsx", import.meta.url), "utf8"),
     readFile(new URL("../components/MovementTracker.tsx", import.meta.url), "utf8"),
     readFile(new URL("../components/LiveVoiceCoach.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../lib/live-voice.ts", import.meta.url), "utf8"),
   ]);
 
   assert.match(page, /await auth\(\)/);
@@ -63,6 +64,11 @@ test("shows a public landing page and protects the coaching workspace", async ()
   assert.match(liveVoice, /\/v1\/coach\/live-turns/);
   assert.match(liveVoice, /AbortSignal\.timeout\(25_000\)/);
   assert.match(liveVoice, /did not finish setup/);
+  assert.match(liveVoice, /decodeLiveServerMessage/);
+  assert.doesNotMatch(liveVoice, /JSON\.parse\(String\(event\.data\)\)/);
+  assert.match(liveVoiceProtocol, /data instanceof Blob/);
+  assert.match(liveVoiceProtocol, /await data\.text\(\)/);
+  assert.match(liveVoiceProtocol, /new TextDecoder\(\)\.decode\(data\)/);
   assert.doesNotMatch(liveVoice, /speechSynthesis|MediaRecorder|audio\/webm/);
   assert.match(coach, /className="ui-visually-hidden"/);
   assert.match(coach, /maxCoachAttachmentBytes/);

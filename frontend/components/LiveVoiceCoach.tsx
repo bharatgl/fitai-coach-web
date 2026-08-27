@@ -7,6 +7,7 @@ import type {
 } from "@fitai/contracts";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { apiRequest } from "@/lib/api";
+import { decodeLiveServerMessage } from "@/lib/live-voice";
 
 type LiveState = "idle" | "connecting" | "listening" | "speaking" | "ending" | "error";
 type ConnectionStage = "microphone" | "authorizing" | "socket" | "setup";
@@ -298,6 +299,7 @@ export function LiveVoiceCoach({
       setConnectionStage("socket");
       const endpoint = "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContentConstrained";
       const socket = new WebSocket(`${endpoint}?access_token=${encodeURIComponent(credentials.token)}`);
+      socket.binaryType = "arraybuffer";
       socketRef.current = socket;
       socket.onopen = () => {
         setConnectionStage("setup");
@@ -330,7 +332,14 @@ export function LiveVoiceCoach({
         }));
       };
       socket.onmessage = (event) => {
-        try { handleServerMessage(JSON.parse(String(event.data)) as LiveServerMessage); } catch { /* ignore malformed provider events */ }
+        void decodeLiveServerMessage<LiveServerMessage>(event.data as string | Blob | ArrayBuffer)
+          .then(handleServerMessage)
+          .catch((cause) => {
+            console.error("Unable to decode a Gemini Live response", cause);
+            setError("The live coach received an unreadable response. End the session and retry.");
+            setState("error");
+            closeResources();
+          });
       };
       socket.onerror = () => {
         setError("The live coach connection failed. Check the API model access and try again.");
