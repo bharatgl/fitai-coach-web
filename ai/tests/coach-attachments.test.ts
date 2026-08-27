@@ -78,6 +78,9 @@ test("includes exact training context and enforces personalized response detail"
   assert.match(coachSystemPrompt, /must not be requested again/);
   assert.match(coachSystemPrompt, /Never ask about dietary preference when a specific value is already supplied/);
   assert.match(coachSystemPrompt, /## Starting targets/);
+  assert.match(coachSystemPrompt, /natural Indian English/);
+  assert.match(coachSystemPrompt, /Hindi, Punjabi, or Hinglish/);
+  assert.match(coachSystemPrompt, /Avoid exaggerated spellings, forced slang, or stereotypes/);
 });
 
 test("includes only compact validated movement aggregates in coach context", () => {

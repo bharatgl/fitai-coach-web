@@ -31,7 +31,9 @@ it for a photoreal, lip-synced WebRTC avatar rather than a local cartoon model.
   provider's lip-synced WebRTC video. Voice-only mode remains available when
   the avatar provider is not configured or temporarily unavailable.
 - The coach uses the backend-configured `GEMINI_LIVE_VOICE` (`Charon` by
-  default), keeping the male character and voice presentation consistent.
+  default), keeping the male character and voice presentation consistent. Its
+  spoken instruction defaults to natural Indian English and mirrors Hindi,
+  Punjabi, or Hinglish when the member uses those languages.
 - The call layout is mobile-first and expands into a two-column coach stage at
   48rem.
 - Browser `speechSynthesis` is no longer presented as a voice-agent feature.

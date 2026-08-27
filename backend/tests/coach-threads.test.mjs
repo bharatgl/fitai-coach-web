@@ -30,4 +30,6 @@ test("persists isolated coach conversations with management routes", async () =>
   assert.match(source, /post\(\s*"\/v1\/coach\/live-avatar-token"/);
   assert.match(source, /https:\/\/api\.simli\.ai\/compose\/token/);
   assert.match(source, /"x-simli-api-key": config\.SIMLI_API_KEY/);
+  assert.match(source, /natural Indian English cadence/);
+  assert.match(source, /Hindi, Punjabi, or Hinglish/);
 });
