@@ -10,6 +10,7 @@ import type {
 import type { Conversation as ElevenLabsConversation } from "@elevenlabs/client";
 import Image from "next/image";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { LiveCoachCamera } from "@/components/LiveCoachCamera";
 import { apiRequest } from "@/lib/api";
 import {
   decodeLiveServerMessage,
@@ -126,6 +127,7 @@ export function LiveVoiceCoach({
   const [avatarReady, setAvatarReady] = useState(false);
   const [userCaption, setUserCaption] = useState("");
   const [coachCaption, setCoachCaption] = useState("");
+  const [cameraMovementSignal, setCameraMovementSignal] = useState<LiveMovementSignal | null>(null);
   const socketRef = useRef<WebSocket | null>(null);
   const elevenLabsConversationRef = useRef<ElevenLabsConversation | null>(null);
   const voiceProviderRef = useRef<"elevenlabs" | "gemini">("elevenlabs");
@@ -228,26 +230,27 @@ export function LiveVoiceCoach({
   }, [closeResources]);
 
   useEffect(() => {
+    const currentMovementSignal = cameraMovementSignal ?? movementSignal;
     if (
-      !movementSignal ||
-      movementSignal.id === lastMovementSignalIdRef.current ||
-      !shouldSendMovementSignal(movementSignal)
+      !currentMovementSignal ||
+      currentMovementSignal.id === lastMovementSignalIdRef.current ||
+      !shouldSendMovementSignal(currentMovementSignal)
     ) return;
-    lastMovementSignalIdRef.current = movementSignal.id;
-    pendingMovementSignalRef.current = movementSignal;
+    lastMovementSignalIdRef.current = currentMovementSignal.id;
+    pendingMovementSignalRef.current = currentMovementSignal;
     const elevenLabsConversation = elevenLabsConversationRef.current;
     if (elevenLabsConversation?.isOpen()) {
-      elevenLabsConversation.sendContextualUpdate(movementSignalText(movementSignal));
+      elevenLabsConversation.sendContextualUpdate(movementSignalText(currentMovementSignal));
       pendingMovementSignalRef.current = null;
       return;
     }
     const socket = socketRef.current;
     if (!setupCompleteRef.current || !socket || socket.readyState !== WebSocket.OPEN) return;
     socket.send(JSON.stringify({
-      realtimeInput: { text: movementSignalText(movementSignal) },
+      realtimeInput: { text: movementSignalText(currentMovementSignal) },
     }));
     pendingMovementSignalRef.current = null;
-  }, [movementSignal]);
+  }, [cameraMovementSignal, movementSignal]);
 
   function playAudio(data: string, mimeType?: string) {
     const avatarClient = avatarClientRef.current;
@@ -775,8 +778,8 @@ export function LiveVoiceCoach({
               <button type="button" onClick={() => { endSession(); onClose(); }} aria-label="Close live voice">×</button>
             </header>
             <div className="live-coach-stage">
-              <div className={`live-coach-presence is-${state}`} aria-hidden="true">
-                <div className="live-coach-light"><i /><i /></div>
+              <div className={`live-coach-presence is-${state}`}>
+                <div className="live-coach-light" aria-hidden="true"><i /><i /></div>
                 {/* The avatar video is muted; the live transcript is rendered beside it. */}
                 <video
                   ref={avatarVideoRef}
@@ -784,6 +787,7 @@ export function LiveVoiceCoach({
                   autoPlay
                   muted
                   playsInline
+                  aria-hidden="true"
                 />
                 {/* The provider audio is transcribed into the visible live-caption region. */}
                 {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
@@ -799,7 +803,11 @@ export function LiveVoiceCoach({
                     sizes="(max-width: 767px) 70vw, 25rem"
                   />
                 )}
-                <div className="live-coach-presence-badge">
+                <LiveCoachCamera
+                  sessionId={activeSessionId}
+                  onMovement={setCameraMovementSignal}
+                />
+                <div className="live-coach-presence-badge" aria-hidden="true">
                   <i /> {state === "speaking" ? "Speaking" : state === "listening" ? "Listening" : "Ready"}
                 </div>
               </div>
@@ -837,7 +845,7 @@ export function LiveVoiceCoach({
                 </div>
               </div>
             </div>
-            <footer className="live-voice-privacy"><span aria-hidden="true">◆</span> Audio streams only during this session. Camera frames stay on your device.</footer>
+            <footer className="live-voice-privacy"><span aria-hidden="true">◆</span> Audio streams only during this session. Workout camera frames stay on your device; only compact rep summaries are saved.</footer>
           </section>
     </div>
   );

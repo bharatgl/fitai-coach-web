@@ -109,6 +109,7 @@ export function buildCoachTrainingContext({
       totalSets: serializedSession.totalSets,
       totalVolumeKg: serializedSession.totalVolumeKg,
       exercises: serializedSession.exercises.map((exercise) => ({
+        exerciseId: exercise.exerciseId,
         name: exercise.name,
         prescribedSets: exercise.prescribedSets,
         repRange: exercise.repRange,

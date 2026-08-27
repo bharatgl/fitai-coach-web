@@ -3,7 +3,7 @@ import { access, readFile } from "node:fs/promises";
 import test from "node:test";
 
 test("shows a public landing page and protects the coaching workspace", async () => {
-  const [page, landing, landingStyles, tokenFactory, apiClient, coach, movementTracker, liveVoice, liveVoiceProtocol] = await Promise.all([
+  const [page, landing, landingStyles, tokenFactory, apiClient, coach, movementTracker, liveVoice, liveCamera, liveVoiceProtocol] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../components/LandingPage.tsx", import.meta.url), "utf8"),
     readFile(new URL("../components/LandingPage.module.css", import.meta.url), "utf8"),
@@ -12,6 +12,7 @@ test("shows a public landing page and protects the coaching workspace", async ()
     readFile(new URL("../components/FitAICoach.tsx", import.meta.url), "utf8"),
     readFile(new URL("../components/MovementTracker.tsx", import.meta.url), "utf8"),
     readFile(new URL("../components/LiveVoiceCoach.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/LiveCoachCamera.tsx", import.meta.url), "utf8"),
     readFile(new URL("../lib/live-voice.ts", import.meta.url), "utf8"),
   ]);
 
@@ -84,6 +85,7 @@ test("shows a public landing page and protects the coaching workspace", async ()
   assert.match(liveVoice, /credentials\.voiceName/);
   assert.doesNotMatch(liveVoice, /voiceName: "Kore"/);
   assert.match(liveVoice, /Your coach is here/);
+  assert.match(liveVoice, /<LiveCoachCamera/);
   assert.match(liveVoice, /live-coach-utterance/);
   assert.doesNotMatch(liveVoice, /live-voice-orb|live-voice-captions/);
   await access(new URL("../public/coach/forge-coach-avatar.webp", import.meta.url));
@@ -92,6 +94,13 @@ test("shows a public landing page and protects the coaching workspace", async ()
   assert.match(liveVoiceProtocol, /await data\.text\(\)/);
   assert.match(liveVoiceProtocol, /new TextDecoder\(\)\.decode\(data\)/);
   assert.doesNotMatch(liveVoice, /speechSynthesis|MediaRecorder|audio\/webm/);
+  assert.match(liveCamera, /navigator\.mediaDevices\.getUserMedia/);
+  assert.match(liveCamera, /facingMode: "user"/);
+  assert.match(liveCamera, /@mediapipe\/tasks-vision/);
+  assert.match(liveCamera, /\/v1\/coach\/live-snapshot/);
+  assert.match(liveCamera, /\/movement-events/);
+  assert.match(liveCamera, /Camera frames stay on your device|Private workout camera preview/);
+  assert.match(liveCamera, /Turn camera on/);
   assert.match(coach, /className="ui-visually-hidden"/);
   assert.match(coach, /maxCoachAttachmentBytes/);
   assert.match(coach, /name="dietaryPreference"/);

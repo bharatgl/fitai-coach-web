@@ -4,6 +4,7 @@ import {
   buildCoachProfileContext,
   buildCoachTrainingContext,
 } from "../src/domain/coach-context.js";
+import { createWorkoutSession } from "../src/domain/workouts.js";
 
 test("removes account identity from the profile sent to the model", () => {
   const context = buildCoachProfileContext({
@@ -101,4 +102,42 @@ test("gives the coach exact next-workout prescriptions and readiness evidence", 
     loadAdjustmentPercent: 0,
   });
   assert.equal(context.dataGaps.length, 0);
+});
+
+test("keeps active-session exercise identifiers for private movement tracking", () => {
+  const now = new Date("2026-08-27T09:00:00.000Z");
+  const activeSession = createWorkoutSession({
+    id: "workout",
+    userId: "user",
+    planId: "plan",
+    weekNumber: 1,
+    dayOffset: 0,
+    name: "Lower body",
+    focus: "Squat pattern",
+    scheduledFor: now,
+    estimatedMinutes: 45,
+    status: "planned",
+    createdAt: now,
+    exercises: [{
+      exerciseId: "bodyweight-squat",
+      name: "Bodyweight squat",
+      video: null,
+      sets: 3,
+      repRange: "10-12 reps",
+      restSeconds: 60,
+      tempo: "3-1-1",
+      coachingNotes: "Keep the knees tracking over the toes.",
+    }],
+  }, "user", now);
+
+  const context = buildCoachTrainingContext({
+    now,
+    readiness: null,
+    activePlan: null,
+    nextWorkout: null,
+    activeSession,
+    recentSessions: [],
+  });
+
+  assert.equal(context.activeSession?.exercises[0]?.exerciseId, "bodyweight-squat");
 });

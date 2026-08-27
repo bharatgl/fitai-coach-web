@@ -30,6 +30,10 @@ photoreal, lip-synced WebRTC avatar rather than a local cartoon model.
 - The workout screen can open the same live coach while MediaPipe tracks a
   supported movement locally. Corrective and periodic rep summaries are sent
   as compact text signals; raw frames and landmarks remain in the browser.
+- The live-coach stage now has an explicit workout-camera control. It requests
+  the front camera only after the member taps **Turn camera on**, shows a private
+  mobile-first preview, and runs MediaPipe rep/range-of-motion tracking when an
+  active supported workout is available. Without one, it remains preview-only.
 - `POST /v1/coach/live-avatar-token` creates a short-lived Simli session on the
   authenticated backend, keeping `SIMLI_API_KEY` out of the browser.
 - The live surface forwards ElevenLabs 16 kHz PCM callbacks to Simli and mutes
@@ -154,3 +158,6 @@ must remain read-only until separate authorization and confirmation UX exists.
    lazy WebRTC avatar client, 24 kHz-to-16 kHz PCM conversion, interruption
    buffer clearing, voice-only fallback, and mobile-first video layout. Set a
    male `SIMLI_FACE_ID` and `SIMLI_API_KEY` to activate it.
+8. Done: explicit live-session workout camera, private preview fallback,
+   on-device pose overlay, compact rep-summary persistence, and live movement
+   cues forwarded to the active voice agent.
