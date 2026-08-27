@@ -3,13 +3,14 @@ import { access, readFile } from "node:fs/promises";
 import test from "node:test";
 
 test("shows a public landing page and protects the coaching workspace", async () => {
-  const [page, landing, landingStyles, tokenFactory, apiClient, coach] = await Promise.all([
+  const [page, landing, landingStyles, tokenFactory, apiClient, coach, movementTracker] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../components/LandingPage.tsx", import.meta.url), "utf8"),
     readFile(new URL("../components/LandingPage.module.css", import.meta.url), "utf8"),
     readFile(new URL("../lib/backend-token.ts", import.meta.url), "utf8"),
     readFile(new URL("../lib/api.ts", import.meta.url), "utf8"),
     readFile(new URL("../components/FitAICoach.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/MovementTracker.tsx", import.meta.url), "utf8"),
   ]);
 
   assert.match(page, /await auth\(\)/);
@@ -29,6 +30,7 @@ test("shows a public landing page and protects the coaching workspace", async ()
   assert.match(apiClient, /\/api\/backend/);
   assert.match(coach, /\/v1\/dashboard/);
   assert.match(coach, /\/v1\/coach\/messages/);
+  assert.match(coach, /sessionId: activeSessionId/);
   assert.match(coach, /\/v1\/coach\/threads/);
   assert.doesNotMatch(coach, /New chat/);
   assert.doesNotMatch(coach, /new-chat-button/);
@@ -55,6 +57,8 @@ test("shows a public landing page and protects the coaching workspace", async ()
   assert.match(coach, /\/v1\/workout-sessions\/\$\{session\.id\}\/sets/);
   assert.match(coach, /\/v1\/workout-sessions\/\$\{session\.id\}\/finish/);
   assert.match(coach, /WorkoutRunner/);
+  assert.match(movementTracker, /visibilitychange/);
+  assert.match(movementTracker, /movementRuntimeSettings/);
 });
 
 test("contains no obsolete Cloudflare application entry points", async () => {

@@ -9,8 +9,14 @@ export type MovementProfile = {
   kind: "squat" | "lunge" | "push_up" | "hinge";
   label: string;
   joint: "knee" | "elbow" | "hip";
+  confidenceThreshold: number;
   extendedAngle: number;
   flexedAngle: number;
+  descentHysteresisDegrees: number;
+  minimumRangeOfMotionDegrees: number;
+  minimumRepDurationMs: number;
+  maximumRepDurationMs: number;
+  trackingLossResetMs: number;
   sides: [[number, number, number], [number, number, number]];
 };
 
@@ -21,45 +27,125 @@ export type RepDetection = {
   confidence: number;
 };
 
+export type MovementRuntimeSettings = {
+  captureWidth: number;
+  captureHeight: number;
+  captureFrameRate: number;
+  inferenceIntervalMs: number;
+};
+
+export function movementRuntimeSettings({
+  compactDevice = false,
+  saveData = false,
+}: {
+  compactDevice?: boolean;
+  saveData?: boolean;
+} = {}): MovementRuntimeSettings {
+  if (saveData) {
+    return {
+      captureWidth: 480,
+      captureHeight: 360,
+      captureFrameRate: 10,
+      inferenceIntervalMs: 160,
+    };
+  }
+  if (compactDevice) {
+    return {
+      captureWidth: 640,
+      captureHeight: 480,
+      captureFrameRate: 12,
+      inferenceIntervalMs: 125,
+    };
+  }
+  return {
+    captureWidth: 960,
+    captureHeight: 540,
+    captureFrameRate: 15,
+    inferenceIntervalMs: 100,
+  };
+}
+
 const PROFILES: Record<MovementProfile["kind"], MovementProfile> = {
   squat: {
     kind: "squat",
     label: "Squat",
     joint: "knee",
+    confidenceThreshold: 0.65,
     extendedAngle: 158,
     flexedAngle: 112,
+    descentHysteresisDegrees: 8,
+    minimumRangeOfMotionDegrees: 40,
+    minimumRepDurationMs: 400,
+    maximumRepDurationMs: 20_000,
+    trackingLossResetMs: 1_500,
     sides: [[23, 25, 27], [24, 26, 28]],
   },
   lunge: {
     kind: "lunge",
     label: "Lunge",
     joint: "knee",
+    confidenceThreshold: 0.65,
     extendedAngle: 158,
     flexedAngle: 112,
+    descentHysteresisDegrees: 8,
+    minimumRangeOfMotionDegrees: 40,
+    minimumRepDurationMs: 400,
+    maximumRepDurationMs: 20_000,
+    trackingLossResetMs: 1_500,
     sides: [[23, 25, 27], [24, 26, 28]],
   },
   push_up: {
     kind: "push_up",
     label: "Push-up",
     joint: "elbow",
+    confidenceThreshold: 0.65,
     extendedAngle: 155,
     flexedAngle: 100,
+    descentHysteresisDegrees: 8,
+    minimumRangeOfMotionDegrees: 45,
+    minimumRepDurationMs: 400,
+    maximumRepDurationMs: 20_000,
+    trackingLossResetMs: 1_500,
     sides: [[11, 13, 15], [12, 14, 16]],
   },
   hinge: {
     kind: "hinge",
     label: "Hip hinge",
     joint: "hip",
+    confidenceThreshold: 0.65,
     extendedAngle: 158,
     flexedAngle: 115,
+    descentHysteresisDegrees: 8,
+    minimumRangeOfMotionDegrees: 35,
+    minimumRepDurationMs: 400,
+    maximumRepDurationMs: 20_000,
+    trackingLossResetMs: 1_500,
     sides: [[11, 23, 25], [12, 24, 26]],
   },
 };
 
+const EXERCISE_PROFILES: Record<string, MovementProfile["kind"]> = {
+  "bodyweight-squat": "squat",
+  "goblet-squat": "squat",
+  "barbell-back-squat": "squat",
+  "reverse-lunge": "lunge",
+  "dumbbell-split-squat": "lunge",
+  "wall-push-up": "push_up",
+  "push-up": "push_up",
+  "bench-incline-push-up": "push_up",
+  "glute-bridge": "hinge",
+  "dumbbell-rdl": "hinge",
+  "barbell-deadlift": "hinge",
+};
+
 export function movementProfileForExercise(exerciseId: string, name: string) {
+  const reviewedKind = EXERCISE_PROFILES[exerciseId.toLowerCase()];
+  if (reviewedKind) return PROFILES[reviewedKind];
+
+  // Preserve support for older stored plans whose IDs predate the reviewed catalog.
   const value = `${exerciseId} ${name}`.toLowerCase();
-  if (value.includes("squat")) return PROFILES.squat;
   if (value.includes("lunge") || value.includes("split-squat")) return PROFILES.lunge;
+  if (value.includes("squat")) return PROFILES.squat;
   if (value.includes("push-up") || value.includes("pushup")) return PROFILES.push_up;
   if (
     value.includes("deadlift") ||
@@ -104,7 +190,7 @@ export function measureMovement(profile: MovementProfile, landmarks: PosePoint[]
 
 export function createRepDetector(
   profile: MovementProfile,
-  confidenceThreshold = 0.65,
+  confidenceThreshold = profile.confidenceThreshold,
 ) {
   type Phase = "seeking_extension" | "extended" | "descending" | "flexed";
   let phase: Phase = "seeking_extension";
@@ -127,7 +213,10 @@ export function createRepDetector(
     ingest(landmarks: PosePoint[], timestampMs: number): RepDetection | null {
       const measurement = measureMovement(profile, landmarks);
       if (!measurement || measurement.confidence < confidenceThreshold) {
-        if (lastReliableAt > 0 && timestampMs - lastReliableAt > 1_500) resetCycle();
+        if (
+          lastReliableAt > 0 &&
+          timestampMs - lastReliableAt > profile.trackingLossResetMs
+        ) resetCycle();
         return null;
       }
       lastReliableAt = timestampMs;
@@ -143,7 +232,7 @@ export function createRepDetector(
 
       if (phase === "extended") {
         peakAngle = Math.max(peakAngle, angle);
-        if (angle < profile.extendedAngle - 8) {
+        if (angle < profile.extendedAngle - profile.descentHysteresisDegrees) {
           phase = "descending";
           repStartedAt = timestampMs;
           minimumAngle = angle;
@@ -165,7 +254,10 @@ export function createRepDetector(
       const durationMs = Math.round(timestampMs - repStartedAt);
       const rangeOfMotionDegrees = Number((peakAngle - minimumAngle).toFixed(1));
       const repConfidence = Number(minimumConfidence.toFixed(3));
-      const valid = durationMs >= 250 && durationMs <= 20_000 && rangeOfMotionDegrees >= 5;
+      const valid =
+        durationMs >= profile.minimumRepDurationMs &&
+        durationMs <= profile.maximumRepDurationMs &&
+        rangeOfMotionDegrees >= profile.minimumRangeOfMotionDegrees;
       resetCycle("extended");
       if (!valid) return null;
       repNumber += 1;

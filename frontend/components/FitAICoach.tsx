@@ -28,7 +28,7 @@ import {
 import Link from "next/link";
 import Image from "next/image";
 import dynamic from "next/dynamic";
-import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider, useQuery, useQueryClient } from "@tanstack/react-query";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { apiRequest } from "@/lib/api";
 import { BrandLockup } from "@/components/BrandLockup";
@@ -169,6 +169,7 @@ export default function FitAICoach({ user }: { user: CurrentUser }) {
 function FitAIWorkspace({ user }: { user: CurrentUser }) {
   const [view, setView] = useState<View>("today");
   const [activeSessionOverride, setActiveSession] = useState<WorkoutSession | null>();
+  const queryClient = useQueryClient();
   const dashboardQuery = useQuery({
     queryKey: ["dashboard", user.id],
     queryFn: () => apiRequest<DashboardResponse>("/v1/dashboard"),
@@ -294,14 +295,17 @@ function FitAIWorkspace({ user }: { user: CurrentUser }) {
             onStart={startWorkout}
             onResume={() => setView("workout")}
             onReadinessSaved={(checkIn) => {
-              setDashboard((current) => current
+              queryClient.setQueryData<DashboardResponse>(["dashboard", user.id], (current) => current
                 ? { ...current, latestReadiness: checkIn }
                 : current);
             }}
           />
         )}
         {view === "coach" && (
-          <Coach initialMessages={dashboard.recentMessages} />
+          <Coach
+            initialMessages={dashboard.recentMessages}
+            activeSessionId={activeSession?.id ?? null}
+          />
         )}
         {view === "plan" && (
           <Plan dashboard={dashboard} refresh={loadDashboard} onStart={startWorkout} />
@@ -693,7 +697,13 @@ function Today({
   );
 }
 
-function Coach({ initialMessages }: { initialMessages: CoachMessage[] }) {
+function Coach({
+  initialMessages,
+  activeSessionId,
+}: {
+  initialMessages: CoachMessage[];
+  activeSessionId: string | null;
+}) {
   const [activeThread, setActiveThread] = useState<CoachThread | null>(null);
   const [messages, setMessages] = useState(initialMessages);
   const [draft, setDraft] = useState("");
@@ -851,6 +861,7 @@ function Coach({ initialMessages }: { initialMessages: CoachMessage[] }) {
           message,
           attachmentIds: attachments.map((attachment) => attachment.id),
           threadId: activeThread?.id,
+          sessionId: activeSessionId ?? undefined,
         }),
       });
       setMessages((current) => [

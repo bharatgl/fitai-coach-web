@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { MovementEventSummary } from "@fitai/contracts";
-import { prepareMovementEvents } from "../src/domain/movement-events.js";
+import {
+  prepareMovementEvents,
+  summarizeMovementEventsForCoach,
+} from "../src/domain/movement-events.js";
 import { createWorkoutSession } from "../src/domain/workouts.js";
 import type { PlannedWorkoutDocument } from "../src/domain/plans.js";
 
@@ -78,4 +81,40 @@ test("rejects tracking while a workout is paused", () => {
     () => prepareMovementEvents(session, "user-1", [event()]),
     /Resume the workout/,
   );
+});
+
+test("builds compact coach context from validated events only", () => {
+  const session = createWorkoutSession(workout, "user-1", new Date("2026-08-24T10:00:00.000Z"));
+  const prepared = prepareMovementEvents(
+    session,
+    "user-1",
+    [
+      event(),
+      event({
+        clientEventId: "7f231755-56d0-48e4-a5e1-5542e35fa457",
+        repNumber: 2,
+        durationMs: 2_000,
+        rangeOfMotionDegrees: 68,
+        confidence: 0.89,
+        occurredAt: "2026-08-24T10:00:05.000Z",
+      }),
+    ],
+    new Date("2026-08-24T10:00:06.000Z"),
+  );
+  const summary = summarizeMovementEventsForCoach(session, [
+    ...prepared,
+    { ...prepared[0]!, userId: "another-user" },
+  ]);
+
+  assert.equal(summary?.capturedReps, 2);
+  assert.deepEqual(summary?.exercises[0], {
+    exerciseId: "bodyweight-squat",
+    exerciseName: "Bodyweight Squat",
+    capturedReps: 2,
+    averageDurationMs: 1_900,
+    averageRangeOfMotionDegrees: 70,
+    averageConfidence: 0.9,
+    lastCapturedAt: "2026-08-24T10:00:05.000Z",
+  });
+  assert.equal("landmarks" in (summary ?? {}), false);
 });

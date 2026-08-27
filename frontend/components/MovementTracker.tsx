@@ -13,11 +13,11 @@ import {
   createRepDetector,
   measureMovement,
   movementProfileForExercise,
+  movementRuntimeSettings,
 } from "@/lib/movement-tracking";
 
 const WASM_PATH = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/wasm";
 const MODEL_PATH = "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task";
-const MIN_CONFIDENCE = 0.65;
 
 type TrackerStatus = "off" | "starting" | "tracking" | "error";
 
@@ -114,7 +114,12 @@ export function MovementTracker({ session }: { session: WorkoutSession }) {
 
   useEffect(() => {
     disposedRef.current = false;
+    const stopWhenHidden = () => {
+      if (document.visibilityState === "hidden" && streamRef.current) stopCamera();
+    };
+    document.addEventListener("visibilitychange", stopWhenHidden);
     return () => {
+      document.removeEventListener("visibilitychange", stopWhenHidden);
       disposedRef.current = true;
       if (flushTimerRef.current !== null) clearTimeout(flushTimerRef.current);
       flushTimerRef.current = null;
@@ -136,9 +141,27 @@ export function MovementTracker({ session }: { session: WorkoutSession }) {
       if (!navigator.mediaDevices?.getUserMedia) {
         throw new Error("Camera access is not supported by this browser");
       }
+      const compactDevice = window.matchMedia(
+        "(max-width: 800px), (pointer: coarse)",
+      ).matches;
+      const connection = (navigator as Navigator & {
+        connection?: { saveData?: boolean };
+      }).connection;
+      const runtime = movementRuntimeSettings({
+        compactDevice,
+        saveData: connection?.saveData === true,
+      });
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: false,
-        video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } },
+        video: {
+          facingMode: "user",
+          width: { ideal: runtime.captureWidth },
+          height: { ideal: runtime.captureHeight },
+          frameRate: {
+            ideal: runtime.captureFrameRate,
+            max: runtime.captureFrameRate,
+          },
+        },
       });
       if (runId !== runIdRef.current) {
         stream.getTracks().forEach((track) => track.stop());
@@ -159,9 +182,9 @@ export function MovementTracker({ session }: { session: WorkoutSession }) {
         baseOptions: { modelAssetPath: MODEL_PATH },
         runningMode: "VIDEO",
         numPoses: 1,
-        minPoseDetectionConfidence: MIN_CONFIDENCE,
-        minPosePresenceConfidence: MIN_CONFIDENCE,
-        minTrackingConfidence: MIN_CONFIDENCE,
+        minPoseDetectionConfidence: selected.profile.confidenceThreshold,
+        minPosePresenceConfidence: selected.profile.confidenceThreshold,
+        minTrackingConfidence: selected.profile.confidenceThreshold,
         outputSegmentationMasks: false,
       });
       if (runId !== runIdRef.current) {
@@ -169,7 +192,7 @@ export function MovementTracker({ session }: { session: WorkoutSession }) {
         return;
       }
       landmarkerRef.current = landmarker;
-      const detector = createRepDetector(selected.profile, MIN_CONFIDENCE);
+      const detector = createRepDetector(selected.profile);
       const drawing = new DrawingUtils(canvas.getContext("2d")!);
       let lastInferenceAt = 0;
       let lastVideoTime = -1;
@@ -187,7 +210,7 @@ export function MovementTracker({ session }: { session: WorkoutSession }) {
         if (
           video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA ||
           video.currentTime === lastVideoTime ||
-          timestamp - lastInferenceAt < 100
+          timestamp - lastInferenceAt < runtime.inferenceIntervalMs
         ) return;
         lastInferenceAt = timestamp;
         lastVideoTime = video.currentTime;
@@ -211,7 +234,10 @@ export function MovementTracker({ session }: { session: WorkoutSession }) {
         drawing.drawLandmarks(landmarks, { color: "#ffffff", radius: 2 });
 
         const measurement = measureMovement(selected.profile, landmarks);
-        if (!measurement || measurement.confidence < MIN_CONFIDENCE) {
+        if (
+          !measurement ||
+          measurement.confidence < selected.profile.confidenceThreshold
+        ) {
           setFeedback("Tracking confidence is low — keep the working joints visible.");
           return;
         }
@@ -243,7 +269,16 @@ export function MovementTracker({ session }: { session: WorkoutSession }) {
       if (runId !== runIdRef.current) return;
       stopCamera(false);
       setStatus("error");
-      setFeedback(cause instanceof Error ? cause.message : "Camera tracking could not start");
+      const permissionDenied =
+        cause instanceof DOMException &&
+        (cause.name === "NotAllowedError" || cause.name === "SecurityError");
+      setFeedback(
+        permissionDenied
+          ? "Camera permission was denied. Allow access in browser settings or keep logging sets manually."
+          : cause instanceof Error
+            ? cause.message
+            : "Camera tracking could not start",
+      );
     }
   }
 

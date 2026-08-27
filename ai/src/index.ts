@@ -2,6 +2,7 @@ export {
   buildCoachContents,
   generateCoachResponse,
   type CoachHistoryItem,
+  type CoachMovementContext,
   type GeneratedCoachResponse,
   type GenerateCoachResponseInput,
 } from "./coach.js";

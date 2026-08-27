@@ -11,7 +11,7 @@ import type {
   UploadCoachAttachmentResponse,
 } from "@fitai/contracts";
 import type { FastifyInstance } from "fastify";
-import type { Db } from "mongodb";
+import type { Db, Filter } from "mongodb";
 import { Binary, MongoServerError } from "mongodb";
 import { z } from "zod";
 import { authenticate, type AuthenticatedUser } from "../auth.js";
@@ -21,6 +21,10 @@ import {
   buildCoachProfileContext,
   buildCoachTrainingContext,
 } from "../domain/coach-context.js";
+import {
+  summarizeMovementEventsForCoach,
+  type MovementEventDocument,
+} from "../domain/movement-events.js";
 import type { PlannedWorkoutDocument, WorkoutPlanDocument } from "../domain/plans.js";
 import type { ReadinessDocument } from "../domain/readiness.js";
 import type { WorkoutSessionDocument } from "../domain/workouts.js";
@@ -305,7 +309,15 @@ async function generateReply(
 ) {
   const config = getConfig();
   const now = new Date();
-  const [profile, history, readiness, activePlan, activeSession, recentSessions] = await Promise.all([
+  const [
+    profile,
+    history,
+    readiness,
+    activePlan,
+    activeSession,
+    recentSessions,
+    movementContext,
+  ] = await Promise.all([
     database
       .collection("profiles")
       .findOne({ userId: user.id }, { projection: { _id: 0 } }),
@@ -344,6 +356,7 @@ async function generateReply(
       .sort({ completedAt: -1 })
       .limit(5)
       .toArray(),
+    loadCoachMovementContext(database, user.id, sessionId),
   ]);
   const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
   const nextWorkout = activePlan
@@ -370,6 +383,7 @@ async function generateReply(
       recentSessions,
       now,
     }),
+    movementContext,
     history: history.reverse().map((item) => ({
       role: item.role,
       content: [
@@ -385,6 +399,31 @@ async function generateReply(
       dataBase64: Buffer.from(attachment.data.buffer).toString("base64"),
     })),
   });
+}
+
+async function loadCoachMovementContext(
+  database: Db,
+  userId: string,
+  requestedSessionId?: string | null,
+) {
+  const sessionFilter: Filter<WorkoutSessionDocument> = requestedSessionId
+    ? { id: requestedSessionId, userId }
+    : { userId, status: { $in: ["active", "paused"] } };
+  const session = await database
+    .collection<WorkoutSessionDocument>("workoutSessions")
+    .findOne(sessionFilter, { projection: { _id: 0 }, sort: { updatedAt: -1 } });
+  if (!session) return null;
+
+  const events = await database
+    .collection<MovementEventDocument>("movementEvents")
+    .find(
+      { userId, sessionId: session.id },
+      { projection: { _id: 0 } },
+    )
+    .sort({ occurredAt: -1 })
+    .limit(500)
+    .toArray();
+  return summarizeMovementEventsForCoach(session, events);
 }
 
 async function requirePendingAttachments(
