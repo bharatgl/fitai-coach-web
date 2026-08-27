@@ -35,6 +35,7 @@ test("shows a public landing page and protects the coaching workspace", async ()
   assert.doesNotMatch(coach, /thread-menu-trigger/);
   assert.match(coach, /Your profile and conversation stay in context/);
   assert.match(coach, /className="coach-suggestions"/);
+  assert.match(coach, /messages\.length === 0 && !loadingThreads/);
   assert.match(coach, /Save and resend/);
   assert.match(coach, /Attach images or PDF/);
   assert.match(coach, /\/v1\/coach\/attachments/);

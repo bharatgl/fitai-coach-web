@@ -915,13 +915,15 @@ function Coach({ initialMessages }: { initialMessages: CoachMessage[] }) {
               </article>
             ))}
           </div>
-          <div className="coach-suggestions" aria-label="Suggested coach prompts">
-            {templates.map((template) => (
-              <button type="button" key={template.title} onClick={() => setDraft(template.prompt)}>
-                {template.title}
-              </button>
-            ))}
-          </div>
+          {messages.length === 0 && !loadingThreads && (
+            <div className="coach-suggestions" aria-label="Suggested coach prompts">
+              {templates.map((template) => (
+                <button type="button" key={template.title} onClick={() => setDraft(template.prompt)}>
+                  {template.title}
+                </button>
+              ))}
+            </div>
+          )}
           <form className="chat-composer" onSubmit={send}>
             {pendingAttachments.length > 0 && (
               <div className="composer-attachments" aria-label="Selected attachments">

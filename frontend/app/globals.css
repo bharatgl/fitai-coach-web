@@ -1033,7 +1033,9 @@ select option{background:#111426;color:#f7f8ff}
 .coach-loading{color:#929cb3;font-size:.75rem;margin:auto}
 .coach-active .coach-workspace .messages{
   background:transparent;
+  overscroll-behavior:contain;
   padding:2rem clamp(1rem,4vw,3rem);
+  scroll-padding-bottom:1rem;
 }
 .coach-active .messages>article{margin-inline:auto;max-width:52rem;width:100%}
 .coach-active .messages>article .message-body{max-width:min(78%,42rem)}
