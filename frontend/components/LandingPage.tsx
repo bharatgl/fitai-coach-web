@@ -146,6 +146,7 @@ export default function LandingPage() {
         <nav className={styles.nav} aria-label="Landing page navigation">
           <a href="#how-it-works">How it works</a>
           <a href="#features">Product</a>
+          <Link href="/exercises">Exercises</Link>
           <a href="#privacy">Privacy</a>
         </nav>
         <div className={styles.headerActions}>
@@ -215,8 +216,8 @@ export default function LandingPage() {
 
       <footer className={styles.footer}>
         <BrandLockup />
-        <div><a href="#how-it-works">How it works</a><a href="#features">Product</a><a href="#privacy">Privacy</a><Link href="/signin">Sign in</Link></div>
-        <small>© {new Date().getFullYear()} forgefit.space · Fitness guidance, not medical care.</small>
+        <div><a href="#how-it-works">How it works</a><a href="#features">Product</a><Link href="/exercises">Exercises</Link><a href="#privacy">Privacy</a><Link href="/signin">Sign in</Link></div>
+        <small>© {new Date().getFullYear()} forgefit.space · Fitness guidance, not medical care. Exercise data by <a href="https://repdb.co" target="_blank" rel="noreferrer">RepDB</a>.</small>
       </footer>
     </main>
   );

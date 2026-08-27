@@ -1,0 +1,23 @@
+.page {
+  background:
+    radial-gradient(circle at 10% 4%, rgb(91 230 210 / 12%), transparent 28rem),
+    radial-gradient(circle at 90% 18%, rgb(200 255 75 / 9%), transparent 30rem),
+    #070812;
+  min-height: 100vh;
+}
+
+.header {
+  align-items: center;
+  border-bottom: 1px solid rgb(255 255 255 / 9%);
+  display: flex;
+  justify-content: space-between;
+  margin: auto;
+  min-height: 5rem;
+  padding: 0 clamp(1rem, 4vw, 3rem);
+}
+
+.header>a { color: #fff; text-decoration: none; }
+.header nav { align-items: center; display: flex; gap: 1rem; }
+.header nav a { color: #a0a9bd; font-size: .68rem; font-weight: 850; text-decoration: none; }
+.header nav a:hover { color: #c8ff4b; }
+.header .cta { background: #c8ff4b; border-radius: .7rem; color: #0b100f; padding: .7rem .9rem; }

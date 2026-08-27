@@ -44,7 +44,7 @@
   .mobile-header.hidden{align-items:center;background:rgb(255 255 255 / 94%);border-bottom:1px solid var(--line);display:flex;height:4rem;justify-content:space-between;padding:0 1rem;position:sticky;top:0;z-index:10;backdrop-filter:blur(14px)}
   .mobile-header .brand{padding:0}
   .mobile-avatar{align-items:center;background:#efd3bc;border-radius:50%;color:#704a37;display:flex;font-size:.6875rem;font-weight:800;height:2rem;justify-content:center;width:2rem}
-  .mobile-nav.hidden{background:rgb(255 255 255 / 96%);border-top:1px solid var(--line);bottom:0;display:grid;grid-template-columns:repeat(4,1fr);left:0;padding:.4rem max(.5rem,env(safe-area-inset-right)) max(.4rem,env(safe-area-inset-bottom)) max(.5rem,env(safe-area-inset-left));position:fixed;right:0;z-index:20;backdrop-filter:blur(16px)}
+  .mobile-nav.hidden{background:rgb(255 255 255 / 96%);border-top:1px solid var(--line);bottom:0;display:grid;grid-template-columns:repeat(5,1fr);left:0;padding:.4rem max(.5rem,env(safe-area-inset-right)) max(.4rem,env(safe-area-inset-bottom)) max(.5rem,env(safe-area-inset-left));position:fixed;right:0;z-index:20;backdrop-filter:blur(16px)}
   .mobile-nav button{align-items:center;background:transparent;border:0;border-radius:.75rem;color:#65787a;display:flex;flex-direction:column;font-size:1.1rem;gap:.18rem;justify-content:center;min-height:3.25rem;padding:.35rem}
   .mobile-nav button small{font-size:.625rem;font-weight:750}
   .mobile-nav button.active{background:var(--ui-color-brand-soft);color:#08756c}

@@ -27,3 +27,16 @@ SOFTWARE.
 The source repository's images and GIFs are owned by Gym Visual and are not
 covered by the MIT License. ForgeFit intentionally does not import, distribute,
 or serve those media files.
+
+## RepDB free tier
+
+ForgeFit uses exercise data and 512px WebP illustrations from the
+[RepDB free exercise dataset](https://github.com/RepDB/exercise-dataset),
+copyright (c) 2026 Sergei Argutin (RepDB), under the RepDB Free Tier License
+v1.0. The assets are used inside the ForgeFit application with visible
+attribution and are not offered as a standalone dataset or API.
+
+The licensed assets may not be republished as a dataset or used as input,
+reference, conditioning material, or training data for generative AI. The full
+license snapshot is distributed alongside the in-app assets at
+`frontend/public/exercises/repdb/LICENSE-DATA.md`.

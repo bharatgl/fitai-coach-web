@@ -300,7 +300,7 @@
 .lightCta { background: linear-gradient(180deg, #d2ff58, #b9ed38); box-shadow:0 14px 34px rgb(151 255 86 / 20%); color: #0b100f !important; min-height: 3.35rem; padding: 0 1.45rem; white-space:nowrap; }
 
 .footer { align-items: center; border-top: 1px solid var(--landing-line); display: grid; gap: 1rem 2rem; grid-template-columns: auto 1fr auto; margin: auto; max-width: 84rem; padding: 2.5rem clamp(1.25rem, 4vw, 2rem) 3rem; }
-.footer { color: #fff; }.footer>div { display: flex; flex-wrap: wrap; gap: 1.4rem; margin-left:auto; }.footer>div a { color: #a4adc0; font-size: .63rem; font-weight: 800; }.footer>div a:hover { color: var(--landing-lime); }.footer>small { border-top: 1px solid var(--landing-line); color: #747e94; font-size: .54rem; grid-column: 1 / -1; padding-top: 1.25rem; }
+.footer { color: #fff; }.footer>div { display: flex; flex-wrap: wrap; gap: 1.4rem; margin-left:auto; }.footer>div a { color: #a4adc0; font-size: .63rem; font-weight: 800; }.footer>div a:hover { color: var(--landing-lime); }.footer>small { border-top: 1px solid var(--landing-line); color: #747e94; font-size: .54rem; grid-column: 1 / -1; padding-top: 1.25rem; }.footer>small a{color:var(--landing-lime);font-weight:800;text-decoration:none}
 
 @media (max-width: 72rem) {
   .hero { grid-template-columns: minmax(0, .8fr) minmax(31rem, 1.2fr); }

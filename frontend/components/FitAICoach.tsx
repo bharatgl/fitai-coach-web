@@ -67,9 +67,20 @@ const LiveVoiceCoach = dynamic(
   { ssr: false },
 );
 
-type View = "today" | "coach" | "plan" | "history" | "profile" | "workout";
+const ExerciseLibrary = dynamic(
+  () => import("@/components/ExerciseLibrary").then((module) => module.ExerciseLibrary),
+  {
+    loading: () => (
+      <div className="wrap">
+        <Card padding="lg">Loading the illustrated exercise library…</Card>
+      </div>
+    ),
+  },
+);
+
+type View = "today" | "coach" | "plan" | "library" | "history" | "profile" | "workout";
 type CurrentUser = { id: string; name: string; email: string };
-type NavIconName = "today" | "coach" | "plan" | "history";
+type NavIconName = "today" | "coach" | "plan" | "library" | "history";
 type PendingCoachAttachment = {
   key: string;
   file: File;
@@ -189,6 +200,7 @@ function NavIcon({ name }: { name: NavIconName }) {
     today: <path d="m13 2-8 11h6l-1 9 9-12h-6z" />,
     coach: <><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z" /><path d="M8 9h8M8 13h5" /></>,
     plan: <><rect x="4" y="3" width="16" height="18" rx="2" /><path d="M8 8h8M8 12h8M8 16h5" /></>,
+    library: <><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H11v16H6.5A2.5 2.5 0 0 0 4 21.5Z" /><path d="M20 5.5A2.5 2.5 0 0 0 17.5 3H13v16h4.5a2.5 2.5 0 0 1 2.5 2.5Z" /></>,
     history: <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>,
   };
   return (
@@ -267,6 +279,7 @@ function FitAIWorkspace({ user }: { user: CurrentUser }) {
     ["today", "today", "Today"],
     ["coach", "coach", "Coach"],
     ["plan", "plan", "Plan"],
+    ["library", "library", "Library"],
     ["history", "history", "History"],
   ];
 
@@ -367,6 +380,7 @@ function FitAIWorkspace({ user }: { user: CurrentUser }) {
           />
         )}
         {view === "history" && <History dashboard={dashboard} />}
+        {view === "library" && <ExerciseLibrary embedded />}
         {view === "profile" && (
           <ProfileSettings
             profile={dashboard.profile}

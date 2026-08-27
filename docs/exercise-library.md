@@ -9,6 +9,13 @@ The source images and GIFs are owned by Gym Visual and are not included. See
 [`THIRD_PARTY_NOTICES.md`](../THIRD_PARTY_NOTICES.md) for attribution and the
 license notice.
 
+The product also vendors the complete 250-exercise RepDB free-tier snapshot and
+459 referenced 512px WebP illustrations for the public and signed-in exercise
+browser. These assets are licensed for commercial in-app use with visible
+attribution. ForgeFit does not expose RepDB records through its exercise API,
+redistribute them as a standalone dataset, include paid-tier preview
+animations, or use the illustrations as generative-AI references.
+
 ## API
 
 - `GET /v1/exercises` accepts `query`, `bodyPart`, `equipment`, `target`,
@@ -37,3 +44,17 @@ The imported library is reference data, not the AI planning allowlist. Promote
 movements into `backend/src/domain/exercise-catalog.ts` only after reviewing
 their safety guidance, experience level, equipment compatibility, and demo
 rights.
+
+## Refreshing RepDB visuals
+
+After reviewing the current RepDB license, run:
+
+```sh
+npm run exercises:import:repdb -- \
+  --source /absolute/path/to/RepDB/exercise-dataset \
+  --source-commit <reviewed-commit-sha>
+```
+
+The importer accepts only the 250-entry free tier, copies only flat WebP images
+referenced by those records, excludes premium preview animations, and preserves
+the RepDB license and attribution files alongside the in-app assets.
