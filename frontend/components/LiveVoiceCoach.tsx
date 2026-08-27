@@ -7,14 +7,20 @@ import type {
 } from "@fitai/contracts";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { apiRequest } from "@/lib/api";
-import { decodeLiveServerMessage } from "@/lib/live-voice";
+import {
+  decodeLiveServerMessage,
+  type LiveMovementSignal,
+  movementSignalText,
+  shouldSendMovementSignal,
+} from "@/lib/live-voice";
 
 type LiveState = "idle" | "connecting" | "listening" | "speaking" | "ending" | "error";
-type ConnectionStage = "microphone" | "authorizing" | "socket" | "setup";
+type ConnectionStage = "microphone" | "authorizing" | "socket" | "setup" | "reconnecting";
 
 type LiveVoiceCoachProps = {
   threadId: string;
   activeSessionId: string | null;
+  movementSignal?: LiveMovementSignal | null;
   onThreadUpdate: (detail: CoachThreadDetail) => void;
   onClose: () => void;
 };
@@ -31,6 +37,7 @@ type LiveServerMessage = {
   };
   toolCall?: { functionCalls?: FunctionCall[] };
   goAway?: { timeLeft?: string };
+  sessionResumptionUpdate?: { resumable?: boolean; newHandle?: string };
 };
 
 function bytesToBase64(buffer: ArrayBuffer) {
@@ -65,6 +72,7 @@ function sessionLabel(state: LiveState, stage: ConnectionStage) {
   if (state === "connecting" && stage === "authorizing") return "Authorizing your live coach…";
   if (state === "connecting" && stage === "socket") return "Opening the live audio channel…";
   if (state === "connecting" && stage === "setup") return "Preparing your personalized coach…";
+  if (state === "connecting" && stage === "reconnecting") return "Reconnecting without losing context…";
   if (state === "listening") return "Listening — speak naturally";
   if (state === "speaking") return "Coach is speaking — interrupt anytime";
   if (state === "ending") return "Ending session…";
@@ -75,6 +83,7 @@ function sessionLabel(state: LiveState, stage: ConnectionStage) {
 export function LiveVoiceCoach({
   threadId,
   activeSessionId,
+  movementSignal = null,
   onThreadUpdate,
   onClose,
 }: LiveVoiceCoachProps) {
@@ -94,12 +103,23 @@ export function LiveVoiceCoach({
   const coachTurnRef = useRef("");
   const mountedRef = useRef(true);
   const setupCompleteRef = useRef(false);
-  const intentionalCloseRef = useRef(false);
+  const shouldRunRef = useRef(false);
   const setupTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reconnectAttemptRef = useRef(0);
+  const connectedAtRef = useRef(0);
+  const resumptionHandleRef = useRef<string | null>(null);
+  const pendingMovementSignalRef = useRef<LiveMovementSignal | null>(null);
+  const lastMovementSignalIdRef = useRef("");
 
   const clearSetupTimer = useCallback(() => {
     if (setupTimerRef.current) clearTimeout(setupTimerRef.current);
     setupTimerRef.current = null;
+  }, []);
+
+  const clearReconnectTimer = useCallback(() => {
+    if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
+    reconnectTimerRef.current = null;
   }, []);
 
   const clearPlayback = useCallback(() => {
@@ -111,8 +131,9 @@ export function LiveVoiceCoach({
   }, []);
 
   const closeResources = useCallback(() => {
+    shouldRunRef.current = false;
     clearSetupTimer();
-    intentionalCloseRef.current = true;
+    clearReconnectTimer();
     captureNodeRef.current?.disconnect();
     captureSourceRef.current?.disconnect();
     captureNodeRef.current = null;
@@ -122,15 +143,24 @@ export function LiveVoiceCoach({
     clearPlayback();
     const socket = socketRef.current;
     socketRef.current = null;
-    if (socket && socket.readyState < WebSocket.CLOSING) socket.close(1000, "Session ended");
+    if (socket) {
+      socket.onopen = null;
+      socket.onmessage = null;
+      socket.onerror = null;
+      socket.onclose = null;
+      if (socket.readyState < WebSocket.CLOSING) socket.close(1000, "Session ended");
+    }
     const audioContext = audioContextRef.current;
     audioContextRef.current = null;
     if (audioContext && audioContext.state !== "closed") void audioContext.close();
-  }, [clearPlayback, clearSetupTimer]);
+  }, [clearPlayback, clearReconnectTimer, clearSetupTimer]);
 
-  useEffect(() => () => {
-    mountedRef.current = false;
-    closeResources();
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      closeResources();
+    };
   }, [closeResources]);
 
   useEffect(() => {
@@ -146,6 +176,22 @@ export function LiveVoiceCoach({
       window.removeEventListener("pagehide", stopWhenHidden);
     };
   }, [closeResources]);
+
+  useEffect(() => {
+    if (
+      !movementSignal ||
+      movementSignal.id === lastMovementSignalIdRef.current ||
+      !shouldSendMovementSignal(movementSignal)
+    ) return;
+    lastMovementSignalIdRef.current = movementSignal.id;
+    pendingMovementSignalRef.current = movementSignal;
+    const socket = socketRef.current;
+    if (!setupCompleteRef.current || !socket || socket.readyState !== WebSocket.OPEN) return;
+    socket.send(JSON.stringify({
+      realtimeInput: { text: movementSignalText(movementSignal) },
+    }));
+    pendingMovementSignalRef.current = null;
+  }, [movementSignal]);
 
   function playAudio(data: string, mimeType?: string) {
     const audioContext = audioContextRef.current;
@@ -206,10 +252,39 @@ export function LiveVoiceCoach({
     }));
   }
 
-  function handleServerMessage(message: LiveServerMessage) {
+  function handleServerMessage(
+    message: LiveServerMessage,
+    socket: WebSocket,
+    initialHistory: LiveCoachTokenResponse["initialHistory"],
+    resumed: boolean,
+  ) {
+    const resumption = message.sessionResumptionUpdate;
+    if (resumption?.resumable && resumption.newHandle) {
+      resumptionHandleRef.current = resumption.newHandle;
+    }
     if ("setupComplete" in message) {
       setupCompleteRef.current = true;
+      connectedAtRef.current = Date.now();
       clearSetupTimer();
+      setError("");
+      if (!resumed && initialHistory.length) {
+        socket.send(JSON.stringify({
+          clientContent: {
+            turns: initialHistory.map((turn) => ({
+              role: turn.role,
+              parts: [{ text: turn.text }],
+            })),
+            turnComplete: false,
+          },
+        }));
+      }
+      const pendingMovement = pendingMovementSignalRef.current;
+      if (pendingMovement) {
+        socket.send(JSON.stringify({
+          realtimeInput: { text: movementSignalText(pendingMovement) },
+        }));
+        pendingMovementSignalRef.current = null;
+      }
       setState("listening");
       const stream = streamRef.current;
       const audioContext = audioContextRef.current;
@@ -245,6 +320,10 @@ export function LiveVoiceCoach({
         setError("I couldn't refresh your workout data. The conversation can continue.");
       });
     }
+    if (message.goAway && shouldRunRef.current) {
+      retireSocket(socket, "Refreshing live connection");
+      scheduleReconnect("The voice provider is refreshing the connection.");
+    }
   }
 
   async function connectCapture(stream: MediaStream, audioContext: AudioContext) {
@@ -258,7 +337,7 @@ export function LiveVoiceCoach({
     silent.connect(audioContext.destination);
     capture.port.onmessage = (event: MessageEvent<ArrayBuffer>) => {
       const socket = socketRef.current;
-      if (!socket || socket.readyState !== WebSocket.OPEN) return;
+      if (!setupCompleteRef.current || !socket || socket.readyState !== WebSocket.OPEN) return;
       socket.send(JSON.stringify({
         realtimeInput: {
           audio: { data: bytesToBase64(event.data), mimeType: "audio/pcm;rate=16000" },
@@ -269,45 +348,63 @@ export function LiveVoiceCoach({
     captureNodeRef.current = capture;
   }
 
-  async function startSession() {
-    if (state !== "idle" && state !== "error") return;
-    setError("");
-    setUserCaption("");
-    setCoachCaption("");
+  function retireSocket(socket: WebSocket, reason: string) {
+    if (socketRef.current === socket) socketRef.current = null;
+    clearSetupTimer();
     setupCompleteRef.current = false;
-    intentionalCloseRef.current = false;
-    setConnectionStage("microphone");
+    socket.onopen = null;
+    socket.onmessage = null;
+    socket.onerror = null;
+    socket.onclose = null;
+    if (socket.readyState < WebSocket.CLOSING) socket.close(1000, reason);
+  }
+
+  function scheduleReconnect(reason: string) {
+    if (!shouldRunRef.current || reconnectTimerRef.current) return;
+    if (connectedAtRef.current && Date.now() - connectedAtRef.current >= 30_000) {
+      reconnectAttemptRef.current = 0;
+    }
+    const attempt = reconnectAttemptRef.current + 1;
+    if (attempt > 3) {
+      closeResources();
+      setError(`${reason} Automatic reconnection was unsuccessful. Please retry.`);
+      setState("error");
+      return;
+    }
+    reconnectAttemptRef.current = attempt;
+    setConnectionStage("reconnecting");
     setState("connecting");
+    setError(`Connection interrupted. Reconnecting automatically (${attempt}/3)…`);
+    reconnectTimerRef.current = setTimeout(() => {
+      reconnectTimerRef.current = null;
+      void connectSocket(true);
+    }, 500 * 2 ** (attempt - 1));
+  }
+
+  async function connectSocket(reconnecting: boolean) {
+    if (!shouldRunRef.current) return;
+    setConnectionStage(reconnecting ? "reconnecting" : "authorizing");
     try {
-      const AudioContextClass = window.AudioContext;
-      if (!AudioContextClass || !navigator.mediaDevices?.getUserMedia) {
-        throw new Error("Live voice needs microphone and Web Audio support in this browser.");
-      }
-      const audioContext = new AudioContextClass();
-      audioContextRef.current = audioContext;
-      await audioContext.resume();
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
-      });
-      streamRef.current = stream;
-      setConnectionStage("authorizing");
       const credentials = await apiRequest<LiveCoachTokenResponse>("/v1/coach/live-token", {
         method: "POST",
         signal: AbortSignal.timeout(25_000),
         body: JSON.stringify({ threadId, sessionId: activeSessionId ?? undefined }),
       });
+      if (!shouldRunRef.current) return;
       setConnectionStage("socket");
+      const resumeHandle = resumptionHandleRef.current;
       const endpoint = "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContentConstrained";
       const socket = new WebSocket(`${endpoint}?access_token=${encodeURIComponent(credentials.token)}`);
       socket.binaryType = "arraybuffer";
+      setupCompleteRef.current = false;
       socketRef.current = socket;
       socket.onopen = () => {
+        if (!shouldRunRef.current || socketRef.current !== socket) return;
         setConnectionStage("setup");
         setupTimerRef.current = setTimeout(() => {
-          if (setupCompleteRef.current) return;
-          setError("The voice provider connected but did not finish setup. End the session and retry.");
-          setState("error");
-          closeResources();
+          if (setupCompleteRef.current || socketRef.current !== socket) return;
+          retireSocket(socket, "Setup timed out");
+          scheduleReconnect("The voice provider did not finish setup.");
         }, 15_000);
         socket.send(JSON.stringify({
           setup: {
@@ -319,6 +416,9 @@ export function LiveVoiceCoach({
               },
               thinkingConfig: { thinkingLevel: "LOW" },
             },
+            historyConfig: { initialHistoryInClientContent: true },
+            contextWindowCompression: { slidingWindow: {} },
+            sessionResumption: resumeHandle ? { handle: resumeHandle } : {},
             inputAudioTranscription: {},
             outputAudioTranscription: {},
             tools: [{
@@ -333,28 +433,69 @@ export function LiveVoiceCoach({
       };
       socket.onmessage = (event) => {
         void decodeLiveServerMessage<LiveServerMessage>(event.data as string | Blob | ArrayBuffer)
-          .then(handleServerMessage)
+          .then((message) => {
+            if (!shouldRunRef.current || socketRef.current !== socket) return;
+            handleServerMessage(
+              message,
+              socket,
+              credentials.initialHistory ?? [],
+              Boolean(resumeHandle),
+            );
+          })
           .catch((cause) => {
             console.error("Unable to decode a Gemini Live response", cause);
-            setError("The live coach received an unreadable response. End the session and retry.");
-            setState("error");
-            closeResources();
+            retireSocket(socket, "Unreadable response");
+            scheduleReconnect("The live coach received an unreadable response.");
           });
       };
       socket.onerror = () => {
-        setError("The live coach connection failed. Check the API model access and try again.");
-        setState("error");
-        closeResources();
+        if (socketRef.current !== socket) return;
+        retireSocket(socket, "Connection error");
+        scheduleReconnect("The live coach connection failed.");
       };
-      socket.onclose = (event) => {
-        clearSetupTimer();
-        if (!mountedRef.current || intentionalCloseRef.current) return;
-        if (!setupCompleteRef.current || event.code !== 1000) {
-          setError("The live coach session ended unexpectedly. You can reconnect without losing chat history.");
-          setState("error");
-          closeResources();
-        }
+      socket.onclose = () => {
+        if (socketRef.current !== socket || !shouldRunRef.current) return;
+        retireSocket(socket, "Connection closed");
+        scheduleReconnect("The live coach connection ended unexpectedly.");
       };
+    } catch (cause) {
+      if (!shouldRunRef.current) return;
+      const timedOut = cause instanceof DOMException && cause.name === "TimeoutError";
+      scheduleReconnect(timedOut
+        ? "Authorizing live voice took too long."
+        : cause instanceof Error ? cause.message : "Live voice could not connect.");
+    }
+  }
+
+  async function startSession() {
+    if (state !== "idle" && state !== "error") return;
+    setError("");
+    setUserCaption("");
+    setCoachCaption("");
+    setupCompleteRef.current = false;
+    resumptionHandleRef.current = null;
+    reconnectAttemptRef.current = 0;
+    connectedAtRef.current = 0;
+    shouldRunRef.current = true;
+    setConnectionStage("microphone");
+    setState("connecting");
+    try {
+      const AudioContextClass = window.AudioContext;
+      if (!AudioContextClass || !navigator.mediaDevices?.getUserMedia) {
+        throw new Error("Live voice needs microphone and Web Audio support in this browser.");
+      }
+      const audioContext = new AudioContextClass();
+      audioContextRef.current = audioContext;
+      await audioContext.resume();
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      });
+      if (!shouldRunRef.current) {
+        stream.getTracks().forEach((track) => track.stop());
+        return;
+      }
+      streamRef.current = stream;
+      await connectSocket(false);
     } catch (cause) {
       closeResources();
       const timedOut = cause instanceof DOMException && cause.name === "TimeoutError";
@@ -404,7 +545,7 @@ export function LiveVoiceCoach({
                 </button>
               )}
             </div>
-            <small className="live-voice-privacy">Microphone audio streams only while this session is active. Audio is not stored by ForgeFit.</small>
+            <small className="live-voice-privacy">Microphone audio streams only while this session is active. During workout tracking, only compact rep and range-of-motion estimates are shared with the coach; camera frames remain on this device.</small>
           </section>
     </div>
   );

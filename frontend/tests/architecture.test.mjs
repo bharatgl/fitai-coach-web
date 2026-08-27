@@ -64,6 +64,11 @@ test("shows a public landing page and protects the coaching workspace", async ()
   assert.match(liveVoice, /\/v1\/coach\/live-turns/);
   assert.match(liveVoice, /AbortSignal\.timeout\(25_000\)/);
   assert.match(liveVoice, /did not finish setup/);
+  assert.match(liveVoice, /sessionResumption/);
+  assert.match(liveVoice, /contextWindowCompression/);
+  assert.match(liveVoice, /initialHistoryInClientContent/);
+  assert.match(liveVoice, /Reconnecting without losing context/);
+  assert.match(liveVoice, /movementSignalText/);
   assert.match(liveVoice, /decodeLiveServerMessage/);
   assert.doesNotMatch(liveVoice, /JSON\.parse\(String\(event\.data\)\)/);
   assert.match(liveVoiceProtocol, /data instanceof Blob/);
@@ -90,6 +95,9 @@ test("shows a public landing page and protects the coaching workspace", async ()
   assert.match(coach, /WorkoutRunner/);
   assert.match(movementTracker, /visibilitychange/);
   assert.match(movementTracker, /movementRuntimeSettings/);
+  assert.match(movementTracker, /onLiveMovement/);
+  assert.match(coach, /movementSignal=\{movementSignal\}/);
+  assert.match(coach, /Live coach/);
 });
 
 test("contains no obsolete Cloudflare application entry points", async () => {

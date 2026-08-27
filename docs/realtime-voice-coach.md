@@ -16,6 +16,12 @@ live transcripts, interruption, and tool-backed application context.
   microphone, audio, and network resources on stop or backgrounding.
 - Completed user and coach transcripts are saved through
   `POST /v1/coach/live-turns` into the same ongoing text thread.
+- Each new socket is seeded with a bounded chronological window from that
+  ongoing thread. Context-window compression and Gemini session-resumption
+  handles keep context across provider connection rotations.
+- The workout screen can open the same live coach while MediaPipe tracks a
+  supported movement locally. Corrective and periodic rep summaries are sent
+  as compact text signals; raw frames and landmarks remain in the browser.
 - Browser `speechSynthesis` is no longer presented as a voice-agent feature.
 
 ## Recommended architecture
@@ -32,6 +38,9 @@ Authenticated browser
   |     -> same-origin backend proxy
   |     -> active workout, logged sets, and compact movement aggregates
   |     <- no camera frames, landmark arrays, or free-form health records
+  |
+  |-- on-device movement signal (corrective or every third rep)
+  |     -> exercise, rep, duration, ROM, confidence, and local cue only
   |
   `-- streamed audio response + visible transcript
 ```
@@ -91,7 +100,9 @@ must remain read-only until separate authorization and confirmation UX exists.
 - Resample microphone input to 16 kHz mono PCM in the worklet and send short
   chunks. Keep playback buffering bounded and discard it immediately on barge-in.
 - Keep movement inference at its existing throttled rate and send only stored
-  aggregate events through the tool snapshot.
+  aggregate events through the tool snapshot. During an active workout voice
+  session, send only corrective or periodic compact rep summaries so the coach
+  does not narrate every repetition.
 - Stop tracks, close the `AudioContext` and WebSocket, clear playback buffers,
   and discard the ephemeral token on stop, navigation, tab hiding, or error.
 - Enable context-window compression and session resumption, but set a product
@@ -107,5 +118,8 @@ must remain read-only until separate authorization and confirmation UX exists.
    playback, visible transcript, and interruption handling.
 4. Partial: transcript persistence is done; the pre-response deterministic
    safety gate remains required before deployment.
-5. Pending: physical mobile-device calibration, cost telemetry, session
-   resumption, and end-to-end provider tests.
+5. Done: context-window compression, bounded initial thread history,
+   session-resumption handles, automatic reconnect, and a real provider setup
+   smoke test.
+6. Pending: physical mobile-device calibration, cost telemetry, and the
+   deterministic pre-response safety gate described above.

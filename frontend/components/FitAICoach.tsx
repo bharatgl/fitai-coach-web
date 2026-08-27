@@ -38,6 +38,7 @@ import {
   useSyncExternalStore,
 } from "react";
 import { apiRequest } from "@/lib/api";
+import type { LiveMovementSignal } from "@/lib/live-voice";
 import {
   collectSpeechTranscript,
   speechRecognitionConstructor,
@@ -1626,6 +1627,37 @@ function WorkoutRunner({
   const [error, setError] = useState("");
   const [reflection, setReflection] = useState(session.reflection);
   const [perceivedEffort, setPerceivedEffort] = useState(7);
+  const [liveVoiceOpen, setLiveVoiceOpen] = useState(false);
+  const [voiceThread, setVoiceThread] = useState<CoachThread | null>(null);
+  const [openingVoice, setOpeningVoice] = useState(false);
+  const [movementSignal, setMovementSignal] = useState<LiveMovementSignal | null>(null);
+
+  async function openLiveCoach() {
+    if (voiceThread) {
+      setLiveVoiceOpen(true);
+      return;
+    }
+    setOpeningVoice(true);
+    setError("");
+    try {
+      const response = await apiRequest<CoachThreadListResponse>("/v1/coach/threads");
+      const existing = response.threads.find((thread) => !thread.archived);
+      if (existing) {
+        setVoiceThread(existing);
+      } else {
+        const created = await apiRequest<CreateCoachThreadResponse>("/v1/coach/threads", {
+          method: "POST",
+          body: JSON.stringify({ title: "Coach" }),
+        });
+        setVoiceThread(created.thread);
+      }
+      setLiveVoiceOpen(true);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Unable to open the live coach");
+    } finally {
+      setOpeningVoice(false);
+    }
+  }
 
   async function update(action: string, path: string, init: RequestInit) {
     setWorkingAction(action);
@@ -1691,16 +1723,39 @@ function WorkoutRunner({
         title={session.name}
         description={`${session.totalSets} sets · ${session.totalVolumeKg} kg volume · ${formatDuration(session.durationSeconds)}`}
         actions={
-          <Button variant="secondary" busy={workingAction === "status"} disabled={Boolean(workingAction)} onClick={() => void changeStatus()}>
-            {workingAction === "status" ? "Updating…" : session.status === "paused" ? "Resume workout" : "Pause workout"}
-          </Button>
+          <div className="workout-live-actions">
+            <Button
+              variant="secondary"
+              busy={openingVoice}
+              disabled={openingVoice}
+              onClick={() => void openLiveCoach()}
+            >
+              {openingVoice ? "Opening coach…" : "Live coach"}
+            </Button>
+            <Button variant="secondary" busy={workingAction === "status"} disabled={Boolean(workingAction)} onClick={() => void changeStatus()}>
+              {workingAction === "status" ? "Updating…" : session.status === "paused" ? "Resume workout" : "Pause workout"}
+            </Button>
+          </div>
         }
       />
+      {liveVoiceOpen && voiceThread && (
+        <LiveVoiceCoach
+          threadId={voiceThread.id}
+          activeSessionId={session.id}
+          movementSignal={movementSignal}
+          onClose={() => setLiveVoiceOpen(false)}
+          onThreadUpdate={(detail) => setVoiceThread(detail.thread)}
+        />
+      )}
       {session.status === "paused" && (
         <section className="pause-banner">Workout paused. Resume it before recording another set.</section>
       )}
       {error && <p className="form-error plan-error" role="alert">{error}</p>}
-      <MovementTracker key={`${session.id}-${session.status}`} session={session} />
+      <MovementTracker
+        key={`${session.id}-${session.status}`}
+        session={session}
+        onLiveMovement={setMovementSignal}
+      />
       <section className="workout-exercises">
         {session.exercises.map((exercise) => (
           <ExerciseLogger

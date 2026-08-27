@@ -27,6 +27,7 @@ import {
   buildCoachProfileContext,
   buildCoachTrainingContext,
 } from "../domain/coach-context.js";
+import { compactLiveHistory } from "../domain/live-history.js";
 import {
   summarizeMovementEventsForCoach,
   type MovementEventDocument,
@@ -508,7 +509,6 @@ async function loadLiveCoachSnapshot(
 
 function liveCoachInstruction(
   snapshot: LiveCoachSnapshotResponse,
-  history: Array<Pick<CoachMessageDocument, "role" | "content">>,
 ) {
   return [
     "You are ForgeFit's live personal coach in an ongoing spoken conversation.",
@@ -517,10 +517,11 @@ function liveCoachInstruction(
     "Answer the exact question first. Usually speak for 15 to 35 seconds, then pause for the user.",
     "Use the supplied member data concretely. Never ask for a preference or fact already present in it.",
     "When workout state may have changed, call get_live_workout_snapshot before giving set-by-set guidance.",
+    "The ongoing coach thread is provided as initial conversation history. Continue from it and never claim that you cannot access earlier messages that were supplied.",
+    "Messages beginning ON_DEVICE_MOVEMENT_UPDATE contain privacy-preserving pose estimates, not raw camera footage. Give one immediate cue under 12 words only when it is actionable; otherwise stay silent.",
     "If the user interrupts, stop immediately and listen. Treat this as one continuous session.",
     "Do not diagnose or prescribe medical treatment. For pain, dizziness, numbness, breathing difficulty, or urgent symptoms, tell the user to stop training and seek appropriate in-person care.",
     `CURRENT MEMBER AND TRAINING CONTEXT:\n${JSON.stringify(snapshot)}`,
-    `RECENT CONVERSATION (continue it; do not re-introduce yourself):\n${JSON.stringify(history)}`,
   ].join("\n\n");
 }
 
@@ -572,15 +573,16 @@ export async function coachRoutes(app: FastifyInstance) {
             { projection: { _id: 0, role: 1, content: 1 } },
           )
           .sort({ createdAt: -1 })
-          .limit(12)
+          .limit(80)
           .toArray(),
       ]);
       const config = getConfig();
-      return createLiveCoachToken({
+      const token = await createLiveCoachToken({
         apiKey: config.GEMINI_API_KEY,
         model: config.GEMINI_LIVE_MODEL,
-        systemInstruction: liveCoachInstruction(snapshot, history.reverse()),
+        systemInstruction: liveCoachInstruction(snapshot),
       });
+      return { ...token, initialHistory: compactLiveHistory(history) };
     },
   );
 

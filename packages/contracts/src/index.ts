@@ -98,6 +98,10 @@ export type LiveCoachTokenResponse = {
   token: string;
   model: string;
   expiresAt: string;
+  initialHistory: Array<{
+    role: "user" | "model";
+    text: string;
+  }>;
 };
 
 export type LiveCoachSnapshotResponse = {

@@ -1256,3 +1256,9 @@ select option{background:#111426;color:#f7f8ff}
   .plan-active-session.ui-card{align-items:stretch;display:grid}
   .plan-active-session>.ui-button{width:100%}
 }
+
+.workout-live-actions{align-items:center;display:flex;gap:.65rem}
+@media(max-width:600px){
+  .workout-live-actions{display:grid;grid-template-columns:1fr 1fr;width:100%}
+  .workout-live-actions>.ui-button{margin:0;width:100%}
+}

@@ -15,13 +15,20 @@ import {
   movementProfileForExercise,
   movementRuntimeSettings,
 } from "@/lib/movement-tracking";
+import type { LiveMovementSignal } from "@/lib/live-voice";
 
 const WASM_PATH = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/wasm";
 const MODEL_PATH = "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task";
 
 type TrackerStatus = "off" | "starting" | "tracking" | "error";
 
-export function MovementTracker({ session }: { session: WorkoutSession }) {
+export function MovementTracker({
+  session,
+  onLiveMovement,
+}: {
+  session: WorkoutSession;
+  onLiveMovement?: (signal: LiveMovementSignal) => void;
+}) {
   const supportedExercises = useMemo(
     () => session.exercises.flatMap((exercise) => {
       const profile = movementProfileForExercise(exercise.exerciseId, exercise.name);
@@ -253,6 +260,31 @@ export function MovementTracker({ session }: { session: WorkoutSession }) {
         if (!rep) return;
         setTrackedReps(rep.repNumber);
         setLastRom(rep.rangeOfMotionDegrees);
+        const rangeNeedsAttention =
+          rep.rangeOfMotionDegrees < selected.profile.minimumRangeOfMotionDegrees + 8;
+        const tempoNeedsAttention = rep.durationMs < 900;
+        const confidenceNeedsAttention =
+          rep.confidence < selected.profile.confidenceThreshold + 0.08;
+        const cue = rangeNeedsAttention
+          ? "Use a little more controlled range on the next rep."
+          : tempoNeedsAttention
+            ? "Slow the next rep down and keep control."
+            : confidenceNeedsAttention
+              ? "Keep the working joints fully visible to the camera."
+              : "Tracked range and tempo look consistent.";
+        onLiveMovement?.({
+          id: crypto.randomUUID(),
+          sessionId: session.id,
+          exerciseId: selected.exercise.exerciseId,
+          exerciseName: selected.exercise.name,
+          repNumber: rep.repNumber,
+          durationMs: rep.durationMs,
+          rangeOfMotionDegrees: rep.rangeOfMotionDegrees,
+          confidence: rep.confidence,
+          cue,
+          requiresCorrection:
+            rangeNeedsAttention || tempoNeedsAttention || confidenceNeedsAttention,
+        });
         queueMovementEvent({
           clientEventId: crypto.randomUUID(),
           exerciseId: selected.exercise.exerciseId,
