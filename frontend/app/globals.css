@@ -1165,3 +1165,65 @@ select option{background:#111426;color:#f7f8ff}
 @media(prefers-reduced-motion:reduce){
   .chat .chat-composer .voice-input-button[aria-pressed="true"],.voice-experience-status i{animation:none}
 }
+
+/* Final coach integration guards. Keep legacy global selectors out of the chat UI. */
+.coach-active .messages article.theirs .message-body>.coach-message-content{
+  background:linear-gradient(135deg,rgb(200 255 75 / 16%),rgb(91 230 210 / 8%));
+  border:1px solid rgb(200 255 75 / 13%);
+  border-radius:.25rem 1rem 1rem;
+  color:#eef5e9;
+  font-size:.8125rem;
+  line-height:1.55;
+  margin:0;
+  padding:.7rem .85rem;
+}
+.coach-active .messages article.theirs .coach-message-content>p{
+  background:transparent;
+  border:0;
+  border-radius:0;
+  color:inherit;
+  font:inherit;
+  margin:0;
+  padding:0;
+  white-space:normal;
+}
+.coach-active .chat .chat-composer>.prompt-toggle-button{
+  align-items:center;
+  background:transparent;
+  border:1px solid transparent;
+  border-radius:.6rem;
+  box-shadow:none;
+  color:#9fa9bc;
+  display:flex;
+  flex:0 0 auto;
+  font-size:.62rem;
+  font-weight:800;
+  gap:.3rem;
+  height:2.4rem;
+  justify-content:center;
+  line-height:1;
+  min-width:max-content;
+  overflow:visible;
+  padding:0 .45rem;
+  transform:none;
+  white-space:nowrap;
+  width:auto;
+}
+.coach-active .chat .chat-composer>.prompt-toggle-button>span:first-child{color:#c8ff4b;font-size:.75rem}
+.coach-active .chat .chat-composer>.prompt-toggle-button:hover:not(:disabled),
+.coach-active .chat .chat-composer>.prompt-toggle-button:focus-visible{
+  background:rgb(200 255 75 / 8%);
+  border-color:transparent;
+  box-shadow:none;
+  color:#d9ff80;
+  transform:none;
+}
+
+@media(max-width:600px){
+  .coach-active .chat .chat-composer>.prompt-toggle-button{height:2.75rem}
+}
+
+@media(max-width:420px){
+  .coach-active .chat .chat-composer>.prompt-toggle-button{min-width:2.75rem;padding:0;width:2.75rem}
+  .coach-active .chat .chat-composer>.prompt-toggle-button>span:last-child{display:none}
+}

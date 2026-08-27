@@ -117,6 +117,10 @@ test("uses the shared responsive design system", async () => {
   assert.match(styles, /\.attachment-button\{[\s\S]*border-color:transparent[\s\S]*padding:0/);
   assert.match(coach, /message\.role === "assistant"[\s\S]*CoachMessageContent/);
   assert.match(styles, /\.messages \.coach-message-content p\{background:transparent/);
+  assert.match(styles, /Final coach integration guards/);
+  assert.match(styles, /\.coach-active \.messages article\.theirs \.message-body>\.coach-message-content\{/);
+  assert.match(styles, /\.coach-active \.messages article\.theirs \.coach-message-content>p\{/);
+  assert.match(styles, /\.coach-active \.chat \.chat-composer>\.prompt-toggle-button\{/);
   assert.match(styles, /forgefit\.space dark glass system/);
   assert.match(styles, /\.sidebar[\s\S]*backdrop-filter:blur\(28px\)/);
   assert.match(styles, /\.sidebar nav button[\s\S]*border-radius:\.8rem/);
