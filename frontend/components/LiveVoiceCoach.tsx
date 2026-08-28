@@ -103,6 +103,14 @@ function pcmForAvatar(data: string, mimeType?: string) {
   return bytes;
 }
 
+function browserTimeZone() {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Kolkata";
+  } catch {
+    return "Asia/Kolkata";
+  }
+}
+
 function sessionLabel(state: LiveState, stage: ConnectionStage) {
   if (state === "connecting" && stage === "microphone") return "Waiting for microphone access…";
   if (state === "connecting" && stage === "avatar") return "Bringing your coach on screen…";
@@ -715,7 +723,11 @@ export function LiveVoiceCoach({
       {
         method: "POST",
         signal: AbortSignal.timeout(40_000),
-        body: JSON.stringify({ threadId, sessionId: activeSessionId ?? undefined }),
+        body: JSON.stringify({
+          threadId,
+          sessionId: activeSessionId ?? undefined,
+          timeZone: browserTimeZone(),
+        }),
       },
     );
     if (!shouldRunRef.current) return;
@@ -860,7 +872,11 @@ export function LiveVoiceCoach({
       const credentials = await apiRequest<LiveCoachTokenResponse>("/v1/coach/live-token", {
         method: "POST",
         signal: AbortSignal.timeout(25_000),
-        body: JSON.stringify({ threadId, sessionId: activeSessionId ?? undefined }),
+        body: JSON.stringify({
+          threadId,
+          sessionId: activeSessionId ?? undefined,
+          timeZone: browserTimeZone(),
+        }),
       });
       if (!shouldRunRef.current) return;
       setConnectionStage("socket");

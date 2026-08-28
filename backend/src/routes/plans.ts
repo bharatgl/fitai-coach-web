@@ -15,6 +15,7 @@ import { availableExercises } from "../domain/exercise-catalog.js";
 import {
   materializePlan,
   PlanValidationError,
+  reschedulePlan,
   resolvePlanStartDate,
   restorePlanVersion,
   serializePlan,
@@ -178,11 +179,83 @@ export async function planRoutes(app: FastifyInstance) {
   );
 
   app.post(
+    "/v1/plans/:id/reschedule",
+    { config: { rateLimit: { max: 10, timeWindow: "10 minutes" } } },
+    async (request, reply) => {
+      const user = await authenticate(request);
+      const { id } = z.object({ id: z.string().min(1).max(100) }).parse(request.params);
+      const input = generatePlanInput.required().parse(request.body ?? {});
+      await syncAuthenticatedUser(user);
+      const database = await getDatabase();
+      const activeWorkout = await database.collection("workoutSessions").findOne(
+        { userId: user.id, status: { $in: ["active", "paused"] } },
+        { projection: { _id: 1 } },
+      );
+      if (activeWorkout) {
+        return reply.code(409).send({
+          error: "Finish or abandon your active workout before changing plan dates",
+        });
+      }
+
+      const plan = await database
+        .collection<WorkoutPlanDocument>("workoutPlans")
+        .findOne({ id, userId: user.id, status: "active" }, { projection: { _id: 0 } });
+      if (!plan) {
+        return reply.code(404).send({ error: "Active plan not found" });
+      }
+      const workouts = await database
+        .collection<PlannedWorkoutDocument>("plannedWorkouts")
+        .find({ planId: id, userId: user.id }, { projection: { _id: 0 } })
+        .sort({ weekNumber: 1, dayOffset: 1 })
+        .toArray();
+      if (workouts.length === 0) {
+        return reply.code(409).send({ error: "This plan has no workouts to reschedule" });
+      }
+
+      const rescheduled = reschedulePlan({
+        plan,
+        workouts,
+        startDate: resolvePlanStartDate(input.startDate),
+      });
+      const client = await getMongoClient();
+      await client.withSession(async (session) => {
+        await session.withTransaction(async () => {
+          await database
+            .collection<WorkoutPlanDocument>("workoutPlans")
+            .updateOne(
+              { id, userId: user.id, status: "active" },
+              { $set: { startDate: rescheduled.plan.startDate } },
+              { session },
+            );
+          await database
+            .collection<PlannedWorkoutDocument>("plannedWorkouts")
+            .bulkWrite(
+              rescheduled.workouts.map((workout) => ({
+                updateOne: {
+                  filter: { id: workout.id, planId: id, userId: user.id },
+                  update: { $set: { scheduledFor: workout.scheduledFor } },
+                },
+              })),
+              { session },
+            );
+        });
+      });
+
+      const response: GeneratePlanResponse = {
+        plan: serializePlan(rescheduled.plan),
+        workouts: rescheduled.workouts.map(serializeWorkout),
+      };
+      return reply.send(response);
+    },
+  );
+
+  app.post(
     "/v1/plans/:id/restore",
     { config: { rateLimit: { max: 5, timeWindow: "10 minutes" } } },
     async (request, reply) => {
       const user = await authenticate(request);
       const { id } = z.object({ id: z.string().min(1).max(100) }).parse(request.params);
+      const input = generatePlanInput.parse(request.body ?? {});
       await syncAuthenticatedUser(user);
       const database = await getDatabase();
       const activeWorkout = await database.collection("workoutSessions").findOne(
@@ -220,7 +293,7 @@ export async function planRoutes(app: FastifyInstance) {
           sourceWorkouts,
           userId: user.id,
           version: (latestPlan?.version ?? 0) + 1,
-          startDate: resolvePlanStartDate(undefined),
+          startDate: resolvePlanStartDate(input.startDate),
         });
       } catch (error) {
         if (error instanceof PlanValidationError) {

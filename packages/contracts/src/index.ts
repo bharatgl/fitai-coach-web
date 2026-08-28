@@ -127,6 +127,8 @@ export type ElevenLabsCoachSessionResponse = {
     user_name: string;
     member_context: string;
     conversation_history: string;
+    current_local_datetime: string;
+    user_timezone: string;
   };
 };
 

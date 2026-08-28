@@ -11,8 +11,8 @@ photoreal, lip-synced WebRTC avatar rather than a local cartoon model.
 
 - `POST /v1/coach/elevenlabs-session` provisions or updates the private ForgeFit
   agent, returns a short-lived signed URL, and supplies the authenticated member's
-  name, profile/training snapshot, and bounded chronological thread history as
-  dynamic variables.
+  name, profile/training snapshot, browser timezone, authoritative current local
+  date/time, and bounded timestamped thread history as dynamic variables.
 - The agent greets the member by name and uses the deeper, resonant male
   `ForgeFit Brian` voice by default. Coaching language and examples remain
   India-focused; an Indian-accented replacement voice requires an eligible
@@ -27,8 +27,10 @@ photoreal, lip-synced WebRTC avatar rather than a local cartoon model.
 - Completed user and coach transcripts are saved through
   `POST /v1/coach/live-turns` into the same ongoing text thread.
 - Each new socket is seeded with a bounded chronological window from that
-  ongoing thread. Context-window compression and Gemini session-resumption
-  handles keep context across provider connection rotations.
+  ongoing thread. Persisted turns retain their original local timestamps so a
+  new calendar day expires stale future-looking intentions such as a prior-night
+  sleep plan. Context-window compression and Gemini session-resumption handles
+  keep context across provider connection rotations.
 - The workout screen can open the same live coach while MediaPipe tracks a
   supported movement locally. Corrective and periodic rep summaries are sent
   as compact text signals; raw frames and landmarks remain in the browser.
@@ -61,7 +63,7 @@ photoreal, lip-synced WebRTC avatar rather than a local cartoon model.
 Authenticated browser
   |-- POST /api/backend/coach/elevenlabs-session
   |     -> authenticated backend returns a short-lived signed agent URL
-  |     -> name + profile + plan + recent thread become dynamic variables
+  |     -> name + profile + plan + local clock + timestamped thread become dynamic variables
   |
   |-- POST /api/backend/coach/live-avatar-token
   |     -> authenticated backend creates a short-lived Simli session token

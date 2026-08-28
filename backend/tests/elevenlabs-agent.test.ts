@@ -19,6 +19,8 @@ test("builds a private personalized Indian-English ElevenLabs coach", () => {
   assert.match(config.conversation_config.agent.first_message, /What's on your mind/);
   assert.match(config.conversation_config.agent.prompt.prompt, /\{\{member_context\}\}/);
   assert.match(config.conversation_config.agent.prompt.prompt, /\{\{conversation_history\}\}/);
+  assert.match(config.conversation_config.agent.prompt.prompt, /\{\{current_local_datetime\}\}/);
+  assert.match(config.conversation_config.agent.prompt.prompt, /\{\{user_timezone\}\}/);
   assert.match(config.conversation_config.agent.prompt.prompt, /natural Indian English/);
   assert.match(config.conversation_config.agent.prompt.prompt, /without agreeing automatically/);
   assert.match(config.conversation_config.agent.prompt.prompt, /Never tease, flirt, use sarcasm/);
@@ -26,6 +28,7 @@ test("builds a private personalized Indian-English ElevenLabs coach", () => {
   assert.match(config.conversation_config.agent.prompt.prompt, /latest explicit statement about their current intent and timing/);
   assert.match(config.conversation_config.agent.prompt.prompt, /Allow ordinary conversation/);
   assert.match(config.conversation_config.agent.prompt.prompt, /will train tomorrow or later/);
+  assert.match(config.conversation_config.agent.prompt.prompt, /previous-day plan to sleep is historical/);
   assert.equal(config.conversation_config.agent.prompt.temperature, 0.35);
   assert.equal(config.conversation_config.tts.voice_id, "nPczCjzI2devNBz1zQrb");
   assert.equal(config.conversation_config.tts.model_id, "eleven_flash_v2");

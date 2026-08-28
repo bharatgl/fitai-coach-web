@@ -28,6 +28,10 @@ export const coachBehaviorContract = `Coaching behavior:
 - If the topic was already answered and there is no meaningful new data, give only the changed or most actionable point. Ask one precise follow-up only when it would materially improve the recommendation.
 - Treat the member's latest explicit statement about their current intent and timing as authoritative for the conversation. A scheduled workout or open app session is stored state, not proof that they are training now.
 - If the member says they already trained, are resting, or will train tomorrow or later, keep that fact in force until they change it. Do not tell them to perform that workout now, repeat its instructions, or steer an unrelated reply back to it.
+- When the member reports training that differs from the saved selectedWeek schedule—for example, they already completed the scheduled muscle group or intend to do another session today—briefly explain the mismatch and ask one explicit yes/no question: "Would you like me to update this week's saved plan to reflect that?"
+- A conversational recommendation is not a saved-plan change. Never imply that workout dates, order, status, volume, or exercises have already changed unless the application confirms the change. Ask for confirmation before proposing a saved-plan update.
+- Resolve relative time words such as today, yesterday, tonight, and tomorrow against the authoritative current local date/time and each message's timestamp when supplied. Do not carry a future-looking question or intention into a later calendar day unless the member explicitly carries it forward.
+- Once the local date has rolled over, a previous-day plan to sleep is historical, not upcoming. Do not ask whether the member will sleep; if sleep is relevant, refer to last night's sleep or ask how it went.
 - Allow ordinary conversation. For greetings, casual chat, or a topic that does not request coaching, respond naturally in one or two sentences without creating an action plan or forcing a fitness follow-up.
 - Stay on the member's current topic. Offer unsolicited workout direction only for an immediate safety concern or a clearly active workout cue.
 - Lead with the verdict or recommendation, follow with the shortest useful reason, then give the next action. Mention profile or history facts only when they change the advice.`;
@@ -118,6 +122,34 @@ export function appendPersonalizationEvidence(reply: string, evidence: string[])
     "## Personalized from your data",
     facts.map((fact) => `- ${fact}`).join("\n"),
   ].join("\n\n");
+}
+
+const workoutReference = String.raw`(?:workout|session|training|push|pull|back|chest|legs?|shoulders?|arms?|upper|lower)`;
+const reportedScheduleChange = new RegExp(
+  String.raw`(?:\b(?:already\s+)?(?:had|did|done|completed|finished|trained)\b.{0,80}\b${workoutReference}\b|\b${workoutReference}\b.{0,80}\b(?:already|yesterday|earlier)\b|\b(?:will|shall|going\s+to|gonna)\s+(?:do|train|hit)\b.{0,80}\b${workoutReference}\b.{0,40}\b(?:today|tomorrow|instead)\b)`,
+  "i",
+);
+const explicitPlanUpdateRequest = /\b(?:please\s+)?(?:update|adjust|change|revise|reschedule|move|reorder)\b.{0,50}\b(?:plan|schedule|week|workout|session)s?\b|\b(?:should|can|could|would)\b.{0,50}\b(?:update|adjust|change|revise|reschedule|move|reorder)\b/i;
+const replyAlreadyRequestsConfirmation = /\b(?:would|do)\s+you\s+(?:like|want)\b.{0,100}\b(?:update|adjust|change|revise|reschedule|move|reorder)\b[^?]*\?/i;
+
+export function ensurePlanChangeConfirmation({
+  reply,
+  message,
+  hasPlanContext,
+}: {
+  reply: string;
+  message: string;
+  hasPlanContext: boolean;
+}) {
+  if (
+    !hasPlanContext
+    || !reportedScheduleChange.test(message)
+    || explicitPlanUpdateRequest.test(message)
+    || replyAlreadyRequestsConfirmation.test(reply)
+  ) {
+    return reply;
+  }
+  return `${reply.trim()}\n\nWould you like me to update this week's saved plan to reflect that?`;
 }
 
 export function buildCoachContents(

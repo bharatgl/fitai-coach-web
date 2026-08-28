@@ -158,6 +158,8 @@ test("shows a public landing page and protects the coaching workspace", async ()
   assert.match(coach, /Legacy workout hidden/);
   assert.match(coach, /ExerciseVideoButton exerciseName=\{exercise\.name\} video=\{exercise\.video\}/);
   assert.match(coach, /Weekly schedule/);
+  assert.match(coach, /startDate: localDateKey\(new Date\(\)\)/);
+  assert.match(coach, /\/v1\/plans\/\$\{plan\.id\}\/reschedule/);
   assert.match(coach, /Work sets/);
   assert.match(coach, /Plan terms/);
   assert.match(coach, /Deload/);
@@ -178,6 +180,12 @@ test("shows a public landing page and protects the coaching workspace", async ()
   assert.match(coach, /onBack=\{\(\) => setView\("plan"\)\}/);
   assert.match(coach, /Back to plan/);
   assert.match(coach, /Your workout stays in progress/);
+  assert.match(coach, /Finish one workout to create your baseline/);
+  assert.match(coach, /className="history-progress-overview"/);
+  assert.match(coach, /className="history-analysis-grid"/);
+  assert.match(coach, /Review my progress with coach/);
+  assert.match(coach, /Incomplete attempts/);
+  assert.match(coach, /Zero-set starts are kept for audit only and excluded from progress/);
   assert.match(movementTracker, /visibilitychange/);
   assert.match(movementTracker, /movementRuntimeSettings/);
   assert.match(movementTracker, /onLiveMovement/);

@@ -6,6 +6,7 @@ import { availableExercises } from "../src/domain/exercise-catalog.js";
 import {
   materializePlan,
   PlanValidationError,
+  reschedulePlan,
   resolvePlanStartDate,
   restorePlanVersion,
   validatePlanDraft,
@@ -165,6 +166,29 @@ test("restores an archived plan as a new immutable version with fresh dates", ()
   assert.equal(generated.workouts[0]?.status, "skipped");
 });
 
+test("reschedules an existing plan from a new calendar start date", () => {
+  const generated = materializePlan({
+    draft,
+    profile,
+    catalog: availableExercises(profile.equipment, profile.experienceLevel),
+    userId: profile.userId,
+    version: 1,
+    model: "test-model",
+    startDate: new Date("2026-08-31T00:00:00.000Z"),
+  });
+
+  const rescheduled = reschedulePlan({
+    plan: generated.plan,
+    workouts: generated.workouts,
+    startDate: new Date("2026-08-28T00:00:00.000Z"),
+  });
+
+  assert.equal(rescheduled.plan.startDate.toISOString(), "2026-08-28T00:00:00.000Z");
+  assert.equal(rescheduled.workouts[0]?.scheduledFor.toISOString(), "2026-08-28T00:00:00.000Z");
+  assert.equal(rescheduled.workouts[7]?.scheduledFor.toISOString(), "2026-09-21T00:00:00.000Z");
+  assert.equal(generated.plan.startDate.toISOString(), "2026-08-31T00:00:00.000Z");
+});
+
 test("rejects plans that reference unavailable exercises", () => {
   const invalid = structuredClone(draft);
   invalid.weeks[0]!.days[0]!.exercises[0]!.exerciseId = "invented-exercise";
@@ -252,9 +276,9 @@ test("validates the local fallback for a six-day advanced bodybuilding profile",
   assert.equal(firstWeekIds.includes("wall-push-up"), false);
 });
 
-test("chooses the current or next Monday when no start date is supplied", () => {
+test("uses the current calendar date when no start date is supplied", () => {
   assert.equal(
     resolvePlanStartDate(undefined, new Date("2026-08-20T13:00:00.000Z")).toISOString(),
-    "2026-08-24T00:00:00.000Z",
+    "2026-08-20T00:00:00.000Z",
   );
 });

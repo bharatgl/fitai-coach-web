@@ -9,6 +9,7 @@ import type {
   CoachThreadListResponse,
   CreateCoachThreadResponse,
   DashboardResponse,
+  GeneratePlanRequest,
   GeneratePlanResponse,
   PlanHistoryEntry,
   PlannedWorkout,
@@ -281,7 +282,7 @@ function FitAIWorkspace({ user }: { user: CurrentUser }) {
     ["coach", "coach", "Coach"],
     ["plan", "plan", "Plan"],
     ["library", "library", "Library"],
-    ["history", "history", "History"],
+    ["history", "history", "Progress"],
   ];
 
   async function startWorkout(plannedWorkoutId: string) {
@@ -379,7 +380,14 @@ function FitAIWorkspace({ user }: { user: CurrentUser }) {
             onResume={() => setView("workout")}
           />
         )}
-        {view === "history" && <History dashboard={dashboard} />}
+        {view === "history" && (
+          <History
+            dashboard={dashboard}
+            hasActiveWorkout={Boolean(activeSession)}
+            onCoach={() => setView("coach")}
+            onTrain={() => setView(activeSession ? "workout" : "today")}
+          />
+        )}
         {view === "library" && <ExerciseLibrary embedded />}
         {view === "profile" && (
           <ProfileSettings
@@ -1952,6 +1960,30 @@ function Plan({
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [selectedWeekNumber, setSelectedWeekNumber] = useState(0);
+  const rescheduleAttemptRef = useRef("");
+
+  useEffect(() => {
+    const plan = dashboard.activePlan;
+    const today = localDateKey(new Date());
+    if (!plan || plan.startDate <= today || activeSession) return;
+
+    const attemptKey = `${plan.id}:${plan.startDate}:${today}`;
+    if (rescheduleAttemptRef.current === attemptKey) return;
+    rescheduleAttemptRef.current = attemptKey;
+    const input: GeneratePlanRequest = { startDate: today };
+    void apiRequest<GeneratePlanResponse>(`/v1/plans/${plan.id}/reschedule`, {
+      method: "POST",
+      body: JSON.stringify(input),
+    })
+      .then(async () => {
+        await refresh();
+        setNotice(`Plan dates updated to start today, ${new Intl.DateTimeFormat("en", { month: "short", day: "numeric" }).format(new Date())}.`);
+      })
+      .catch((cause) => {
+        setError(cause instanceof Error ? cause.message : "Unable to update the saved plan dates");
+      });
+  }, [activeSession, dashboard.activePlan, refresh]);
+
   const weeklyWorkouts = useMemo(() => {
     const weeks = new Map<number, Map<string, PlannedWorkout[]>>();
     for (const workout of dashboard.upcomingWorkouts) {
@@ -2026,9 +2058,10 @@ function Plan({
     setError("");
     setNotice("");
     try {
+      const input: GeneratePlanRequest = { startDate: localDateKey(new Date()) };
       const response = await apiRequest<GeneratePlanResponse>("/v1/plans/generate", {
         method: "POST",
-        body: JSON.stringify({}),
+        body: JSON.stringify(input),
       });
       setSelectedWeekNumber(0);
       await refresh();
@@ -2070,9 +2103,10 @@ function Plan({
     setRestoringId(planId);
     setError("");
     try {
+      const input: GeneratePlanRequest = { startDate: localDateKey(new Date()) };
       await apiRequest<GeneratePlanResponse>(`/v1/plans/${planId}/restore`, {
         method: "POST",
-        body: JSON.stringify({}),
+        body: JSON.stringify(input),
       });
       setSelectedWeekNumber(0);
       await refresh();
@@ -2727,21 +2761,86 @@ function ExerciseLogger({
   );
 }
 
-function History({ dashboard }: { dashboard: DashboardResponse }) {
-  const [filter, setFilter] = useState<"all" | "completed" | "abandoned">("all");
+function History({
+  dashboard,
+  hasActiveWorkout,
+  onCoach,
+  onTrain,
+}: {
+  dashboard: DashboardResponse;
+  hasActiveWorkout: boolean;
+  onCoach: () => void;
+  onTrain: () => void;
+}) {
+  const [filter, setFilter] = useState<"completed" | "all">("completed");
   const completed = useMemo(
     () => dashboard.recentSessions.filter((session) => session.status === "completed"),
     [dashboard.recentSessions],
   );
-  const abandoned = useMemo(
-    () => dashboard.recentSessions.filter((session) => session.status === "abandoned"),
+  const meaningfulStopped = useMemo(
+    () => dashboard.recentSessions.filter(
+      (session) => session.status === "abandoned" && session.totalSets > 0,
+    ),
+    [dashboard.recentSessions],
+  );
+  const emptyAttempts = useMemo(
+    () => dashboard.recentSessions.filter(
+      (session) => session.status === "abandoned" && session.totalSets === 0,
+    ),
     [dashboard.recentSessions],
   );
   const visibleSessions = useMemo(
-    () => dashboard.recentSessions.filter((session) => filter === "all" || session.status === filter),
-    [dashboard.recentSessions, filter],
+    () => (filter === "completed" ? completed : [...completed, ...meaningfulStopped])
+      .sort((left, right) => new Date(right.startedAt).getTime() - new Date(left.startedAt).getTime()),
+    [completed, filter, meaningfulStopped],
   );
   const hasCompletedWork = dashboard.progress.completedSessions > 0;
+  const today = new Date();
+  const startOfWeek = new Date(today);
+  startOfWeek.setHours(0, 0, 0, 0);
+  startOfWeek.setDate(today.getDate() - ((today.getDay() + 6) % 7));
+  const completedThisWeek = dashboard.completedSessionDates.filter((value) => {
+    const completedAt = new Date(value);
+    return Number.isFinite(completedAt.getTime()) && completedAt >= startOfWeek;
+  }).length;
+  const weeklyTarget = dashboard.profile?.trainingDaysPerWeek ?? 1;
+  const weeklyPercent = Math.min(100, Math.round((completedThisWeek / Math.max(1, weeklyTarget)) * 100));
+  const recentCompleted = [...completed].slice(0, 6).reverse();
+  const maxRecentSets = Math.max(1, ...recentCompleted.map((session) => session.totalSets));
+  const recentAverageSets = completed.length > 0
+    ? Math.round(completed.reduce((sum, session) => sum + session.totalSets, 0) / completed.length)
+    : 0;
+  const recentAverageDuration = completed.length > 0
+    ? Math.round(completed.reduce((sum, session) => sum + session.durationSeconds, 0) / completed.length / 60)
+    : 0;
+  const personalBests = useMemo(() => {
+    const bestByExercise = new Map<string, {
+      exerciseId: string;
+      name: string;
+      loadKg: number;
+      reps: number;
+      completedAt: string;
+    }>();
+    for (const session of completed) {
+      for (const exercise of session.exercises) {
+        for (const set of exercise.sets) {
+          const current = bestByExercise.get(exercise.exerciseId);
+          if (!current || set.loadKg > current.loadKg || (set.loadKg === current.loadKg && set.reps > current.reps)) {
+            bestByExercise.set(exercise.exerciseId, {
+              exerciseId: exercise.exerciseId,
+              name: exercise.name,
+              loadKg: set.loadKg,
+              reps: set.reps,
+              completedAt: set.completedAt,
+            });
+          }
+        }
+      }
+    }
+    return [...bestByExercise.values()]
+      .sort((left, right) => new Date(right.completedAt).getTime() - new Date(left.completedAt).getTime())
+      .slice(0, 4);
+  }, [completed]);
   const dateFormatter = useMemo(
     () => new Intl.DateTimeFormat("en", { dateStyle: "medium", timeStyle: "short" }),
     [],
@@ -2755,9 +2854,9 @@ function History({ dashboard }: { dashboard: DashboardResponse }) {
     <div className="wrap history-page">
       <header className="history-header">
         <div>
-          <Eyebrow>Training log</Eyebrow>
-          <h1>History</h1>
-          <p>Review completed work, actual sets, effort, and notes.</p>
+          <Eyebrow>Performance</Eyebrow>
+          <h1>Progress</h1>
+          <p>See what is improving and decide what to do next.</p>
         </div>
         {dashboard.progress.lastCompletedAt && (
           <span className="history-last-trained">
@@ -2767,34 +2866,105 @@ function History({ dashboard }: { dashboard: DashboardResponse }) {
         )}
       </header>
 
-      {hasCompletedWork ? (
-        <section className="history-summary" aria-label="Lifetime training summary">
-          <article><b>{dashboard.progress.completedSessions}</b><span>Sessions</span></article>
-          <article><b>{dashboard.progress.completedSets}</b><span>Working sets</span></article>
-          <article><b>{dashboard.progress.totalVolumeKg.toLocaleString()}</b><span>Volume kg</span></article>
-          <article><b>{dashboard.progress.averageEffort ?? "—"}</b><span>Average RPE</span></article>
-        </section>
-      ) : (
-        <section className="history-empty-summary">
-          <span aria-hidden="true">01</span>
-          <div>
-            <strong>No completed training yet</strong>
-            <p>Stopped starts stay in your log for context, but they do not count toward progress. Finish one workout to begin your baseline.</p>
+      {!hasCompletedWork ? (
+        <section className="history-baseline" aria-labelledby="history-baseline-title">
+          <div className="history-baseline-copy">
+            <Eyebrow>Your first milestone</Eyebrow>
+            <h2 id="history-baseline-title">Finish one workout to create your baseline.</h2>
+            <p>One completed session unlocks useful coaching: consistency, training-load trends, effort patterns, and your best working sets.</p>
+            <Button size="lg" onClick={onTrain}>
+              {hasActiveWorkout ? "Resume current workout" : "Go to today’s workout"}
+            </Button>
+          </div>
+          <div className="history-baseline-unlocks" aria-label="Progress features unlocked after a completed workout">
+            <span><b>01</b><strong>Consistency</strong><small>Sessions completed against your weekly target</small></span>
+            <span><b>02</b><strong>Training load</strong><small>Sets, duration, volume, and effort over time</small></span>
+            <span><b>03</b><strong>Lift records</strong><small>Your strongest logged working sets by exercise</small></span>
           </div>
         </section>
+      ) : (
+        <>
+          <section className="history-progress-overview" aria-label="Current training progress">
+            <article className="history-week-progress">
+              <div>
+                <Eyebrow>This week</Eyebrow>
+                <strong>{completedThisWeek} <span>of {weeklyTarget} sessions</span></strong>
+                <p>{completedThisWeek >= weeklyTarget
+                  ? "Weekly target complete. Protect recovery before adding more work."
+                  : `${Math.max(0, weeklyTarget - completedThisWeek)} ${weeklyTarget - completedThisWeek === 1 ? "session" : "sessions"} remaining to match your plan.`}</p>
+              </div>
+              <div className="history-week-ring" style={{ "--history-progress": `${weeklyPercent * 3.6}deg` } as React.CSSProperties}>
+                <span>{weeklyPercent}%</span>
+              </div>
+              <div className="history-week-track" aria-hidden="true"><span style={{ width: `${weeklyPercent}%` }} /></div>
+            </article>
+            <dl className="history-lifetime-metrics">
+              <div><dt>Completed</dt><dd>{dashboard.progress.completedSessions}<small>sessions</small></dd></div>
+              <div><dt>Working sets</dt><dd>{dashboard.progress.completedSets}<small>total</small></dd></div>
+              <div><dt>Volume</dt><dd>{Math.round(dashboard.progress.totalVolumeKg).toLocaleString()}<small>kg</small></dd></div>
+              <div><dt>Avg. effort</dt><dd>{dashboard.progress.averageEffort ?? "—"}<small>RPE</small></dd></div>
+            </dl>
+          </section>
+
+          <section className="history-analysis-grid">
+            <article className="history-load-card">
+              <header>
+                <div><Eyebrow>Recent workload</Eyebrow><h2>Working sets by session</h2></div>
+                <span><b>{recentAverageSets}</b> sets avg · <b>{recentAverageDuration}</b> min avg</span>
+              </header>
+              {recentCompleted.length > 0 ? (
+                <div className="history-load-chart" aria-label="Working sets completed in recent sessions">
+                  {recentCompleted.map((session) => (
+                    <div key={session.id}>
+                      <span style={{ height: `${Math.max(12, (session.totalSets / maxRecentSets) * 100)}%` }}><b>{session.totalSets}</b></span>
+                      <small>{new Intl.DateTimeFormat("en", { month: "short", day: "numeric" }).format(new Date(session.startedAt))}</small>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="history-analysis-empty">Complete another workout to start the recent-load chart.</p>
+              )}
+            </article>
+            <article className="history-records-card">
+              <header><Eyebrow>Best working sets</Eyebrow><h2>Recent exercise records</h2></header>
+              {personalBests.length > 0 ? (
+                <ol>
+                  {personalBests.map((record, index) => (
+                    <li key={record.exerciseId}>
+                      <span>{String(index + 1).padStart(2, "0")}</span>
+                      <strong>{record.name}</strong>
+                      <b>{record.loadKg > 0 ? `${record.loadKg} kg × ${record.reps}` : `${record.reps} reps`}</b>
+                    </li>
+                  ))}
+                </ol>
+              ) : (
+                <p className="history-analysis-empty">Logged working sets will become exercise records here.</p>
+              )}
+            </article>
+          </section>
+
+          <section className="history-coach-review">
+            <div>
+              <Eyebrow>Coach review</Eyebrow>
+              <strong>{completedThisWeek >= weeklyTarget ? "You hit this week’s target." : "Your next best move is consistency."}</strong>
+              <p>Your coach can see this training history, current plan, readiness, and exact logged sets.</p>
+            </div>
+            <Button variant="secondary" onClick={onCoach}>Review my progress with coach</Button>
+          </section>
+        </>
       )}
 
-      <section className="history-log">
+      {hasCompletedWork && (
+      <section className="history-log" aria-labelledby="history-log-title">
         <header className="history-log-header">
           <div>
-            <h2>Recent sessions</h2>
-            <p>Open a session to inspect the work that was actually recorded.</p>
+            <h2 id="history-log-title">Workout details</h2>
+            <p>Inspect completed work and any stopped session that contains logged sets.</p>
           </div>
           <div className="history-filters" aria-label="Filter training history">
             {([
-              ["all", "All", dashboard.recentSessions.length],
               ["completed", "Completed", completed.length],
-              ["abandoned", "Stopped", abandoned.length],
+              ["all", "All activity", completed.length + meaningfulStopped.length],
             ] as const).map(([value, label, count]) => (
               <button
                 aria-pressed={filter === value}
@@ -2812,7 +2982,6 @@ function History({ dashboard }: { dashboard: DashboardResponse }) {
           {visibleSessions.map((session) => {
             const startedAt = new Date(session.startedAt);
             const loggedExercises = session.exercises.filter((exercise) => exercise.sets.length > 0);
-            const stoppedEmpty = session.status === "abandoned" && session.totalSets === 0;
             const statusLabel = session.status === "abandoned"
               ? "Stopped"
               : session.status === "completed"
@@ -2832,9 +3001,7 @@ function History({ dashboard }: { dashboard: DashboardResponse }) {
                     <small>{dateFormatter.format(startedAt)}</small>
                   </span>
                   <span className="history-session-metrics">
-                    {stoppedEmpty
-                      ? "Stopped before first set"
-                      : `${session.totalSets} sets · ${session.totalVolumeKg.toLocaleString()} kg · ${formatDuration(session.durationSeconds)}`}
+                    {`${session.totalSets} sets · ${session.totalVolumeKg.toLocaleString()} kg · ${formatDuration(session.durationSeconds)}`}
                   </span>
                   <StatusBadge
                     className="session-status"
@@ -2877,12 +3044,31 @@ function History({ dashboard }: { dashboard: DashboardResponse }) {
           })}
           {visibleSessions.length === 0 && (
             <div className="history-filter-empty">
-              <strong>No {filter === "all" ? "recent" : filter} sessions</strong>
-              <p>Your matching sessions will appear here after training.</p>
+              <strong>No completed session details are available yet</strong>
+              <p>Finish another workout to add it to this comparison.</p>
             </div>
           )}
         </div>
       </section>
+      )}
+
+      {emptyAttempts.length > 0 && (
+        <details className="history-attempts">
+          <summary>
+            <span><strong>Incomplete attempts</strong><small>Zero-set starts are kept for audit only and excluded from progress.</small></span>
+            <b>{emptyAttempts.length}</b>
+            <i aria-hidden="true">+</i>
+          </summary>
+          <div>
+            {emptyAttempts.map((session) => (
+              <article key={session.id}>
+                <span><strong>{session.name}</strong><small>{dateFormatter.format(new Date(session.startedAt))}</small></span>
+                <small>Stopped before first set</small>
+              </article>
+            ))}
+          </div>
+        </details>
+      )}
     </div>
   );
 }

@@ -166,10 +166,7 @@ export function resolvePlanStartDate(value: string | undefined, now = new Date()
     return parsed;
   }
 
-  const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-  const daysUntilMonday = (8 - today.getUTCDay()) % 7;
-  today.setUTCDate(today.getUTCDate() + daysUntilMonday);
-  return today;
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
 }
 
 export function materializePlan({
@@ -258,6 +255,27 @@ export function serializePlan(plan: WorkoutPlanDocument): WorkoutPlan {
     rationale: plan.rationale,
     weeklyProgression: plan.weeklyProgression,
     createdAt: plan.createdAt.toISOString(),
+  };
+}
+
+export function reschedulePlan({
+  plan,
+  workouts,
+  startDate,
+}: {
+  plan: WorkoutPlanDocument;
+  workouts: PlannedWorkoutDocument[];
+  startDate: Date;
+}) {
+  return {
+    plan: { ...plan, startDate },
+    workouts: workouts.map((workout) => {
+      const scheduledFor = new Date(startDate);
+      scheduledFor.setUTCDate(
+        startDate.getUTCDate() + (workout.weekNumber - 1) * 7 + workout.dayOffset,
+      );
+      return { ...workout, scheduledFor };
+    }),
   };
 }
 

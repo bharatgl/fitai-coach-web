@@ -4,6 +4,7 @@ import {
   classifySafetyMessage,
   coachBehaviorContract,
   createLiveCoachToken,
+  ensurePlanChangeConfirmation,
   generateCoachResponse,
 } from "@fitai/ai";
 import type {
@@ -32,7 +33,11 @@ import {
   buildCoachProfileContext,
   buildCoachTrainingContext,
 } from "../domain/coach-context.js";
-import { compactLiveHistory } from "../domain/live-history.js";
+import {
+  compactDatedLiveHistory,
+  defaultCoachTimeZone,
+  formatCoachLocalDateTime,
+} from "../domain/live-history.js";
 import {
   summarizeMovementEventsForCoach,
   type MovementEventDocument,
@@ -133,6 +138,14 @@ const attachmentParams = z.object({ attachmentId: z.string().uuid() });
 const liveTokenInput = z.object({
   threadId: z.string().uuid(),
   sessionId: z.string().trim().min(1).max(100).optional(),
+  timeZone: z.string().trim().min(1).max(100).refine((timeZone) => {
+    try {
+      new Intl.DateTimeFormat("en", { timeZone }).format();
+      return true;
+    } catch {
+      return false;
+    }
+  }, "Invalid IANA timezone").default(defaultCoachTimeZone),
 });
 const liveSnapshotQuery = z.object({
   sessionId: z.string().trim().min(1).max(100).optional(),
@@ -428,7 +441,7 @@ async function generateReply(
       .sort({ dayOffset: 1 })
       .toArray()
     : [];
-  return generateCoachResponse({
+  const result = await generateCoachResponse({
     apiKey: config.GEMINI_API_KEY,
     model: config.GEMINI_MODEL,
     profile: buildCoachProfileContext(profile),
@@ -460,6 +473,16 @@ async function generateReply(
       dataBase64: Buffer.from(attachment.data.buffer).toString("base64"),
     })),
   });
+  return {
+    ...result,
+    reply: result.safetyCategory === "none"
+      ? ensurePlanChangeConfirmation({
+          reply: result.reply,
+          message,
+          hasPlanContext: Boolean(planScope?.planId && selectedWeekWorkouts.length > 0),
+        })
+      : result.reply,
+  };
 }
 
 async function loadCoachMovementContext(
@@ -562,10 +585,14 @@ async function loadLiveCoachSnapshot(
 
 function liveCoachInstruction(
   snapshot: LiveCoachSnapshotResponse,
+  currentLocalDateTime: string,
+  timeZone: string,
 ) {
   return [
     "You are ForgeFit's live personal coach in an ongoing spoken conversation.",
     coachBehaviorContract,
+    `The authoritative current local date and time is ${currentLocalDateTime}. The member's IANA timezone is ${timeZone}.`,
+    "The ongoing thread turns include their original Sent timestamps. Use those timestamps to distinguish past discussions from current intentions.",
     "Speak naturally and directly. Use short sentences, contractions, and a warm confident gym-coach tone.",
     "Speak with a natural Indian English cadence and pronunciation without exaggeration or stereotype.",
     "If the member speaks Hindi, Punjabi, or Hinglish, mirror that language mix naturally. Otherwise continue in English.",
@@ -686,7 +713,7 @@ export async function coachRoutes(app: FastifyInstance) {
         database.collection<CoachMessageDocument>("coachMessages")
           .find(
             { userId: user.id, threadId: input.threadId },
-            { projection: { _id: 0, role: 1, content: 1 } },
+            { projection: { _id: 0, role: 1, content: 1, createdAt: 1 } },
           )
           .sort({ createdAt: -1 })
           .limit(80)
@@ -695,7 +722,9 @@ export async function coachRoutes(app: FastifyInstance) {
       try {
         const { agentId, signedUrl } = await createElevenLabsSignedUrl(getConfig());
         const userName = user.name.trim() || "there";
-        const chronologicalHistory = compactLiveHistory(history)
+        const now = new Date();
+        const currentLocalDateTime = formatCoachLocalDateTime(now, input.timeZone);
+        const chronologicalHistory = compactDatedLiveHistory(history, 24_000, input.timeZone)
           .map((turn) => `${turn.role === "user" ? "Member" : "Coach"}: ${turn.text}`)
           .join("\n");
         return {
@@ -706,6 +735,8 @@ export async function coachRoutes(app: FastifyInstance) {
             user_name: userName,
             member_context: JSON.stringify(snapshot),
             conversation_history: chronologicalHistory || "No earlier conversation was supplied.",
+            current_local_datetime: currentLocalDateTime,
+            user_timezone: input.timeZone,
           },
         };
       } catch (cause) {
@@ -742,22 +773,28 @@ export async function coachRoutes(app: FastifyInstance) {
         database.collection<CoachMessageDocument>("coachMessages")
           .find(
             { userId: user.id, threadId: input.threadId },
-            { projection: { _id: 0, role: 1, content: 1 } },
+            { projection: { _id: 0, role: 1, content: 1, createdAt: 1 } },
           )
           .sort({ createdAt: -1 })
           .limit(80)
           .toArray(),
       ]);
       const config = getConfig();
+      const now = new Date();
+      const currentLocalDateTime = formatCoachLocalDateTime(now, input.timeZone);
       const token = await createLiveCoachToken({
         apiKey: config.GEMINI_API_KEY,
         model: config.GEMINI_LIVE_MODEL,
-        systemInstruction: liveCoachInstruction(snapshot),
+        systemInstruction: liveCoachInstruction(
+          snapshot,
+          currentLocalDateTime,
+          input.timeZone,
+        ),
       });
       return {
         ...token,
         voiceName: config.GEMINI_LIVE_VOICE,
-        initialHistory: compactLiveHistory(history),
+        initialHistory: compactDatedLiveHistory(history, 24_000, input.timeZone),
       };
     },
   );

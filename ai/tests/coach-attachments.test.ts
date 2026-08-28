@@ -5,6 +5,7 @@ import {
   buildCoachContents,
   coachBehaviorContract,
   coachSystemPrompt,
+  ensurePlanChangeConfirmation,
 } from "../src/coach.js";
 
 test("builds multimodal coach content when attachments are present", () => {
@@ -88,6 +89,37 @@ test("includes exact training context and enforces personalized response detail"
   assert.match(coachBehaviorContract, /latest explicit statement about their current intent and timing/);
   assert.match(coachBehaviorContract, /Allow ordinary conversation/);
   assert.match(coachBehaviorContract, /will train tomorrow or later/);
+  assert.match(coachBehaviorContract, /differs from the saved selectedWeek schedule/);
+  assert.match(coachBehaviorContract, /ask one explicit yes\/no question/);
+});
+
+test("asks before changing a saved week when reported training differs from the plan", () => {
+  const reply = ensurePlanChangeConfirmation({
+    reply: "Do your Back session today and keep the prescribed sets.",
+    message: "I already had my push day yesterday and will do the back session today.",
+    hasPlanContext: true,
+  });
+
+  assert.match(reply, /Would you like me to update this week's saved plan to reflect that\?$/);
+});
+
+test("does not duplicate or force plan confirmation outside a schedule mismatch", () => {
+  const existingQuestion = "Would you like me to update this week's plan?";
+  assert.equal(ensurePlanChangeConfirmation({
+    reply: existingQuestion,
+    message: "I already did my push workout yesterday.",
+    hasPlanContext: true,
+  }), existingQuestion);
+  assert.equal(ensurePlanChangeConfirmation({
+    reply: "Use your normal warm-up.",
+    message: "How should I warm up?",
+    hasPlanContext: true,
+  }), "Use your normal warm-up.");
+  assert.equal(ensurePlanChangeConfirmation({
+    reply: "Noted.",
+    message: "I already did my push workout yesterday.",
+    hasPlanContext: false,
+  }), "Noted.");
 });
 
 test("includes only compact validated movement aggregates in coach context", () => {
