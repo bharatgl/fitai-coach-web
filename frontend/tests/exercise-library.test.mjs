@@ -37,13 +37,14 @@ test("vendors the complete RepDB free tier as attributed in-app exercise visuals
 });
 
 test("enriches visual demos from licensed sources without exposing a text directory", async () => {
-  const [rawReference, rawRepdb, rawWorkoutGuide, component, styles, page] = await Promise.all([
+  const [rawReference, rawRepdb, rawWorkoutGuide, component, styles, page, dockerfile] = await Promise.all([
     readFile(new URL("../../backend/src/data/exercises.json", import.meta.url), "utf8"),
     readFile(new URL("../data/repdb-exercises.json", import.meta.url), "utf8"),
     readFile(new URL("../data/workout-guide-exercises.json", import.meta.url), "utf8"),
     readFile(new URL("../components/ExerciseLibrary.tsx", import.meta.url), "utf8"),
     readFile(new URL("../components/ExerciseLibrary.module.css", import.meta.url), "utf8"),
     readFile(new URL("../app/exercises/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../Dockerfile", import.meta.url), "utf8"),
   ]);
   const reference = JSON.parse(rawReference).exercises;
   const repdb = JSON.parse(rawRepdb).exercises;
@@ -74,6 +75,7 @@ test("enriches visual demos from licensed sources without exposing a text direct
   assert.match(component, /repdbLibraryData\.exercises/);
   assert.match(component, /workoutGuideLibraryData\.exercises/);
   assert.match(component, /workoutGuideExercises\s*\.map/);
+  assert.match(dockerfile, /COPY backend\/src\/data\/exercises\.json backend\/src\/data\/exercises\.json/);
   assert.doesNotMatch(component, /seenNames|baseExercises|directoryRow/);
   assert.doesNotMatch(component, /LibraryMode|Directory|directory exercises/);
   assert.match(component, /ExercisePreview/);
