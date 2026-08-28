@@ -66,7 +66,10 @@ npm run test:e2e:workout --workspace backend
 
 See [`docs/architecture.md`](docs/architecture.md) for request flows, security
 boundaries, deployment setup, and recommended integrations. Delivery status is
-tracked in [`docs/roadmap.md`](docs/roadmap.md). The repeatable GCP deployment
+tracked in [`docs/roadmap.md`](docs/roadmap.md). The staged plan for logging,
+tracing, response validation, model evaluation, and AI cost control is in
+[`docs/observability-and-model-quality-plan.md`](docs/observability-and-model-quality-plan.md).
+The repeatable GCP deployment
 workflow is in [`infra/gcp/README.md`](infra/gcp/README.md).
 The provider-neutral container contract is documented in
 [`infra/README.md`](infra/README.md).
