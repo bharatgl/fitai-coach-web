@@ -25,7 +25,21 @@ export {
 } from "./plan.js";
 export {
   AiProviderError,
+  type AiFailureReason,
 } from "./provider-error.js";
+export {
+  estimateCostMicroUsd,
+  modelPricing,
+  pricingFor,
+  type AiUsage,
+  type ModelPricing,
+} from "./pricing.js";
+export {
+  failureExcerptLimit,
+  type AiCallContext,
+  type AiFeature,
+  type AiRunTelemetry,
+} from "./telemetry.js";
 export {
   createLiveCoachToken,
   defaultLiveCoachModel,

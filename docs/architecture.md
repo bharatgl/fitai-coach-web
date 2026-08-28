@@ -214,6 +214,83 @@ locally. Moving to another container platform therefore changes the deployment
 adapter and secret mappings rather than frontend, backend, database, or AI
 business logic.
 
+## Observability
+
+Everything below is self-hosted and free: structured lines on stdout, read with
+`jq` or the report script. No log shipping, no vendor, no storage bill.
+
+### One identifier across the tiers
+
+The browser, the Next.js proxy, the Fastify backend, and each model call share a
+single `x-request-id`.
+
+1. The proxy adopts an inbound `x-request-id` or mints one, forwards it to the
+   backend, and echoes it on the response.
+2. The backend adopts the same header via `genReqId`, so pino stamps `reqId` on
+   every line for that request, and echoes it back through an `onSend` hook.
+3. Each model call records it on the run record described below.
+4. `ApiRequestError.requestId` carries it into the browser, so a failure a member
+   reports can be traced without guessing from timestamps.
+
+Both tiers validate a supplied id against `^[A-Za-z0-9_-]{8,64}$` before adopting
+it. An unconstrained header would let a caller inject newlines or unbounded text
+into the log stream.
+
+### AI run records
+
+Every model call emits exactly one `ai.run` line, whether it succeeded or failed,
+carrying token counts, wall-clock duration, USD cost, and the failure class. The
+shape is `AiRunTelemetry` in `ai/src/telemetry.ts`, versioned by its `schema`
+field so old lines stay parseable.
+
+Run records carry no member content. Generated text already lives in
+`coachMessages` and `workoutPlans`; duplicating it into logs would create a
+second copy to delete on account removal. On a schema violation the record names
+the *field* that broke the contract and its Zod issue code, never the value.
+
+Summarize them with:
+
+```bash
+docker logs fitai-backend 2>&1 | npm run ai:report
+npm run ai:report -- backend.log --since 2026-08-01
+```
+
+The report groups by feature and model and reports call volume, failure rate by
+class, p50/p95 latency, token split, total cost, and cost per *successful*
+response. That last column is the one that matters when comparing models: a model
+that is cheap per call but fails validation often is not cheap.
+
+### Failure classes
+
+`AiProviderError.reason` distinguishes problems that have different owners:
+`authentication`, `rate_limit`, `timeout`, and `unavailable` are the provider's;
+`empty_response`, `malformed_json` (the model did not emit JSON), and
+`schema_violation` (valid JSON that broke our contract) are ours. `retryable`
+is derived from the class. User-facing messages are unchanged.
+
+### What must never be logged
+
+Coach message content, readiness notes, `movementNotes`, `bodyConsiderations`,
+attachments, camera frames, and email addresses are health data. Logs record
+shape — counts, lengths, durations, categories — and never content. `redactPaths`
+in `backend/src/observability/logging.ts` enforces this for credentials and
+payloads, and `backend/tests/logging-redaction.test.ts` asserts at runtime that
+nothing leaks. Members appear as `userRef`, an HMAC of the account id keyed on a
+server-only secret, so runs can be joined during debugging without the log store
+becoming a personal-data store.
+
+### Settings
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `LOG_LEVEL` | `info` | pino level |
+| `LOG_SALT` | `API_JWT_SECRET` | keys the `userRef` hash |
+| `AI_LOG_FAILURE_EXCERPT` | `false` | records a bounded excerpt of output that failed to parse; raw output can echo member context, so enable it only while diagnosing |
+
+Per-feature timeouts live beside each prompt in `ai/src/{coach,plan,vision}.ts`:
+30s for coach, 120s for plan generation, 20s for a camera frame. There is no
+retry yet — the failure classes above are what will make retry decidable.
+
 ## Recommended additions
 
 Connect these only when their milestone needs them:

@@ -6,6 +6,7 @@ import {
   createLiveCoachToken,
   ensurePlanChangeConfirmation,
   generateCoachResponse,
+  type AiCallContext,
 } from "@fitai/ai";
 import type {
   CoachAttachment,
@@ -34,6 +35,7 @@ import { z } from "zod";
 import { authenticate, type AuthenticatedUser } from "../auth.js";
 import { getConfig } from "../config.js";
 import { getDatabase, getMongoClient } from "../db.js";
+import { aiCallContext } from "../observability/ai-telemetry.js";
 import {
   buildCoachProfileContext,
   buildCoachTrainingContext,
@@ -446,6 +448,7 @@ async function migrateLegacyMessages(database: Db, userId: string) {
 async function generateReply(
   database: Db,
   user: AuthenticatedUser,
+  context: AiCallContext,
   threadId: string,
   message: string,
   before: Date,
@@ -545,6 +548,7 @@ async function generateReply(
       : [];
   const result = await generateCoachResponse({
     provider: aiSettings,
+    context,
     profile: buildCoachProfileContext(profile),
     message,
     trainingContext: buildCoachTrainingContext({
@@ -1166,6 +1170,7 @@ export async function coachRoutes(app: FastifyInstance) {
       const aiSettings = await resolveAISettings(user.id);
       const analysis = await analyzeCameraFrame({
         provider: aiSettings,
+        context: aiCallContext(request, user),
         focus: input.focus,
         memberContext: snapshot,
         imageBase64: input.imageBase64,
@@ -1199,6 +1204,7 @@ export async function coachRoutes(app: FastifyInstance) {
       const result = await generateReply(
         database,
         user,
+        aiCallContext(request, user),
         input.threadId,
         input.question,
         new Date(),
@@ -1503,6 +1509,7 @@ export async function coachRoutes(app: FastifyInstance) {
       const result = await generateReply(
         database,
         user,
+        aiCallContext(request, user),
         thread.id,
         input.message,
         now,
@@ -1613,6 +1620,7 @@ export async function coachRoutes(app: FastifyInstance) {
       const result = await generateReply(
         database,
         user,
+        aiCallContext(request, user),
         threadId,
         content,
         existing.createdAt,

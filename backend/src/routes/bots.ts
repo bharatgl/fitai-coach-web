@@ -561,6 +561,9 @@ export async function botRoutes(app: FastifyInstance) {
           ],
         }],
         maxOutputTokens: 1_200,
+        temperature: 0.3,
+        timeoutMs: 30_000,
+        feature: "bot",
       });
       return {
         attachments: attachments.map(serializeAttachment),
@@ -832,6 +835,9 @@ export async function botRoutes(app: FastifyInstance) {
           },
         ],
         maxOutputTokens: currentResearch ? 3_200 : 2_000,
+        temperature: 0.3,
+        timeoutMs: 30_000,
+        feature: "bot",
       });
       const now = new Date();
       const userMessage: BotChatMessageDocument = {

@@ -5,6 +5,7 @@ import Fastify from "fastify";
 import { ZodError } from "zod";
 import { getConfig } from "./config.js";
 import { ensureIndexes, getDatabase } from "./db.js";
+import { generateRequestId, redactPaths } from "./observability/logging.js";
 import { coachRoutes } from "./routes/coach.js";
 import { botRoutes } from "./routes/bots.js";
 import { dashboardRoutes } from "./routes/dashboard.js";
@@ -20,7 +21,15 @@ import { registerRequestTelemetry } from "./services/request-telemetry.js";
 export async function buildApp() {
   const config = getConfig();
   const app = Fastify({
-    logger: config.NODE_ENV !== "test",
+    logger: config.NODE_ENV === "test"
+      ? false
+      : {
+          level: config.LOG_LEVEL,
+          redact: { paths: redactPaths, remove: true },
+        },
+    // Adopts the caller's x-request-id when present, so one identifier spans
+    // the browser, the frontend proxy, this service, and each model call.
+    genReqId: generateRequestId,
     trustProxy: true,
     bodyLimit: 64 * 1024,
   });
@@ -28,6 +37,10 @@ export async function buildApp() {
   await app.register(helmet);
   await app.register(rateLimit, { max: 120, timeWindow: "1 minute" });
   registerRequestTelemetry(app);
+
+  app.addHook("onSend", async (request, reply) => {
+    reply.header("x-request-id", request.id);
+  });
 
   app.get("/health/live", async () => ({ status: "ok" }));
   app.get("/health/ready", async (_request, reply) => {

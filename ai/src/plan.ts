@@ -1,6 +1,18 @@
 import type { UserProfile } from "@fitai/contracts";
 import { z } from "zod";
 import { generateStructuredAI, type AIProviderConfig } from "./provider.js";
+import type { AiCallContext } from "./telemetry.js";
+
+/**
+ * A whole periodized program in one response. The output ceiling is the largest
+ * in the product, so the timeout is correspondingly generous — a slow plan is
+ * still far better than a failed one, because the user is waiting on it.
+ */
+const planProfile = {
+  temperature: 0.3,
+  maxOutputTokens: 32_000,
+  timeoutMs: 120_000,
+} as const;
 
 const planExerciseSchema = z.object({
   exerciseId: z.string().min(1).max(80),
@@ -47,6 +59,7 @@ export type GeneratePlanInput = {
   provider: AIProviderConfig;
   profile: UserProfile;
   exercises: PlanCatalogExercise[];
+  context?: AiCallContext;
 };
 
 const sessionTemplates = [
@@ -280,7 +293,9 @@ export async function generateAdaptivePlan(
     provider: input.provider,
     schema: generatedPlanSchema,
     systemInstruction: planInstructions,
-    maxOutputTokens: 32_000,
+    feature: "plan",
+    context: input.context,
+    ...planProfile,
     contents: JSON.stringify({
       requestedTrainingDays: input.profile.trainingDaysPerWeek,
       requestedProgramWeeks: input.profile.programDurationWeeks,

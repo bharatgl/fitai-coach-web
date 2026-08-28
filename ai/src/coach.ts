@@ -6,6 +6,17 @@ import {
   type AIProviderConfig,
 } from "./provider.js";
 import { classifySafetyMessage, type CoachSafetyResult } from "./safety.js";
+import type { AiCallContext } from "./telemetry.js";
+
+/**
+ * A conversational reply: short enough to answer inside a user's patience, warm
+ * enough that a little sampling variety helps.
+ */
+const coachProfile = {
+  temperature: 0.3,
+  maxOutputTokens: 3_500,
+  timeoutMs: 30_000,
+} as const;
 
 const coachOutput = z.object({
   reply: z
@@ -133,6 +144,7 @@ export type GenerateCoachResponseInput = {
     mimeType: string;
     dataBase64: string;
   }>;
+  context?: AiCallContext;
 };
 
 export type GeneratedCoachResponse = CoachSafetyResult & {
@@ -228,8 +240,10 @@ export async function generateCoachResponse(
     provider: input.provider,
     schema: coachOutput,
     systemInstruction: coachSystemPrompt,
-    maxOutputTokens: 3_500,
     contents: buildCoachContents(input),
+    feature: "coach",
+    context: input.context,
+    ...coachProfile,
   });
 
   const { personalizationEvidence, ...coachResult } = result;

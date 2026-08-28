@@ -1,12 +1,24 @@
 export class ApiRequestError extends Error {
   readonly status: number;
   readonly retryAfterSeconds: number | null;
+  /**
+   * Identifies this exact request in the proxy and backend logs. Carried on the
+   * error so a failure a member reports can be traced without guessing from
+   * timestamps.
+   */
+  readonly requestId: string | null;
 
-  constructor(message: string, status: number, retryAfterSeconds: number | null) {
+  constructor(
+    message: string,
+    status: number,
+    retryAfterSeconds: number | null,
+    requestId: string | null = null,
+  ) {
     super(message);
     this.name = "ApiRequestError";
     this.status = status;
     this.retryAfterSeconds = retryAfterSeconds;
+    this.requestId = requestId;
   }
 }
 
@@ -42,6 +54,7 @@ export async function apiRequest<T>(path: string, init?: RequestInit): Promise<T
       body?.message ?? body?.error ?? fallbackMessage,
       response.status,
       retryAfterSeconds(response),
+      response.headers.get("x-request-id"),
     );
   }
   return body as T;

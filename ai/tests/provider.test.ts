@@ -32,6 +32,9 @@ test("maps files and structured output through the OpenAI Responses adapter", as
         ],
       }],
       maxOutputTokens: 300,
+      temperature: 0.3,
+      timeoutMs: 30_000,
+      feature: "coach",
     });
 
     assert.deepEqual(result, { answer: "reviewed" });
@@ -73,6 +76,9 @@ test("maps PDFs through the Anthropic document adapter", async () => {
         parts: [{ file: { name: "report.pdf", mimeType: "application/pdf", dataBase64: pdfBase64 } }],
       }],
       maxOutputTokens: 300,
+      temperature: 0.3,
+      timeoutMs: 30_000,
+      feature: "coach",
     });
 
     assert.deepEqual(result, { answer: "reviewed" });
@@ -111,6 +117,9 @@ test("uses a configurable Responses endpoint for OpenAI-compatible providers", a
       systemInstruction: "Answer.",
       contents: "Hello",
       maxOutputTokens: 100,
+      temperature: 0.3,
+      timeoutMs: 30_000,
+      feature: "coach",
     });
 
     assert.deepEqual(result, { answer: "local" });

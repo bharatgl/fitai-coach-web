@@ -9,6 +9,7 @@ import type { FastifyInstance } from "fastify";
 import { MongoServerError } from "mongodb";
 import { z } from "zod";
 import { authenticate } from "../auth.js";
+import { aiCallContext } from "../observability/ai-telemetry.js";
 import { getDatabase, getMongoClient } from "../db.js";
 import { availableExercises } from "../domain/exercise-catalog.js";
 import {
@@ -92,6 +93,7 @@ export async function planRoutes(app: FastifyInstance) {
             provider: aiSettings,
             profile,
             exercises,
+            context: aiCallContext(request, user),
           });
         } catch (error) {
           if (!(error instanceof AiProviderError)) throw error;

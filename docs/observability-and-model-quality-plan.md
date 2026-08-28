@@ -1,8 +1,52 @@
 # Observability, Response Quality, and Cost Engineering Plan
 
-Status: proposal. Nothing in this document is implemented yet.
+Status: in progress. See **Delivered so far** below for what has landed.
 Scope: `ai/`, `backend/`, `frontend/app/api/backend`, `infra/gcp/`.
 Audience: whoever builds and operates ForgeFit in production.
+
+## Delivered so far
+
+The first slice of Stages 1 and 2 is implemented and documented in
+[`architecture.md`](architecture.md#observability):
+
+- **Correlation.** One validated `x-request-id` spans browser, Next proxy,
+  Fastify, and every model call. The proxy now logs and no longer echoes internal
+  error messages to the browser.
+- **Instrumented AI boundary.** `generateGeminiStructured` captures
+  `usageMetadata`, wall-clock duration, and USD cost, and emits one versioned
+  `ai.run` record per call — success or failure — through an injected sink.
+- **Failure taxonomy.** `empty_response`, `malformed_json`, `schema_violation`,
+  and `timeout` are now distinct from `unavailable`, with `retryable` derived
+  from the class. A schema violation records the failing field path and Zod
+  code, never the value. User-facing messages are unchanged.
+- **Per-feature timeouts** (coach 30s, plan 120s, vision 20s) and a reused
+  provider client.
+- **Pricing table** (`ai/src/pricing.ts`) with per-model rates, cache-read rates,
+  and long-context tiers. An unpriced model records tokens and reports
+  `costMicroUsd: null` rather than implying the call was free.
+- **`npm run ai:report`** aggregates `ai.run` lines into per-feature, per-model
+  volume, failure rate by class, p50/p95 latency, tokens, cost, and cost per
+  *successful* response.
+
+Three decisions were taken that change later stages:
+
+1. **Run records are log lines, not a collection.** No `aiRuns` in MongoDB and no
+   log shipping — this is a zero-budget project. `scripts/ai-runs-report.mjs` is
+   the query layer. The trade-off is real and is restated in Stage 0 below:
+   container logs are a 30 MB rotating buffer that dies with the VM, so anything
+   worth keeping has to be exported before then. The telemetry sink is injected,
+   so adding a durable sink later is a change at the call site, not in `ai/`.
+2. **Cost is computed, not deferred.** Prices are checked in with a `verifiedOn`
+   date rather than fetched, so a run recorded last month keeps the price that
+   was in force when it ran.
+3. **Timeouts landed; retry did not.** Retry changes cost and latency and is
+   better decided once the failure classes above have produced real data.
+
+Still open from Stages 1–2: business-event logging beyond the AI path, a
+`/metrics` endpoint, and counting the `local-fallback:validation` rate that
+Stage 2 makes queryable.
+
+
 
 This plan starts from what the repository actually does today, names the gaps
 precisely, and then sequences the work so that each stage is independently
