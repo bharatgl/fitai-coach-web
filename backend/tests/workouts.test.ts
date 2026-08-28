@@ -141,6 +141,7 @@ test("selects a compatible same-pattern substitute before sets are logged", () =
   assert.notEqual(replacement.id, "goblet-squat");
   const updated = substituteWorkoutExercise(session, "goblet-squat", replacement);
   assert.equal(updated.exercises[0]?.substitutedFor?.exerciseId, "goblet-squat");
+  assert.ok(replacement.video);
   assert.equal(updated.exercises[0]?.video?.videoId, replacement.video.videoId);
 
   const logged = logWorkoutSet(

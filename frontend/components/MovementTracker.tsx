@@ -320,12 +320,34 @@ export function MovementTracker({
   const tracking = status === "tracking";
   return (
     <Card className="movement-tracker" padding="md">
+      <div className="movement-tracker-heading">
+        <div>
+          <Eyebrow>Optional form assist</Eyebrow>
+          <h2>Camera tracking</h2>
+        </div>
+        <span className="movement-private-badge">Private</span>
+      </div>
+      <div className="movement-camera" data-state={status}>
+        <video ref={videoRef} muted playsInline aria-label="Local movement tracking camera preview" />
+        <canvas ref={canvasRef} aria-hidden="true" />
+        {!tracking && status !== "starting" && (
+          <div className="movement-camera-empty">
+            <span aria-hidden="true">⌾</span>
+            <strong>Camera is off</strong>
+            <small>Turn it on for automatic rep counting and form cues.</small>
+          </div>
+        )}
+        {status === "starting" && <div className="movement-camera-loading">Preparing private tracking…</div>}
+        <div className="movement-camera-status">
+          <strong>{tracking ? `${trackedReps} reps tracked` : status === "error" ? "Camera unavailable" : "Ready when you are"}</strong>
+          <small>{feedback}</small>
+          {lastRom !== null && <small>Last detected ROM: {lastRom}°</small>}
+          {syncError && <small className="movement-sync-error">Sync pending: {syncError}</small>}
+        </div>
+      </div>
       <div className="movement-tracker-copy">
-        <Eyebrow>On-device movement tracking</Eyebrow>
-        <h2>Private rep and range-of-motion feedback.</h2>
-        <p>Camera frames and pose landmarks stay in this browser. forgefit.space receives only compact rep timing, confidence, and range-of-motion summaries.</p>
         <label className="movement-exercise-select">
-          Exercise
+          Track exercise
           <select
             value={selected?.exercise.exerciseId ?? ""}
             disabled={status === "starting" || tracking}
@@ -345,8 +367,15 @@ export function MovementTracker({
             disabled={status === "starting" || tracking}
             onChange={(event) => setConsented(event.target.checked)}
           />
-          <span>I consent to local camera processing by MediaPipe. Frames are not uploaded; MediaPipe may process non-frame performance and usage metrics.</span>
+          <span>
+            Use my camera for this workout
+            <small>Video and pose landmarks stay on this device.</small>
+          </span>
         </label>
+        <details className="movement-privacy-details">
+          <summary>How is my camera data used?</summary>
+          <p>Frames are not uploaded. forgefit.space receives only compact rep timing, confidence, and range-of-motion summaries. MediaPipe may process non-frame performance and usage metrics.</p>
+        </details>
         <div className="movement-tracker-actions">
           {tracking ? (
             <Button variant="secondary" onClick={() => stopCamera()}>Turn camera off</Button>
@@ -356,21 +385,10 @@ export function MovementTracker({
               disabled={!consented || session.status !== "active" || status === "starting"}
               onClick={() => void startCamera()}
             >
-              {status === "starting" ? "Starting camera…" : "Start camera tracking"}
+              {status === "starting" ? "Starting camera…" : "Turn on camera"}
             </Button>
           )}
           {session.status !== "active" && <small>Resume the workout to enable tracking.</small>}
-        </div>
-      </div>
-      <div className="movement-camera" data-state={status}>
-        <video ref={videoRef} muted playsInline aria-label="Local movement tracking camera preview" />
-        <canvas ref={canvasRef} aria-hidden="true" />
-        {!tracking && status !== "starting" && <span aria-hidden="true">◉</span>}
-        <div className="movement-camera-status">
-          <strong>{tracking ? `${trackedReps} reps tracked` : status === "error" ? "Camera unavailable" : "Camera off"}</strong>
-          <small>{feedback}</small>
-          {lastRom !== null && <small>Last detected ROM: {lastRom}°</small>}
-          {syncError && <small className="movement-sync-error">Sync pending: {syncError}</small>}
         </div>
       </div>
     </Card>

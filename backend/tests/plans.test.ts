@@ -78,6 +78,34 @@ test("filters the exercise catalog by equipment and experience", () => {
   assert.ok(!exercises.some((exercise) => exercise.id === "dumbbell-overhead-press"));
 });
 
+test("uses bodybuilding staples instead of warm-up regressions for an advanced full gym", () => {
+  const exercises = availableExercises(["full gym"], "advanced");
+  const ids = new Set(exercises.map((exercise) => exercise.id));
+
+  assert.ok(ids.has("opengym-0025"));
+  assert.ok(ids.has("opengym-2330"));
+  assert.ok(ids.has("opengym-0739"));
+  assert.equal(ids.has("wall-push-up"), false);
+  assert.equal(ids.has("bodyweight-squat"), false);
+  assert.equal(ids.has("bird-dog"), false);
+});
+
+test("recognizes plain gym access and never falls back to regressions for advanced athletes", () => {
+  const gymExercises = availableExercises(["gym"], "advanced");
+  const gymIds = new Set(gymExercises.map((exercise) => exercise.id));
+  assert.ok(gymIds.has("opengym-0025"));
+  assert.ok(gymIds.has("opengym-2330"));
+  assert.equal(gymIds.has("wall-push-up"), false);
+  assert.equal(gymIds.has("bodyweight-squat"), false);
+
+  const noEquipmentIds = new Set(
+    availableExercises(["bodyweight only"], "advanced").map((exercise) => exercise.id),
+  );
+  assert.equal(noEquipmentIds.has("wall-push-up"), false);
+  assert.equal(noEquipmentIds.has("bodyweight-squat"), false);
+  assert.equal(noEquipmentIds.has("bird-dog"), false);
+});
+
 test("materializes four weeks of dated workouts from a validated plan", () => {
   const catalog = availableExercises(profile.equipment, profile.experienceLevel);
   const generated = materializePlan({
@@ -178,7 +206,7 @@ test("rejects beginner-sized sessions for an advanced hour-long profile", () => 
       advancedProfile,
       availableExercises(advancedProfile.equipment, advancedProfile.experienceLevel),
     ),
-    /needs at least 5 movements/,
+    /needs at least 6 movements/,
   );
 });
 
@@ -216,7 +244,12 @@ test("validates the local fallback for a six-day advanced bodybuilding profile",
   assert.doesNotThrow(() => validatePlanDraft(fallback, advancedProfile, catalog));
   assert.equal(fallback.weeks.length, 12);
   assert.equal(fallback.weeks[0]?.days.length, 6);
-  assert.ok(fallback.weeks[0]!.days.every((day) => day.exercises.length >= 5));
+  assert.ok(fallback.weeks[0]!.days.every((day) => day.exercises.length >= 8));
+  const firstWeekIds = fallback.weeks[0]!.days.flatMap((day) => day.exercises.map((exercise) => exercise.exerciseId));
+  assert.ok(firstWeekIds.includes("opengym-0025"));
+  assert.ok(firstWeekIds.includes("opengym-2330"));
+  assert.ok(firstWeekIds.includes("opengym-0739"));
+  assert.equal(firstWeekIds.includes("wall-push-up"), false);
 });
 
 test("chooses the current or next Monday when no start date is supplied", () => {

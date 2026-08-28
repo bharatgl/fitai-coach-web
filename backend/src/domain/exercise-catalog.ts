@@ -1,11 +1,17 @@
 import type { ExerciseVideo, ExperienceLevel } from "@fitai/contracts";
+import { findExerciseLibraryItem } from "./exercise-library.js";
 
 export type EquipmentKey =
   | "dumbbells"
   | "resistance_bands"
   | "bench"
   | "barbell"
-  | "pull_up_bar";
+  | "pull_up_bar"
+  | "cable"
+  | "leverage_machine"
+  | "sled_machine"
+  | "smith_machine"
+  | "ez_barbell";
 
 export type ExerciseDefinition = {
   id: string;
@@ -13,8 +19,9 @@ export type ExerciseDefinition = {
   movement: "squat" | "hinge" | "push" | "pull" | "lunge" | "core" | "carry";
   requiredEquipment: EquipmentKey[];
   minimumLevel: ExperienceLevel;
+  muscleGroups?: string[];
   guidance: string;
-  video: ExerciseVideo;
+  video: ExerciseVideo | null;
 };
 
 function youtube(videoId: string, title: string, channel: string): ExerciseVideo {
@@ -51,8 +58,73 @@ export const exerciseCatalog: ExerciseDefinition[] = [
   { id: "farmer-carry", name: "Dumbbell Farmer Carry", movement: "carry", requiredEquipment: ["dumbbells"], minimumLevel: "beginner", guidance: "Walk tall with short controlled steps and enough space to turn safely.", video: youtube("rt17lmnaLSM", "Farmer's walk", "Buff Dudes Workouts") },
 ];
 
+function titleCase(value: string) {
+  return value.replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function bodybuildingExercise(
+  id: string,
+  name: string,
+  movement: ExerciseDefinition["movement"],
+  requiredEquipment: EquipmentKey[],
+  muscleGroups: string[],
+): ExerciseDefinition {
+  const source = findExerciseLibraryItem(id);
+  if (!source) throw new Error(`Missing bodybuilding exercise ${id}`);
+  return {
+    id,
+    name: name || titleCase(source.name),
+    movement,
+    requiredEquipment,
+    minimumLevel: "advanced",
+    muscleGroups,
+    guidance: source.instructions.slice(0, 2).join(" ").slice(0, 300),
+    video: null,
+  };
+}
+
+/**
+ * Profile-programming pool sourced from the full OpenGym library. These are
+ * stable hypertrophy staples, not warm-up regressions or camera demo choices.
+ */
+export const bodybuildingExerciseCatalog: ExerciseDefinition[] = [
+  bodybuildingExercise("opengym-0025", "Barbell Bench Press", "push", ["barbell", "bench"], ["chest"]),
+  bodybuildingExercise("opengym-0314", "Incline Dumbbell Bench Press", "push", ["dumbbells", "bench"], ["chest"]),
+  bodybuildingExercise("opengym-0188", "Cable Fly", "push", ["cable"], ["chest"]),
+  bodybuildingExercise("opengym-0576", "Machine Chest Press", "push", ["leverage_machine"], ["chest"]),
+  bodybuildingExercise("opengym-0405", "Seated Dumbbell Shoulder Press", "push", ["dumbbells", "bench"], ["shoulders"]),
+  bodybuildingExercise("opengym-0178", "Cable Lateral Raise", "push", ["cable"], ["shoulders"]),
+  bodybuildingExercise("opengym-0334", "Dumbbell Lateral Raise", "push", ["dumbbells"], ["shoulders"]),
+  bodybuildingExercise("opengym-0602", "Reverse Pec Deck", "pull", ["leverage_machine"], ["rear_delts"]),
+  bodybuildingExercise("opengym-0030", "Close-Grip Bench Press", "push", ["barbell", "bench"], ["triceps"]),
+  bodybuildingExercise("opengym-0241", "Cable Triceps Pushdown", "push", ["cable"], ["triceps"]),
+  bodybuildingExercise("opengym-0194", "Overhead Cable Triceps Extension", "push", ["cable"], ["triceps"]),
+  bodybuildingExercise("opengym-0027", "Barbell Bent-Over Row", "pull", ["barbell"], ["back"]),
+  bodybuildingExercise("opengym-0861", "Seated Cable Row", "pull", ["cable"], ["back"]),
+  bodybuildingExercise("opengym-2330", "Lat Pulldown", "pull", ["cable"], ["back"]),
+  bodybuildingExercise("opengym-0238", "Straight-Arm Cable Pulldown", "pull", ["cable"], ["back"]),
+  bodybuildingExercise("opengym-0327", "Chest-Supported Dumbbell Row", "pull", ["dumbbells", "bench"], ["back"]),
+  bodybuildingExercise("opengym-0031", "Barbell Curl", "pull", ["barbell"], ["biceps"]),
+  bodybuildingExercise("opengym-0318", "Incline Dumbbell Curl", "pull", ["dumbbells", "bench"], ["biceps"]),
+  bodybuildingExercise("opengym-0313", "Dumbbell Hammer Curl", "pull", ["dumbbells"], ["biceps"]),
+  bodybuildingExercise("opengym-0592", "Machine Preacher Curl", "pull", ["leverage_machine"], ["biceps"]),
+  bodybuildingExercise("opengym-0043", "Barbell Back Squat", "squat", ["barbell"], ["quads", "glutes"]),
+  bodybuildingExercise("opengym-0739", "45-Degree Leg Press", "squat", ["sled_machine"], ["quads", "glutes"]),
+  bodybuildingExercise("opengym-0585", "Leg Extension", "squat", ["leverage_machine"], ["quads"]),
+  bodybuildingExercise("opengym-2810", "Barbell Split Squat", "lunge", ["barbell"], ["quads", "glutes"]),
+  bodybuildingExercise("opengym-0085", "Barbell Romanian Deadlift", "hinge", ["barbell"], ["hamstrings", "glutes"]),
+  bodybuildingExercise("opengym-0599", "Seated Leg Curl", "hinge", ["leverage_machine"], ["hamstrings"]),
+  bodybuildingExercise("opengym-0586", "Lying Leg Curl", "hinge", ["leverage_machine"], ["hamstrings"]),
+  bodybuildingExercise("opengym-0058", "Barbell Hip Thrust", "hinge", ["barbell", "bench"], ["glutes", "glutes_primary"]),
+  bodybuildingExercise("opengym-0605", "Standing Calf Raise Machine", "carry", ["leverage_machine"], ["calves"]),
+  bodybuildingExercise("opengym-0594", "Seated Calf Raise Machine", "carry", ["leverage_machine"], ["calves"]),
+  bodybuildingExercise("opengym-0175", "Cable Kneeling Crunch", "core", ["cable"], ["core"]),
+];
+
+const planningExerciseCatalog = [...bodybuildingExerciseCatalog, ...exerciseCatalog];
+
 export function exerciseVideoForId(exerciseId: string): ExerciseVideo | null {
-  return exerciseCatalog.find((exercise) => exercise.id === exerciseId)?.video ?? null;
+  return planningExerciseCatalog.find((exercise) => exercise.id === exerciseId)?.video ?? null;
 }
 
 const levelRank: Record<ExperienceLevel, number> = {
@@ -61,16 +133,35 @@ const levelRank: Record<ExperienceLevel, number> = {
   advanced: 2,
 };
 
+export const advancedRegressionExerciseIds = new Set([
+  "wall-push-up",
+  "bodyweight-squat",
+  "reverse-lunge",
+  "glute-bridge",
+  "push-up",
+  "bird-dog",
+  "dead-bug",
+  "forearm-plank",
+  "calf-raise",
+  "bench-incline-push-up",
+  "assisted-pull-up",
+]);
+
 export function normalizeEquipment(equipment: string[]): Set<EquipmentKey> {
   const normalized = equipment.join(" ").toLowerCase();
   const available = new Set<EquipmentKey>();
-  const fullGym = /full gym|commercial gym|gym access|all equipment/.test(normalized);
+  const fullGym = /\b(?:full|commercial)?\s*gym\b|\bgym access\b|\ball equipment\b/.test(normalized);
 
   if (fullGym || /dumbbell|\bdbs?\b/.test(normalized)) available.add("dumbbells");
   if (fullGym || /resistance band|exercise band|\bbands?\b/.test(normalized)) available.add("resistance_bands");
   if (fullGym || /bench|box|stable chair/.test(normalized)) available.add("bench");
   if (fullGym || /barbell|power rack|squat rack/.test(normalized)) available.add("barbell");
   if (fullGym || /pull.?up bar|chin.?up bar/.test(normalized)) available.add("pull_up_bar");
+  if (fullGym || /cable|functional trainer/.test(normalized)) available.add("cable");
+  if (fullGym || /machine|selectorized/.test(normalized)) available.add("leverage_machine");
+  if (fullGym || /leg press|sled/.test(normalized)) available.add("sled_machine");
+  if (fullGym || /smith/.test(normalized)) available.add("smith_machine");
+  if (fullGym || /ez.?bar/.test(normalized)) available.add("ez_barbell");
   return available;
 }
 
@@ -79,9 +170,15 @@ export function availableExercises(
   level: ExperienceLevel,
 ): ExerciseDefinition[] {
   const available = normalizeEquipment(equipment);
-  return exerciseCatalog.filter(
+  const compatible = planningExerciseCatalog.filter(
     (exercise) =>
       levelRank[exercise.minimumLevel] <= levelRank[level] &&
       exercise.requiredEquipment.every((item) => available.has(item)),
   );
+  if (level !== "advanced") return compatible;
+
+  const advancedPool = compatible.filter(
+    (exercise) => !advancedRegressionExerciseIds.has(exercise.id),
+  );
+  return advancedPool;
 }

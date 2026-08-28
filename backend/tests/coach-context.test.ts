@@ -144,3 +144,44 @@ test("keeps active-session exercise identifiers for private movement tracking", 
 
   assert.equal(context.activeSession?.exercises[0]?.exerciseId, "bodyweight-squat");
 });
+
+test("shares the selected plan week with every coach surface", () => {
+  const now = new Date("2026-08-27T09:00:00.000Z");
+  const context = buildCoachTrainingContext({
+    now,
+    readiness: null,
+    activePlan: null,
+    nextWorkout: null,
+    activeSession: null,
+    recentSessions: [],
+    selectedWeekNumber: 2,
+    selectedWorkoutId: "pull-day",
+    selectedWeekWorkouts: [{
+      id: "pull-day",
+      userId: "user",
+      planId: "plan",
+      weekNumber: 2,
+      dayOffset: 1,
+      name: "Pull day",
+      focus: "Back and biceps",
+      scheduledFor: now,
+      estimatedMinutes: 55,
+      status: "planned",
+      createdAt: now,
+      exercises: [{
+        exerciseId: "row",
+        name: "Cable row",
+        video: null,
+        sets: 3,
+        repRange: "8-12 reps",
+        restSeconds: 90,
+        tempo: "2-1-2",
+        coachingNotes: "Drive the elbows back.",
+      }],
+    }],
+  });
+
+  assert.equal(context.selectedWeek?.weekNumber, 2);
+  assert.equal(context.selectedWeek?.selectedWorkoutId, "pull-day");
+  assert.equal(context.selectedWeek?.workouts[0]?.exercises[0]?.name, "Cable row");
+});

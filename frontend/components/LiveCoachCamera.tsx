@@ -311,6 +311,7 @@ export function LiveCoachCamera({
     <div className="live-workout-camera" data-state={status}>
       <video ref={videoRef} muted playsInline aria-label="Private workout camera preview" />
       <canvas ref={canvasRef} aria-hidden="true" />
+      {cameraOn && <span className="live-camera-self-label">You</span>}
       <div className="live-camera-controls">
         {exercises.length > 1 && !cameraOn && (
           <label>
@@ -332,7 +333,7 @@ export function LiveCoachCamera({
           aria-pressed={cameraOn}
         >
           <span aria-hidden="true">{cameraOn ? "■" : "●"}</span>
-          {status === "starting" ? "Starting camera…" : cameraOn ? "Turn camera off" : "Turn camera on"}
+          {status === "starting" ? "Starting camera…" : cameraOn ? "Camera off" : "Turn camera on"}
         </button>
       </div>
       {(cameraOn || status === "error") && (

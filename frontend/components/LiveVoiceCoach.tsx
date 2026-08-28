@@ -568,7 +568,9 @@ export function LiveVoiceCoach({
       fallbackInProgressRef.current = false;
       return;
     }
-    setAvatarIssue(message);
+    setAvatarIssue(message.includes("video")
+      ? "Coach video is reconnecting. You can keep talking in the meantime."
+      : "Your coach is reconnecting. The conversation will continue automatically.");
     setConnectionStage("reconnecting");
     setState("connecting");
     try {
@@ -625,7 +627,9 @@ export function LiveVoiceCoach({
         avatarReadyRef.current = false;
         setAvatarReady(false);
         elevenLabsConversationRef.current?.setVolume({ volume: 1 });
-        setAvatarIssue(message || "Photoreal coach video disconnected; voice remains available.");
+        setAvatarIssue(message
+          ? "Coach video is reconnecting. You can keep talking in the meantime."
+          : "Coach video paused. You can keep talking while it reconnects.");
       };
       client.on("error", failAvatar);
       client.on("startup_error", failAvatar);
@@ -652,8 +656,8 @@ export function LiveVoiceCoach({
       if (mountedRef.current) {
         setAvatarReady(false);
         setAvatarIssue(cause instanceof Error
-          ? `${cause.message} Voice-only mode is still available.`
-          : "Photoreal coach video is unavailable. Voice-only mode is still available.");
+          ? "Coach video is reconnecting. You can keep talking in the meantime."
+          : "Coach video paused. You can keep talking while it reconnects.");
       }
       return false;
     }
@@ -672,7 +676,7 @@ export function LiveVoiceCoach({
       ) return;
       void switchToGeminiFallback(
         expectedConversation,
-        "The natural voice provider connected but did not answer. Switched to backup voice automatically.",
+        "Your coach is reconnecting. The conversation will continue automatically.",
       );
     }, 15_000);
   }
@@ -686,7 +690,9 @@ export function LiveVoiceCoach({
     elevenLabsConversationRef.current = null;
     await conversation.endSession().catch(() => undefined);
     if (!shouldRunRef.current) return;
-    setAvatarIssue(message);
+    setAvatarIssue(message.includes("video")
+      ? "Coach video is reconnecting. You can keep talking in the meantime."
+      : "Your coach is reconnecting. The conversation will continue automatically.");
     setConnectionStage("reconnecting");
     setState("connecting");
     try {
@@ -965,11 +971,9 @@ export function LiveVoiceCoach({
     try {
       try {
         await connectElevenLabs(false);
-      } catch (cause) {
+      } catch {
         if (!shouldRunRef.current) return;
-        setAvatarIssue(cause instanceof Error
-          ? `${cause.message} Using the backup live voice.`
-          : "ElevenLabs is unavailable. Using the backup live voice.");
+        setAvatarIssue("Your coach is reconnecting. The conversation will continue automatically.");
         await startGeminiFallback();
       }
       if (shouldRunRef.current) void connectAvatar();
@@ -1000,16 +1004,16 @@ export function LiveVoiceCoach({
   const showCoachContext = state === "idle" && !activeCaption;
 
   return (
-    <div className="live-voice-backdrop" role="presentation" onMouseDown={(event) => {
-      if (event.target === event.currentTarget && state === "idle") onClose();
-    }}>
-          <section className={`live-voice-panel is-${state}`} role="dialog" aria-modal="true" aria-labelledby="live-voice-title">
+          <section className={`live-voice-panel live-voice-inline is-${state}`} aria-labelledby="live-voice-title">
             <header>
               <div>
                 <small>LIVE COACHING SESSION</small>
                 <h2 id="live-voice-title">Your coach is here.</h2>
               </div>
-              <button type="button" onClick={() => { endSession(); onClose(); }} aria-label="Close live voice">×</button>
+              <button className="live-voice-back-button" type="button" onClick={() => { endSession(); onClose(); }}>
+                <span aria-hidden="true">←</span>
+                Back to chat
+              </button>
             </header>
             <div className="live-coach-stage">
               <div className={`live-coach-presence is-${state}`}>
@@ -1084,6 +1088,5 @@ export function LiveVoiceCoach({
             </div>
             <footer className="live-voice-privacy"><span aria-hidden="true">◆</span> Audio streams only during this session. Camera tracking stays on-device; when you ask for visual feedback, one compressed frame is analyzed securely and is not stored.</footer>
           </section>
-    </div>
   );
 }

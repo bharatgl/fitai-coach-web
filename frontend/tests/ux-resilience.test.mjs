@@ -46,5 +46,5 @@ test("shows scoped progress for workout mutations", async () => {
   assert.match(coach, /workingAction === "status"/);
   assert.match(coach, /workingAction === "finish"/);
   assert.match(coach, /workingAction === `log-\$\{exercise\.exerciseId\}`/);
-  assert.match(coach, /busy=\{!activeSession && startingId === workout\.id\}/);
+  assert.match(coach, /busy=\{startingId === primarySession\.id\}/);
 });

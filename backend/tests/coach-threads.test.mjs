@@ -11,6 +11,8 @@ test("persists isolated coach conversations with management routes", async () =>
 
   assert.match(source, /get\("\/v1\/coach\/threads"/);
   assert.match(source, /post\("\/v1\/coach\/threads"/);
+  assert.match(source, /scope: z\.enum\(\["general", "plan"\]\)/);
+  assert.match(source, /scope: thread\.scope/);
   assert.match(source, /patch\("\/v1\/coach\/threads\/:threadId"/);
   assert.match(source, /pinned: z\.boolean\(\)\.optional\(\)/);
   assert.match(source, /archived: z\.boolean\(\)\.optional\(\)/);

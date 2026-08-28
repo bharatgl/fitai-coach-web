@@ -46,6 +46,7 @@ import { syncAuthenticatedUser } from "../users.js";
 type CoachThreadDocument = {
   id: string;
   userId: string;
+  scope?: "general" | "plan";
   title: string;
   pinned?: boolean;
   archived?: boolean;
@@ -96,6 +97,9 @@ const coachInput = z
     attachmentIds: z.array(z.string().uuid()).max(maxAttachmentsPerMessage).default([]),
     threadId: z.string().uuid().optional(),
     sessionId: z.string().trim().min(1).max(100).optional(),
+    planId: z.string().trim().min(1).max(100).optional(),
+    weekNumber: z.number().int().min(1).max(52).optional(),
+    workoutId: z.string().trim().min(1).max(100).optional(),
   })
   .refine(({ message, attachmentIds }) => message.length > 0 || attachmentIds.length > 0, {
     message: "A message or attachment is required",
@@ -107,6 +111,7 @@ const uploadAttachmentInput = z.object({
 });
 const createThreadInput = z.object({
   title: z.string().trim().min(1).max(80).optional(),
+  scope: z.enum(["general", "plan"]).default("general"),
 });
 const updateThreadInput = z
   .object({
@@ -155,6 +160,7 @@ function notFound(message: string): never {
 function serializeThread(thread: CoachThreadDocument): CoachThread {
   return {
     id: thread.id,
+    scope: thread.scope ?? (thread.title === "Training plan" ? "plan" : "general"),
     title: thread.title,
     pinned: thread.pinned ?? false,
     archived: thread.archived ?? false,
@@ -219,11 +225,13 @@ function attachmentSignatureMatches(mimeType: CoachAttachment["mimeType"], data:
 function createThreadDocument(
   userId: string,
   title = "New conversation",
+  scope: "general" | "plan" = "general",
 ): CoachThreadDocument {
   const now = new Date();
   return {
     id: randomUUID(),
     userId,
+    scope,
     title,
     pinned: false,
     archived: false,
@@ -342,6 +350,7 @@ async function generateReply(
   before: Date,
   attachmentDocuments: CoachAttachmentDocument[] = [],
   sessionId?: string | null,
+  planScope?: { planId?: string; weekNumber?: number; workoutId?: string },
 ) {
   const config = getConfig();
   const now = new Date();
@@ -406,6 +415,19 @@ async function generateReply(
       { projection: { _id: 0 }, sort: { scheduledFor: 1 } },
     )
     : null;
+  const scopedPlan = activePlan && (!planScope?.planId || planScope.planId === activePlan.id)
+    ? activePlan
+    : null;
+  const selectedWeekNumber = planScope?.weekNumber ?? nextWorkout?.weekNumber ?? null;
+  const selectedWeekWorkouts = scopedPlan && selectedWeekNumber
+    ? await database.collection<PlannedWorkoutDocument>("plannedWorkouts")
+      .find(
+        { userId: user.id, planId: scopedPlan.id, weekNumber: selectedWeekNumber },
+        { projection: { _id: 0 } },
+      )
+      .sort({ dayOffset: 1 })
+      .toArray()
+    : [];
   return generateCoachResponse({
     apiKey: config.GEMINI_API_KEY,
     model: config.GEMINI_MODEL,
@@ -417,6 +439,9 @@ async function generateReply(
       nextWorkout,
       activeSession,
       recentSessions,
+      selectedWeekNumber,
+      selectedWeekWorkouts,
+      selectedWorkoutId: planScope?.workoutId ?? nextWorkout?.id ?? null,
       now,
     }),
     movementContext,
@@ -507,6 +532,15 @@ async function loadLiveCoachSnapshot(
       { projection: { _id: 0 }, sort: { scheduledFor: 1 } },
     )
     : null;
+  const selectedWeekWorkouts = activePlan && nextWorkout
+    ? await database.collection<PlannedWorkoutDocument>("plannedWorkouts")
+      .find(
+        { userId, planId: activePlan.id, weekNumber: nextWorkout.weekNumber },
+        { projection: { _id: 0 } },
+      )
+      .sort({ dayOffset: 1 })
+      .toArray()
+    : [];
 
   return {
     capturedAt: now.toISOString(),
@@ -517,6 +551,9 @@ async function loadLiveCoachSnapshot(
       nextWorkout,
       activeSession,
       recentSessions,
+      selectedWeekNumber: nextWorkout?.weekNumber ?? null,
+      selectedWeekWorkouts,
+      selectedWorkoutId: nextWorkout?.id ?? null,
       now,
     }),
     movementContext,
@@ -833,7 +870,7 @@ export async function coachRoutes(app: FastifyInstance) {
     const input = createThreadInput.parse(request.body ?? {});
     await syncAuthenticatedUser(user);
     const database = await getDatabase();
-    const thread = createThreadDocument(user.id, input.title);
+    const thread = createThreadDocument(user.id, input.title, input.scope);
     await database.collection<CoachThreadDocument>("coachThreads").insertOne(thread);
     return { thread: serializeThread(thread) };
   });
@@ -1004,6 +1041,11 @@ export async function coachRoutes(app: FastifyInstance) {
         now,
         attachmentDocuments,
         input.sessionId,
+        {
+          planId: input.planId,
+          weekNumber: input.weekNumber,
+          workoutId: input.workoutId,
+        },
       );
       const assistantMessage: CoachMessageDocument = {
         id: randomUUID(),

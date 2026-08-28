@@ -1,4 +1,9 @@
-import { AiProviderError, buildDeterministicPlan, generateAdaptivePlan } from "@fitai/ai";
+import {
+  AiProviderError,
+  buildDeterministicPlan,
+  generateAdaptivePlan,
+  planVolumeTargetsFor,
+} from "@fitai/ai";
 import type { GeneratePlanResponse } from "@fitai/contracts";
 import type { FastifyInstance } from "fastify";
 import { MongoServerError } from "mongodb";
@@ -52,9 +57,12 @@ export async function planRoutes(app: FastifyInstance) {
         });
       }
       const exercises = availableExercises(profile.equipment, profile.experienceLevel);
-      if (exercises.length < 6) {
+      const volumeTargets = planVolumeTargetsFor(profile);
+      if (exercises.length < volumeTargets.minExercisesPerSession) {
         return reply.code(422).send({
-          error: "Not enough compatible exercises are available for this profile",
+          error: profile.experienceLevel === "advanced"
+            ? `Your equipment setup only supports ${exercises.length} advanced working exercises, but this ${profile.preferredSessionMinutes}-minute plan needs at least ${volumeTargets.minExercisesPerSession}. Update Available equipment (for example, “commercial gym”) and rebuild.`
+            : "Not enough compatible exercises are available for this profile",
         });
       }
 

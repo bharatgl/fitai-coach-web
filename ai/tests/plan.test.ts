@@ -50,10 +50,10 @@ test("scales session volume for an advanced bodybuilding profile", () => {
   assert.deepEqual(
     planVolumeTargetsFor({ experienceLevel: "advanced", preferredSessionMinutes: 60, trainingPhase: "bulk" }),
     {
-      minExercisesPerSession: 5,
-      maxExercisesPerSession: 7,
-      minWorkingSetsPerSession: 15,
-      maxWorkingSetsPerSession: 28,
+      minExercisesPerSession: 6,
+      maxExercisesPerSession: 8,
+      minWorkingSetsPerSession: 18,
+      maxWorkingSetsPerSession: 30,
       targetSessionMinutes: { min: 48, max: 60 },
     },
   );
@@ -65,7 +65,7 @@ test("reduces accessory volume before intensity during an advanced cut", () => {
     preferredSessionMinutes: 60,
     trainingPhase: "cut",
   });
-  assert.equal(targets.minExercisesPerSession, 5);
+  assert.equal(targets.minExercisesPerSession, 6);
   assert.equal(targets.minWorkingSetsPerSession, 12);
   assert.equal(targets.maxWorkingSetsPerSession, 24);
 });
@@ -103,6 +103,6 @@ test("builds a complete advanced fallback when structured generation fails", () 
 
   assert.equal(plan.weeks.length, 12);
   assert.equal(plan.weeks[0]?.days.length, 6);
-  assert.equal(plan.weeks[0]?.days[0]?.exercises.length, 5);
+  assert.equal(plan.weeks[0]?.days[0]?.exercises.length, 8);
   assert.match(plan.title, /^Advanced Bulk/);
 });

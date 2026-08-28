@@ -38,6 +38,7 @@ export type PlanCatalogExercise = {
   id: string;
   name: string;
   movement: string;
+  muscleGroups?: string[];
   requiredEquipment: string[];
   guidance: string;
 };
@@ -57,6 +58,15 @@ const sessionTemplates = [
   { name: "Back and arms", movements: ["pull", "pull", "hinge", "core", "carry", "push", "lunge", "squat"] },
   { name: "Lower body", movements: ["squat", "lunge", "hinge", "carry", "core", "pull", "push", "lunge"] },
   { name: "Full body", movements: ["squat", "push", "pull", "hinge", "lunge", "core", "carry", "push"] },
+] as const;
+
+const advancedBodybuildingTemplates = [
+  { name: "Push — chest, shoulders, triceps", muscleGroups: ["chest", "chest", "chest", "shoulders", "shoulders", "triceps", "triceps", "triceps"] },
+  { name: "Pull — back, rear delts, biceps", muscleGroups: ["back", "back", "back", "back", "rear_delts", "biceps", "biceps", "biceps"] },
+  { name: "Legs — quads, hamstrings, glutes", muscleGroups: ["quads", "quads", "quads", "hamstrings", "hamstrings", "glutes_primary", "calves", "calves"] },
+  { name: "Push — shoulders and chest", muscleGroups: ["shoulders", "shoulders", "chest", "chest", "chest", "triceps", "triceps", "triceps"] },
+  { name: "Pull — back and arms", muscleGroups: ["back", "back", "back", "rear_delts", "biceps", "biceps", "biceps", "biceps"] },
+  { name: "Legs — posterior and quads", muscleGroups: ["hamstrings", "hamstrings", "glutes_primary", "quads", "quads", "quads", "calves", "calves"] },
 ] as const;
 
 function spreadDayOffsets(trainingDays: number) {
@@ -97,16 +107,30 @@ export function buildDeterministicPlan(
     return {
       weekNumber: weekIndex + 1,
       days: dayOffsets.map((dayOffset, dayIndex) => {
+        const bodybuildingTemplate = profile.experienceLevel === "advanced"
+          ? advancedBodybuildingTemplates[dayIndex % advancedBodybuildingTemplates.length]
+          : null;
         const template = sessionTemplates[dayIndex % sessionTemplates.length]!;
         const rotation = (dayIndex * exerciseCount) % exercises.length;
         const rotated = [...exercises.slice(rotation), ...exercises.slice(0, rotation)];
         const selected: PlanCatalogExercise[] = [];
-        for (const movement of template.movements) {
-          if (selected.length >= exerciseCount) break;
-          const match = rotated.find(
-            (exercise) => exercise.movement === movement && !selected.some((item) => item.id === exercise.id),
-          );
-          if (match) selected.push(match);
+        if (bodybuildingTemplate) {
+          for (const muscleGroup of bodybuildingTemplate.muscleGroups) {
+            if (selected.length >= exerciseCount) break;
+            const match = rotated.find(
+              (exercise) => exercise.muscleGroups?.includes(muscleGroup)
+                && !selected.some((item) => item.id === exercise.id),
+            );
+            if (match) selected.push(match);
+          }
+        } else {
+          for (const movement of template.movements) {
+            if (selected.length >= exerciseCount) break;
+            const match = rotated.find(
+              (exercise) => exercise.movement === movement && !selected.some((item) => item.id === exercise.id),
+            );
+            if (match) selected.push(match);
+          }
         }
         for (const exercise of rotated) {
           if (selected.length >= exerciseCount) break;
@@ -117,8 +141,10 @@ export function buildDeterministicPlan(
         const additionalSets = workingSetTarget % selected.length;
         return {
           dayOffset,
-          name: template.name,
-          focus: [...new Set(selected.map((exercise) => exercise.movement))].join(", "),
+          name: bodybuildingTemplate?.name ?? template.name,
+          focus: bodybuildingTemplate
+            ? [...new Set(bodybuildingTemplate.muscleGroups)].join(", ")
+            : [...new Set(selected.map((exercise) => exercise.movement))].join(", "),
           estimatedMinutes: profile.preferredSessionMinutes,
           exercises: selected.map((exercise, exerciseIndex) => ({
             exerciseId: exercise.id,
@@ -176,8 +202,16 @@ export function planVolumeTargetsFor(
   };
 
   if (profile.experienceLevel === "advanced") {
-    const minExercisesPerSession = minutes >= 60 ? 5 : minutes >= 40 ? 4 : 3;
-    const maxExercisesPerSession = Math.min(8, minExercisesPerSession + 2);
+    const minExercisesPerSession = minutes >= 90
+      ? 8
+      : minutes >= 75
+        ? 7
+        : minutes >= 60
+          ? 6
+          : minutes >= 40
+            ? 5
+            : 4;
+    const maxExercisesPerSession = Math.min(10, minExercisesPerSession + 2);
     return {
       minExercisesPerSession,
       maxExercisesPerSession,
@@ -225,6 +259,7 @@ Return exactly one weeklyProgression entry per requested week. Organize longer p
 Do not copy the same week repeatedly. Every consecutive week must change at least one visible prescription while preserving a coherent progression. Keep primary lifts stable long enough to measure progress; vary accessories, sets, rep ranges, tempo, or loading emphasis deliberately rather than randomly.
 Follow the supplied sessionVolumeTargets for every workout. Use most of the user's available session time rather than filling a long session with a short circuit.
 For advanced bodybuilding goals, use a coherent hypertrophy split such as push/pull/legs, upper/lower, or body-part emphasis. Sequence stable compound work before accessories, distribute volume across the week, and include enough distinct movements to train the stated focus completely.
+For an advanced profile with full gym equipment, select loaded compounds, machines, cables, and targeted isolation work. Do not prescribe wall push-ups, bodyweight squats, bird dogs, dead bugs, basic glute bridges, or other regression-style warm-ups as primary working exercises.
 For a bulk phase, prioritize stable compound and accessory exercises that support progressive overload, use mostly moderate hypertrophy rep ranges, allow longer rest for demanding lifts, and build recoverable volume across each accumulation phase.
 For a cut phase, retain key compound patterns and meaningful loading to preserve strength and muscle, reduce accessory volume before load, manage fatigue, and use low-impact conditioning only when the supplied catalog and schedule permit. Do not turn every session into a high-repetition circuit.
 For recomposition, balance progressive strength work with moderate recoverable hypertrophy volume. For general training, use a balanced phase without pretending it is a bulk or cut.

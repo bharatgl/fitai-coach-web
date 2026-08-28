@@ -38,7 +38,7 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import { apiRequest } from "@/lib/api";
+import { ApiRequestError, apiRequest } from "@/lib/api";
 import type { LiveMovementSignal } from "@/lib/live-voice";
 import {
   collectSpeechTranscript,
@@ -367,7 +367,6 @@ function FitAIWorkspace({ user }: { user: CurrentUser }) {
         )}
         {view === "coach" && (
           <Coach
-            initialMessages={dashboard.recentMessages}
             activeSessionId={activeSession?.id ?? null}
           />
         )}
@@ -395,6 +394,7 @@ function FitAIWorkspace({ user }: { user: CurrentUser }) {
           <WorkoutRunner
             session={activeSession}
             onSession={setActiveSession}
+            onBack={() => setView("plan")}
             onClose={closeWorkout}
           />
         )}
@@ -613,11 +613,11 @@ function ProfileFields({ profile }: { profile?: UserProfile }) {
           </select>
         </Field>
       </div>
-      <Field label="Available equipment" hint="Separate multiple items with commas.">
+      <Field label="Available equipment" hint="Separate multiple items with commas. Use “commercial gym” when you have full gym access.">
         <input
           name="equipment"
           defaultValue={profile?.equipment.join(", ") ?? ""}
-          placeholder="Dumbbells, resistance bands"
+          placeholder="Commercial gym, or dumbbells, bench, cable"
         />
       </Field>
       <div className="form-row">
@@ -771,9 +771,13 @@ function Today({
   const totalSets = activeSession?.totalSets
     ?? nextWorkout?.exercises.reduce((sum, exercise) => sum + exercise.sets, 0)
     ?? 0;
-  const scheduledLabel = nextWorkout
+  const nextWorkoutDate = nextWorkout ? new Date(nextWorkout.scheduledFor) : null;
+  const isWorkoutToday = nextWorkoutDate
+    ? localDateKey(nextWorkoutDate) === localDateKey(today)
+    : false;
+  const scheduledLabel = nextWorkoutDate
     ? new Intl.DateTimeFormat("en", { weekday: "short", month: "short", day: "numeric" })
-        .format(new Date(nextWorkout.scheduledFor))
+        .format(nextWorkoutDate)
     : null;
 
   async function start() {
@@ -794,8 +798,8 @@ function Today({
       <header className="today-heading">
         <div>
           <Eyebrow>{new Intl.DateTimeFormat("en", { weekday: "long", month: "long", day: "numeric" }).format(today)}</Eyebrow>
-          <h1>{activeSession ? "Keep the momentum going." : "Your training, ready to go."}</h1>
-          <p>{activeSession ? "Your session is saved. Jump back in when you’re ready." : "Everything you need for a focused session, without the guesswork."}</p>
+          <h1>{activeSession ? "Pick up where you left off." : isWorkoutToday ? "Today’s session." : "Your next session."}</h1>
+          <p>{activeSession ? "Your progress is saved and ready." : "A clear plan for your next focused hour."}</p>
         </div>
         <div className="today-week-chip" aria-label={`${sessionsThisWeek} workouts completed this week`}>
           <span>THIS WEEK</span>
@@ -814,7 +818,7 @@ function Today({
             <span>{activeSession ? "Progress saved" : scheduledLabel}</span>
           </div>
           <div className="today-session-copy">
-            <Eyebrow>{activeSession ? "Continue session" : "Today’s workout"}</Eyebrow>
+            <Eyebrow>{activeSession ? "Continue session" : isWorkoutToday ? "Today’s workout" : "Next workout"}</Eyebrow>
             <h2>{activeSession?.name ?? nextWorkout?.name}</h2>
             <p>{activeSession ? `${activeSession.totalSets} sets completed so far` : nextWorkout?.focus}</p>
           </div>
@@ -853,7 +857,7 @@ function Today({
               busy={starting}
               onClick={activeSession ? onResume : () => void start()}
             >
-              {activeSession ? "Resume workout" : starting ? "Starting…" : "Start today’s workout"}
+              {activeSession ? "Resume workout" : starting ? "Starting…" : "Start workout"}
             </Button>
             <small>{activeSession ? "Continue exactly where you stopped" : "Your progress saves automatically"}</small>
             {error && <small className="form-error" role="alert">{error}</small>}
@@ -1014,14 +1018,12 @@ function ActivityCalendar({ completedSessionDates }: { completedSessionDates: st
 }
 
 function Coach({
-  initialMessages,
   activeSessionId,
 }: {
-  initialMessages: CoachMessage[];
   activeSessionId: string | null;
 }) {
   const [activeThread, setActiveThread] = useState<CoachThread | null>(null);
-  const [messages, setMessages] = useState(initialMessages);
+  const [messages, setMessages] = useState<CoachMessage[]>([]);
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const [loadingThreads, setLoadingThreads] = useState(true);
@@ -1169,7 +1171,7 @@ function Coach({
       try {
         const response = await apiRequest<CoachThreadListResponse>("/v1/coach/threads");
         if (!active) return;
-        const existing = response.threads.find((thread) => !thread.archived);
+        const existing = response.threads.find((thread) => !thread.archived && thread.scope === "general");
         if (existing) {
           const detail = await apiRequest<CoachThreadDetail>(`/v1/coach/threads/${existing.id}`);
           if (!active) return;
@@ -1319,48 +1321,60 @@ function Coach({
 
   return (
     <div className="wrap coach-page">
-      <section className="coach-workspace">
-        <Card className="chat" padding="md">
+      <section className={`coach-workspace coach-voice-first-workspace${liveVoiceOpen ? " is-live" : ""}`}>
+        <section className="coach-voice-home" aria-labelledby="coach-voice-home-title">
+          <div className="coach-voice-home-copy">
+            <span className="coach-voice-home-status"><i aria-hidden="true" /> YOUR COACH IS ONLINE</span>
+            <h1 id="coach-voice-home-title">Your coach is ready to <em>talk.</em></h1>
+            <p>Have a natural, real-time conversation about today’s workout, recovery, form, or plan.</p>
+            <ul className="coach-voice-home-context" aria-label="Live coach capabilities">
+              <li><i aria-hidden="true">✓</i><span><b>Remembers you</b>Your profile, goals, and coaching history.</span></li>
+              <li><i aria-hidden="true">✓</i><span><b>Workout aware</b>Your active session stays in context.</span></li>
+              <li><i aria-hidden="true">✓</i><span><b>Visual feedback</b>Optional on-device movement tracking.</span></li>
+            </ul>
+            <button
+              className="coach-voice-home-action"
+              type="button"
+              onClick={() => setLiveVoiceOpen(true)}
+              disabled={!activeThread}
+              aria-expanded={liveVoiceOpen}
+            >
+              <span className="coach-voice-home-action-icon" aria-hidden="true">
+                <span className="live-voice-wave"><i /><i /><i /></span>
+              </span>
+              <span>
+                <strong>{loadingThreads ? "Getting your coach ready…" : "Start voice coaching"}</strong>
+                <small>Tap to begin a private live session</small>
+              </span>
+              <b aria-hidden="true">→</b>
+            </button>
+            <small className="coach-voice-home-privacy">Microphone and camera stay off until you start.</small>
+          </div>
+          <div className="coach-voice-home-visual" aria-hidden="true">
+            <span className="coach-voice-home-orbit"><i /><i /></span>
+            <Image
+              className="coach-voice-home-avatar"
+              src="/coach/forge-coach-avatar.webp"
+              alt=""
+              width={682}
+              height={1024}
+              priority
+              sizes="(max-width: 900px) 55vw, 34vw"
+            />
+            <span className="coach-voice-home-listening"><i /> Ready when you are</span>
+          </div>
+        </section>
+        <Card className="chat coach-chat-side" padding="md">
           <header className="chat-header">
             <div className="chat-header-copy">
-              <strong>Your AI coach</strong>
-              <span>Voice first, with your profile and conversation in context.</span>
+              <small>TEXT CHAT</small>
+              <strong>Conversation</strong>
+              <span>Synced with your live coach.</span>
             </div>
             <div className="chat-header-actions">
               {activeThread && <small>{activeThread.messageCount} messages</small>}
-              {activeThread && liveVoiceOpen && (
-                <LiveVoiceCoach
-                  threadId={activeThread.id}
-                  activeSessionId={activeSessionId}
-                  onClose={() => setLiveVoiceOpen(false)}
-                  onThreadUpdate={(detail) => {
-                    setActiveThread(detail.thread);
-                    setMessages(detail.messages);
-                  }}
-                />
-              )}
             </div>
           </header>
-          {activeThread && (
-            <section className={`${coachVoiceStyles.voiceEntry} coach-voice-entry`} aria-label="Live voice coach">
-              <button
-                className={coachVoiceStyles.voiceButton}
-                type="button"
-                onClick={() => setLiveVoiceOpen(true)}
-                aria-haspopup="dialog"
-              >
-                <span className={`${coachVoiceStyles.voiceIcon} coach-voice-entry-icon`} aria-hidden="true">
-                  <span className="live-voice-wave"><i /><i /><i /></span>
-                </span>
-                <span className={`${coachVoiceStyles.voiceCopy} coach-voice-entry-copy`}>
-                  <small>REAL-TIME COACH</small>
-                  <strong>Talk to your coach</strong>
-                  <span>Natural conversation · remembers your plan</span>
-                </span>
-                <span className={`${coachVoiceStyles.voiceAction} coach-voice-entry-action`} aria-hidden="true">Start →</span>
-              </button>
-            </section>
-          )}
           <div className="messages" ref={messagesRef}>
             {loadingThreads && (
               <>
@@ -1371,7 +1385,7 @@ function Coach({
             {messages.length === 0 && !loadingThreads && (
               <div className="chat-starter">
                 <div className="coach-starter-mark" aria-hidden="true">
-                  <span /><span /><b>AI</b>
+                  <span /><span /><b>FF</b>
                 </div>
                 <h2>Prefer to type?</h2>
                 <p>Text chat stays synced with your live coach.</p>
@@ -1467,7 +1481,7 @@ function Coach({
               }}
             />
             <div className={`composer-main ${coachVoiceStyles.main}`}>
-              <label className="ui-visually-hidden" htmlFor="coach-message">Message your AI coach</label>
+              <label className="ui-visually-hidden" htmlFor="coach-message">Message your coach</label>
               <textarea
                 id="coach-message"
                 rows={1}
@@ -1579,31 +1593,16 @@ function Coach({
           {voiceError && <small className="form-error voice-error" role="alert">{voiceError}</small>}
           {error && <small className="form-error" role="alert">{error}</small>}
         </Card>
-        {activeThread && (
-          <button
-            className="floating-coach-agent"
-            type="button"
-            onClick={() => setLiveVoiceOpen(true)}
-            aria-label="Open your live AI coach"
-            aria-haspopup="dialog"
-            aria-expanded={liveVoiceOpen}
-          >
-            <span className="floating-coach-agent-copy">
-              <small><i aria-hidden="true" /> AI COACH ONLINE</small>
-              <strong>Talk to your coach</strong>
-              <span>Voice · visual · remembers you</span>
-            </span>
-            <span className="floating-coach-agent-avatar" aria-hidden="true">
-              <Image
-                src="/coach/forge-coach-avatar.webp"
-                alt=""
-                width={82}
-                height={123}
-                sizes="82px"
-              />
-              <b><span className="live-voice-wave"><i /><i /><i /></span></b>
-            </span>
-          </button>
+        {activeThread && liveVoiceOpen && (
+          <LiveVoiceCoach
+            threadId={activeThread.id}
+            activeSessionId={activeSessionId}
+            onClose={() => setLiveVoiceOpen(false)}
+            onThreadUpdate={(detail) => {
+              setActiveThread(detail.thread);
+              setMessages(detail.messages);
+            }}
+          />
         )}
       </section>
     </div>
@@ -1687,108 +1686,251 @@ function PlanVersionCard({
 function PlanHistory({
   history,
   activePlanId,
-  compareId,
   restoringId,
-  optimizing,
   hasActiveWorkout,
-  onCompare,
   onRestore,
-  onOptimize,
 }: {
   history: PlanHistoryEntry[];
   activePlanId: string;
-  compareId: string;
   restoringId: string;
-  optimizing: boolean;
   hasActiveWorkout: boolean;
-  onCompare: (planId: string) => void;
   onRestore: (planId: string) => Promise<void>;
-  onOptimize: () => Promise<void>;
 }) {
   const current = history.find((entry) => entry.plan.id === activePlanId) ?? history[0];
   const archived = history.filter((entry) => entry.plan.id !== current?.plan.id);
-  const comparison = archived.find((entry) => entry.plan.id === compareId) ?? archived[0];
   if (!current) return null;
 
   return (
-    <section className="plan-history" aria-labelledby="plan-history-title">
-      <header className="plan-history-header">
-        <div>
-          <Eyebrow>Plan evolution</Eyebrow>
-          <h2 id="plan-history-title">Version history</h2>
-          <p>Compare training load and adherence, restore an older structure, or generate a new optimized version.</p>
-        </div>
-        <Button
-          variant="secondary"
-          busy={optimizing}
-          disabled={hasActiveWorkout}
-          onClick={() => void onOptimize()}
-        >
-          {optimizing ? "Optimizing…" : "Optimize current"}
-        </Button>
-      </header>
+    <details className="plan-history">
+      <summary className="plan-history-summary">
+        <span className="plan-history-summary-icon" aria-hidden="true">↺</span>
+        <span className="plan-history-summary-copy">
+          <strong>Previous plans</strong>
+          <small>{archived.length === 0 ? "No previous versions yet" : `${archived.length} saved ${archived.length === 1 ? "version" : "versions"}`}</small>
+        </span>
+        <span className="plan-history-summary-action">
+          Manage
+          <b aria-hidden="true">+</b>
+        </span>
+      </summary>
 
-      {comparison ? (
-        <div className="plan-history-comparison" aria-label="Plan version comparison">
-          <PlanVersionCard entry={current} label="Current" />
-          <span className="plan-history-versus" aria-hidden="true">VS</span>
-          <PlanVersionCard entry={comparison} label="Compare" />
-        </div>
-      ) : (
-        <p className="plan-history-first">Your next generated plan will appear here for comparison.</p>
-      )}
+      <div className="plan-history-body">
+        <header className="plan-history-header">
+          <div>
+            <Eyebrow>Only if you need it</Eyebrow>
+            <h2 id="plan-history-title">Version history</h2>
+            <p>Your current plan is already active. Open a previous version only when you want to inspect or restore it.</p>
+          </div>
+        </header>
 
-      <div className="plan-history-list">
-        {history.map((entry) => {
-          const isActive = entry.plan.id === activePlanId;
-          return (
-            <article className={isActive ? "is-active" : ""} key={entry.plan.id}>
-              <div className="plan-history-version">
-                <b>V{entry.plan.version}</b>
-                <span>{isActive ? "Active" : "Archived"}</span>
-              </div>
-              <div className="plan-history-copy">
-                <strong>{entry.plan.title}</strong>
-                <small>
-                  {new Intl.DateTimeFormat("en", { day: "numeric", month: "short", year: "numeric" }).format(new Date(entry.plan.createdAt))}
-                  {entry.plan.restoredFromVersion ? ` · restored from V${entry.plan.restoredFromVersion}` : ""}
-                </small>
-              </div>
-              <div className="plan-history-quick-metrics">
-                <span><b>{entry.averageMovementsPerSession}</b> movements</span>
-                <span><b>{entry.averageSetsPerSession}</b> sets/session</span>
-                <span><b>{entry.completionRate}%</b> complete</span>
-              </div>
-              <div className="plan-history-actions">
-                {!isActive && (
-                  <Button size="sm" variant="ghost" onClick={() => onCompare(entry.plan.id)}>
-                    Compare
-                  </Button>
-                )}
-                {!isActive && (
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    busy={restoringId === entry.plan.id}
-                    disabled={Boolean(restoringId) || hasActiveWorkout}
-                    onClick={() => void onRestore(entry.plan.id)}
-                  >
-                    {restoringId === entry.plan.id ? "Restoring…" : "Restore as new"}
-                  </Button>
-                )}
-              </div>
-            </article>
-          );
-        })}
+        {archived.length > 0 ? (
+          <div className="plan-history-list">
+            {archived.map((entry) => (
+              <details className="plan-history-item" key={entry.plan.id}>
+                <summary>
+                  <span className="plan-history-version">
+                    <b>V{entry.plan.version}</b>
+                  </span>
+                  <span className="plan-history-copy">
+                    <strong>{entry.plan.title}</strong>
+                    <small>
+                      Saved {new Intl.DateTimeFormat("en", { day: "numeric", month: "short", year: "numeric" }).format(new Date(entry.plan.createdAt))}
+                    </small>
+                  </span>
+                  <span className="plan-history-row-action">View details <b aria-hidden="true">+</b></span>
+                </summary>
+                <div className="plan-history-comparison" aria-label="Compare previous plan details with your current plan">
+                  <PlanVersionCard entry={entry} label="Previous plan" />
+                  <div className="plan-history-decision">
+                    <strong>Want to use this plan again?</strong>
+                    <p>Restoring creates a new copy. Your current history stays unchanged.</p>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      busy={restoringId === entry.plan.id}
+                      disabled={Boolean(restoringId) || hasActiveWorkout}
+                      onClick={() => void onRestore(entry.plan.id)}
+                    >
+                      {restoringId === entry.plan.id ? "Restoring…" : "Restore as new"}
+                    </Button>
+                  </div>
+                </div>
+              </details>
+            ))}
+          </div>
+        ) : (
+          <p className="plan-history-first">When you update your plan, the previous version will be saved here.</p>
+        )}
+        {hasActiveWorkout && (
+          <small className="plan-history-note">Finish or abandon the active workout before changing plans.</small>
+        )}
       </div>
-      <small className="plan-history-guidance">
-        Prefer the plan you can complete consistently; more planned volume is not automatically better.
-      </small>
-      {hasActiveWorkout && (
-        <small className="plan-history-note">Finish or abandon the active workout before changing plan versions.</small>
-      )}
-    </section>
+    </details>
   );
+}
+
+function PlanCoachPanel({
+  planId,
+  planTitle,
+  weekNumber,
+  workoutId,
+  activeSessionId,
+}: {
+  planId: string;
+  planTitle: string;
+  weekNumber: number;
+  workoutId?: string;
+  activeSessionId?: string;
+}) {
+  const [thread, setThread] = useState<CoachThread | null>(null);
+  const [messages, setMessages] = useState<CoachMessage[]>([]);
+  const [draft, setDraft] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState("");
+  const visibleMessages = messages.slice(-6);
+
+  useEffect(() => {
+    let active = true;
+    async function loadPlanCoach() {
+      try {
+        const response = await apiRequest<CoachThreadListResponse>("/v1/coach/threads");
+        const existing = response.threads.find((item) => !item.archived && item.scope === "plan");
+        if (existing) {
+          const detail = await apiRequest<CoachThreadDetail>(`/v1/coach/threads/${existing.id}`);
+          if (!active) return;
+          setThread(detail.thread);
+          setMessages(detail.messages);
+        } else {
+          const created = await apiRequest<CreateCoachThreadResponse>("/v1/coach/threads", {
+            method: "POST",
+            body: JSON.stringify({ title: "Plan workspace", scope: "plan" }),
+          });
+          if (!active) return;
+          setThread(created.thread);
+        }
+      } catch (cause) {
+        if (active) setError(cause instanceof Error ? cause.message : "Unable to load your coach");
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
+    void loadPlanCoach();
+    return () => { active = false; };
+  }, []);
+
+  async function sendPlanMessage(event: FormEvent) {
+    event.preventDefault();
+    const message = draft.trim();
+    if (!message || sending) return;
+    setSending(true);
+    setError("");
+    try {
+      const response = await apiRequest<CoachResponse>("/v1/coach/messages", {
+        method: "POST",
+        body: JSON.stringify({
+          message,
+          threadId: thread?.id,
+          sessionId: activeSessionId,
+          planId,
+          weekNumber,
+          workoutId,
+        }),
+      });
+      setThread(response.thread);
+      setMessages((current) => [...current, response.userMessage, response.message]);
+      setDraft("");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Your coach could not respond");
+    } finally {
+      setSending(false);
+    }
+  }
+
+  return (
+    <aside className="plan-coach-panel" aria-labelledby="plan-coach-title">
+      <header>
+        <span className="plan-coach-mark" aria-hidden="true">✦</span>
+        <div>
+          <Eyebrow>Plan-aware AI coach</Eyebrow>
+          <h2 id="plan-coach-title">Plan this with me</h2>
+        </div>
+        <span className="plan-coach-context"><i /> Week {weekNumber} linked</span>
+      </header>
+      <p className="plan-coach-intro">
+        I can see <strong>{planTitle}</strong>, this week&apos;s workouts, your profile, readiness, and training history.
+      </p>
+      <div className="plan-coach-prompts" aria-label="Plan coaching prompts">
+        {["Review this week", "Fit this around my schedule", "Adjust volume or exercises"].map((prompt) => (
+          <button key={prompt} type="button" onClick={() => setDraft(prompt)}>{prompt}</button>
+        ))}
+      </div>
+      <div className="plan-coach-conversation" aria-live="polite">
+        {loading ? (
+          <p>Connecting to your coach…</p>
+        ) : visibleMessages.length === 0 ? (
+          <div className="plan-coach-empty">
+            <strong>What needs to change?</strong>
+            <p>Share your schedule, recovery, equipment, exercise preferences, or concerns.</p>
+          </div>
+        ) : (
+          visibleMessages.map((message) => (
+            <article className={message.role === "user" ? "is-user" : "is-coach"} key={message.id}>
+              <small>{message.role === "user" ? "You" : "Coach"}</small>
+              {message.role === "assistant"
+                ? <CoachMessageContent content={message.content} />
+                : <p>{message.content}</p>}
+            </article>
+          ))
+        )}
+      </div>
+      <form className="plan-coach-composer" onSubmit={(event) => void sendPlanMessage(event)}>
+        <label className="ui-visually-hidden" htmlFor="plan-coach-message">Message your plan-aware coach</label>
+        <textarea
+          id="plan-coach-message"
+          rows={2}
+          maxLength={2_000}
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+          placeholder="Example: I only have 45 minutes on Wednesday…"
+        />
+        <Button type="submit" busy={sending} disabled={loading || !draft.trim()}>
+          Send
+        </Button>
+      </form>
+      {error && <small className="form-error" role="alert">{error}</small>}
+      <small className="plan-coach-sync-note">Separate planning chat · your Coach still sees the current plan.</small>
+    </aside>
+  );
+}
+
+function minimumMovementsForProfile(profile: UserProfile | null) {
+  if (!profile) return 2;
+  const minutes = profile.preferredSessionMinutes;
+  if (profile.experienceLevel === "advanced") {
+    return minutes >= 90 ? 8 : minutes >= 75 ? 7 : minutes >= 60 ? 6 : minutes >= 40 ? 5 : 4;
+  }
+  if (profile.experienceLevel === "intermediate") return minutes >= 45 ? 4 : 3;
+  return minutes >= 30 ? 3 : 2;
+}
+
+const advancedRegressionExerciseIds = new Set([
+  "wall-push-up",
+  "bodyweight-squat",
+  "reverse-lunge",
+  "glute-bridge",
+  "push-up",
+  "bird-dog",
+  "dead-bug",
+  "forearm-plank",
+  "calf-raise",
+  "bench-incline-push-up",
+  "assisted-pull-up",
+]);
+
+function hasAdvancedRegression(workout: PlannedWorkout, profile: UserProfile | null) {
+  return profile?.experienceLevel === "advanced"
+    && workout.exercises.some((exercise) => advancedRegressionExerciseIds.has(exercise.exerciseId));
 }
 
 function Plan({
@@ -1807,9 +1949,9 @@ function Plan({
   const [generating, setGenerating] = useState(false);
   const [startingId, setStartingId] = useState("");
   const [restoringId, setRestoringId] = useState("");
-  const [comparePlanId, setComparePlanId] = useState("");
   const [error, setError] = useState("");
-  const [selectedWeekNumber, setSelectedWeekNumber] = useState(1);
+  const [notice, setNotice] = useState("");
+  const [selectedWeekNumber, setSelectedWeekNumber] = useState(0);
   const weeklyWorkouts = useMemo(() => {
     const weeks = new Map<number, Map<string, PlannedWorkout[]>>();
     for (const workout of dashboard.upcomingWorkouts) {
@@ -1828,9 +1970,14 @@ function Plan({
       }));
   }, [dashboard.upcomingWorkouts]);
 
+  const defaultWeekNumber = dashboard.upcomingWorkouts.find(
+    (workout) => workout.id === activeSession?.plannedWorkoutId,
+  )?.weekNumber
+    ?? dashboard.upcomingWorkouts.find((workout) => workout.status === "planned" || workout.status === "in_progress")?.weekNumber
+    ?? weeklyWorkouts[0]?.weekNumber;
   const selectedWeek = weeklyWorkouts.find(
     (week) => week.weekNumber === selectedWeekNumber,
-  ) ?? weeklyWorkouts[0];
+  ) ?? weeklyWorkouts.find((week) => week.weekNumber === defaultWeekNumber) ?? weeklyWorkouts[0];
   const selectedWeekSessions = selectedWeek?.days.flatMap((day) =>
     day.workouts.map((workout) => ({ ...workout, date: day.date })),
   ) ?? [];
@@ -1838,9 +1985,10 @@ function Plan({
     (sum, workout) => sum + workout.exercises.length,
     0,
   );
-  const primarySession = selectedWeekSessions.find((workout) => workout.status === "in_progress")
+  const primarySession = selectedWeekSessions.find((workout) => workout.id === activeSession?.plannedWorkoutId)
+    ?? selectedWeekSessions.find((workout) => workout.status === "in_progress")
+    ?? selectedWeekSessions.find((workout) => workout.status === "planned")
     ?? selectedWeekSessions[0];
-  const laterSessions = selectedWeekSessions.filter((workout) => workout.id !== primarySession?.id);
   const profileLevel = dashboard.profile?.experienceLevel ?? "beginner";
   const profileLevelLabel = `${profileLevel.charAt(0).toUpperCase()}${profileLevel.slice(1)}`;
   const profilePhase = dashboard.profile?.trainingPhase ?? "general";
@@ -1849,25 +1997,53 @@ function Plan({
     : profilePhase === "cut"
       ? "Cut"
       : `${profilePhase.charAt(0).toUpperCase()}${profilePhase.slice(1)}`;
-  const planNeedsRefresh = Boolean(
+  const minimumMovements = minimumMovementsForProfile(dashboard.profile);
+  const underPrescribedWorkouts = dashboard.upcomingWorkouts.filter(
+    (workout) => workout.exercises.length < minimumMovements,
+  );
+  const regressionWorkouts = dashboard.upcomingWorkouts.filter(
+    (workout) => hasAdvancedRegression(workout, dashboard.profile),
+  );
+  const planProfileMismatch = Boolean(
     dashboard.activePlan && dashboard.profile && (
       dashboard.activePlan.experienceLevel !== profileLevel
       || dashboard.activePlan.trainingPhase !== dashboard.profile.trainingPhase
       || dashboard.activePlan.durationWeeks !== dashboard.profile.programDurationWeeks
     ),
   );
+  const planNeedsRefresh = planProfileMismatch
+    || underPrescribedWorkouts.length > 0
+    || regressionWorkouts.length > 0;
+  const primarySessionNeedsRefresh = Boolean(
+    primarySession && (
+      primarySession.exercises.length < minimumMovements
+      || hasAdvancedRegression(primarySession, dashboard.profile)
+    ),
+  );
 
   async function generate() {
     setGenerating(true);
     setError("");
+    setNotice("");
     try {
-      await apiRequest<GeneratePlanResponse>("/v1/plans/generate", {
+      const response = await apiRequest<GeneratePlanResponse>("/v1/plans/generate", {
         method: "POST",
         body: JSON.stringify({}),
       });
+      setSelectedWeekNumber(0);
       await refresh();
+      setNotice(`${response.plan.title} is ready as version ${response.plan.version}.`);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Unable to generate your plan");
+      if (cause instanceof ApiRequestError && cause.status === 429) {
+        const wait = cause.retryAfterSeconds == null
+          ? "a few minutes"
+          : cause.retryAfterSeconds < 60
+            ? `${cause.retryAfterSeconds} seconds`
+            : `${Math.ceil(cause.retryAfterSeconds / 60)} minutes`;
+        setError(`Plan generation is temporarily limited after repeated rebuilds. Try again in ${wait}.`);
+      } else {
+        setError(cause instanceof Error ? cause.message : "Unable to generate your plan");
+      }
     } finally {
       setGenerating(false);
     }
@@ -1898,7 +2074,7 @@ function Plan({
         method: "POST",
         body: JSON.stringify({}),
       });
-      setSelectedWeekNumber(1);
+      setSelectedWeekNumber(0);
       await refresh();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Unable to restore this plan version");
@@ -1922,19 +2098,20 @@ function Plan({
             <p>{dashboard.activePlan.summary}</p>
             {planNeedsRefresh && (
               <p className="plan-profile-warning" role="status">
-                This saved plan does not match your current {profileLevelLabel.toLowerCase()} {profilePhaseLabel.toLowerCase()} setup.
-                Rebuild it to apply the correct duration, mesocycles, split, and volume.
+                {regressionWorkouts.length > 0
+                  ? "This outdated plan uses beginner regression exercises as primary work for an advanced profile. Rebuild it with loaded compounds, machines, cables, and isolation work."
+                  : underPrescribedWorkouts.length > 0
+                  ? `This is an outdated low-volume plan. Your ${profileLevelLabel.toLowerCase()} ${dashboard.profile?.preferredSessionMinutes}-minute profile requires at least ${minimumMovements} movements per session.`
+                  : `This saved plan does not match your current ${profileLevelLabel.toLowerCase()} ${profilePhaseLabel.toLowerCase()} setup.`}
               </p>
             )}
           </div>
           <div className="plan-overview-action">
-            <Button className="plan-generate" busy={generating} onClick={() => void generate()}>
-              {generating
-                ? "Updating…"
-                : planNeedsRefresh
-                  ? `Build ${profileLevelLabel.toLowerCase()} plan`
-                  : "Update plan"}
-            </Button>
+            {(!planNeedsRefresh || weeklyWorkouts.length === 0) && (
+              <Button className="plan-generate" busy={generating} onClick={() => void generate()}>
+                {generating ? "Updating…" : planNeedsRefresh ? "Rebuild plan" : "Update plan"}
+              </Button>
+            )}
           </div>
           <div className="plan-overview-meta" aria-label="Program summary">
             <span><b>{dashboard.activePlan.durationWeeks}</b> week block</span>
@@ -1957,7 +2134,8 @@ function Plan({
           }
         />
       )}
-      {error && <p className="form-error plan-error" role="alert">{error}</p>}
+      {notice && <p className="plan-generation-success" role="status">{notice}</p>}
+      {error && !planNeedsRefresh && <p className="form-error plan-error" role="alert">{error}</p>}
       {activeSession && (
         <Card className="plan-active-session" tone="accent" padding="md">
           <div>
@@ -1974,156 +2152,173 @@ function Plan({
       )}
       {weeklyWorkouts.length > 0 && selectedWeek && (
         <section className="plan-weeks" aria-label="Workout schedule">
-          <nav className="plan-week-tabs" aria-label="Choose training week">
-            {weeklyWorkouts.map((week) => {
-              const sessionCount = week.days.reduce(
-                (sum, day) => sum + day.workouts.length,
-                0,
-              );
-              return (
-                <button
-                  key={week.weekNumber}
-                  type="button"
-                  className={week.weekNumber === selectedWeek.weekNumber ? "active" : ""}
-                  aria-pressed={week.weekNumber === selectedWeek.weekNumber}
-                  onClick={() => setSelectedWeekNumber(week.weekNumber)}
-                >
-                  <span>W{week.weekNumber}</span>
-                  <strong>{week.weekNumber === selectedWeek.weekNumber ? "Current view" : `Week ${week.weekNumber}`}</strong>
-                  <small>{sessionCount} sessions</small>
-                </button>
-              );
-            })}
-          </nav>
+          <div className="plan-week-picker">
+            <label>
+              <span>View training week</span>
+              <select
+                aria-label="Choose training week"
+                value={selectedWeek.weekNumber}
+                onChange={(event) => setSelectedWeekNumber(Number(event.target.value))}
+              >
+                {weeklyWorkouts.map((week) => {
+                  const sessionCount = week.days.reduce(
+                    (sum, day) => sum + day.workouts.length,
+                    0,
+                  );
+                  return (
+                    <option key={week.weekNumber} value={week.weekNumber}>
+                      Week {week.weekNumber} · {sessionCount} {sessionCount === 1 ? "workout" : "workouts"}
+                    </option>
+                  );
+                })}
+              </select>
+            </label>
+            <span>{weeklyWorkouts.length}-week program</span>
+          </div>
 
           <section className="plan-week" aria-labelledby={`week-${selectedWeek.weekNumber}`}>
             <header className="plan-week-summary">
               <div>
                 <Eyebrow>Week {selectedWeek.weekNumber}</Eyebrow>
-                <h2 id={`week-${selectedWeek.weekNumber}`}>
-                  {formatPlanDateRange(selectedWeek.days)}
-                </h2>
+                <h2 id={`week-${selectedWeek.weekNumber}`}>{formatPlanDateRange(selectedWeek.days)}</h2>
               </div>
-              <p>
-                {dashboard.activePlan?.weeklyProgression[selectedWeek.weekNumber - 1]
-                  ?? "Build quality repetitions and keep each movement controlled."}
-              </p>
+              <p>{dashboard.activePlan?.weeklyProgression[selectedWeek.weekNumber - 1]
+                ?? "Build quality repetitions and keep each movement controlled."}</p>
             </header>
 
-            {primarySession && (() => {
-              const date = new Date(`${primarySession.date}T12:00:00`);
-              return (
-                <Card as="article" padding="md" className="plan-primary-session">
-                  <header className="plan-session-head">
-                    <time dateTime={primarySession.date}>
-                      <span>{new Intl.DateTimeFormat("en", { weekday: "short" }).format(date)}</span>
-                      <strong>{new Intl.DateTimeFormat("en", { day: "2-digit" }).format(date)}</strong>
-                      <small>{new Intl.DateTimeFormat("en", { month: "short" }).format(date)}</small>
-                    </time>
-                    <div>
-                      <span className="session-number">
-                        {primarySession.status === "in_progress" ? "Workout in progress" : "Up next"}
-                      </span>
-                      <h3>{primarySession.name}</h3>
-                      <p>{primarySession.focus}</p>
-                    </div>
-                  </header>
-
-                  <div className="plan-session-meta" aria-label="Session details">
-                    <span><b>{primarySession.estimatedMinutes}</b> min</span>
-                    <span><b>{primarySession.exercises.length}</b> movements</span>
-                    <span><b>{primarySession.exercises.reduce((sum, exercise) => sum + exercise.sets, 0)}</b> sets</span>
-                  </div>
-
-                  <ol className="plan-exercise-list">
-                    {primarySession.exercises.map((exercise, exerciseIndex) => (
-                      <li key={exercise.exerciseId}>
-                        <span className="exercise-index">{String(exerciseIndex + 1).padStart(2, "0")}</span>
-                        <span className="exercise-name">
-                          <strong>{exercise.name}</strong>
-                          {exercise.video && <ExerciseVideoButton exerciseName={exercise.name} video={exercise.video} preview />}
-                        </span>
-                        <b>{exercise.sets} × {exercise.repRange}</b>
-                      </li>
-                    ))}
-                  </ol>
-
-                  <footer className="plan-session-footer">
-                    <small>Rest, tempo and logging open inside the workout.</small>
-                    <Button
-                      className="session-start"
-                      disabled={Boolean(startingId)}
-                      busy={!activeSession && startingId === primarySession.id}
-                      onClick={() => void start(primarySession.id)}
-                    >
-                      {activeSession
-                        ? activeSession.plannedWorkoutId === primarySession.id
-                          ? "Resume workout →"
-                          : "Resume current workout →"
-                        : startingId === primarySession.id
-                          ? "Starting…"
-                          : primarySession.status === "in_progress"
-                            ? "Resume workout →"
-                            : "Start workout →"}
-                    </Button>
-                  </footer>
-                </Card>
-              );
-            })()}
-
-            {laterSessions.length > 0 && (
-              <section className="plan-later" aria-labelledby="later-this-week">
+            <div className="plan-dashboard-layout">
+              <section className="plan-schedule-dashboard" aria-labelledby="weekly-schedule-title">
                 <header>
-                  <h3 id="later-this-week">Later this week</h3>
-                  <span>{laterSessions.length} more {laterSessions.length === 1 ? "session" : "sessions"}</span>
+                  <div>
+                    <h3 id="weekly-schedule-title">Weekly schedule</h3>
+                    <p>One view of every session planned for this week.</p>
+                  </div>
+                  <dl>
+                    <div><dt>Workouts</dt><dd>{selectedWeekSessions.length}</dd></div>
+                    <div><dt>Time</dt><dd>{selectedWeekSessions.reduce((sum, workout) => sum + workout.estimatedMinutes, 0)} min</dd></div>
+                    <div><dt>Work sets</dt><dd>{selectedWeekSessions.reduce((sum, workout) => sum + workout.exercises.reduce((sets, exercise) => sets + exercise.sets, 0), 0)}</dd></div>
+                  </dl>
                 </header>
-                <div className="plan-later-list">
-                  {laterSessions.map((workout) => {
-                    const date = new Date(`${workout.date}T12:00:00`);
-                    return (
-                      <details className="plan-session-row" key={workout.id}>
-                        <summary>
-                          <time dateTime={workout.date}>
-                            <span>{new Intl.DateTimeFormat("en", { weekday: "short" }).format(date)}</span>
-                            <strong>{new Intl.DateTimeFormat("en", { day: "2-digit" }).format(date)}</strong>
-                          </time>
-                          <span className="plan-session-row-copy">
-                            <strong>{workout.name}</strong>
-                            <small>{workout.focus}</small>
-                          </span>
-                          <span className="plan-session-row-meta">
-                            {workout.estimatedMinutes} min · {workout.exercises.length} movements
-                          </span>
-                          <b className="plan-session-row-toggle" aria-hidden="true">+</b>
-                        </summary>
-                        <div className="plan-session-row-detail">
-                          <ol className="plan-exercise-list">
-                            {workout.exercises.map((exercise, exerciseIndex) => (
-                              <li key={exercise.exerciseId}>
-                                <span className="exercise-index">{String(exerciseIndex + 1).padStart(2, "0")}</span>
-                                <span className="exercise-name">
-                                  <strong>{exercise.name}</strong>
-                                  {exercise.video && <ExerciseVideoButton exerciseName={exercise.name} video={exercise.video} />}
-                                </span>
-                                <b>{exercise.sets} × {exercise.repRange}</b>
-                              </li>
-                            ))}
-                          </ol>
-                          <Button
-                            className="session-start"
-                            disabled={Boolean(startingId)}
-                            busy={!activeSession && startingId === workout.id}
-                            onClick={() => void start(workout.id)}
-                          >
-                            {activeSession ? "Resume current workout →" : startingId === workout.id ? "Starting…" : "Start this workout →"}
-                          </Button>
-                        </div>
-                      </details>
-                    );
-                  })}
+
+                {planNeedsRefresh && (
+                  <div className="plan-quality-alert" role="status">
+                    <div>
+                      <strong>{regressionWorkouts.length > 0 ? "This plan does not match your level" : "This plan is under-prescribed"}</strong>
+                      <p>
+                        {regressionWorkouts.length > 0
+                          ? `${regressionWorkouts.length} workouts contain warm-up or regression movements as primary exercises.`
+                          : underPrescribedWorkouts.length > 0
+                          ? `${underPrescribedWorkouts.length} workouts have fewer than the ${minimumMovements} movements expected for your profile.`
+                          : "Its duration or training phase no longer matches your profile."}
+                        {activeSession ? " Finish or abandon the active workout before rebuilding." : " Rebuild it before starting another session."}
+                      </p>
+                      {error && (
+                        <p className="plan-quality-error" role="alert">{error}</p>
+                      )}
+                    </div>
+                    <Button
+                      busy={generating}
+                      disabled={Boolean(activeSession)}
+                      onClick={() => void generate()}
+                    >
+                      {generating ? "Rebuilding…" : activeSession ? "Workout in progress" : "Rebuild plan"}
+                    </Button>
+                  </div>
+                )}
+
+                <div className="plan-table-wrap">
+                  <table className="plan-schedule-table">
+                    <thead>
+                      <tr><th>Date</th><th>Workout</th><th>Duration</th><th>Movements</th><th>Status</th></tr>
+                    </thead>
+                    <tbody>
+                      {selectedWeekSessions.map((workout) => {
+                        const date = new Date(`${workout.date}T12:00:00`);
+                        const isActiveWorkout = activeSession?.plannedWorkoutId === workout.id;
+                        const needsRebuild = workout.exercises.length < minimumMovements
+                          || hasAdvancedRegression(workout, dashboard.profile);
+                        const isNext = !isActiveWorkout && !needsRebuild && workout.status === "planned" && primarySession?.id === workout.id;
+                        return (
+                          <tr className={isActiveWorkout ? "is-active" : isNext ? "is-next" : ""} key={workout.id}>
+                            <td data-label="Date"><time dateTime={workout.date}><strong>{new Intl.DateTimeFormat("en", { weekday: "short" }).format(date)}</strong><span>{new Intl.DateTimeFormat("en", { month: "short", day: "numeric" }).format(date)}</span></time></td>
+                            <td data-label="Workout"><strong>{workout.name}</strong><small>{workout.focus}</small></td>
+                            <td data-label="Duration">{workout.estimatedMinutes} min</td>
+                            <td data-label="Movements"><span className={needsRebuild ? "plan-movement-warning" : ""}>{workout.exercises.length}{needsRebuild ? ` / ${minimumMovements}+` : ""}</span></td>
+                            <td data-label="Status"><span className={`plan-table-status ${needsRebuild ? "needs-rebuild" : isActiveWorkout ? "active" : workout.status}`}>
+                              {isActiveWorkout
+                                ? "In progress"
+                                : needsRebuild
+                                  ? "Needs rebuild"
+                                : isNext
+                                  ? "Up next"
+                                  : workout.status === "completed"
+                                    ? "Complete"
+                                    : workout.status === "skipped"
+                                      ? "Skipped"
+                                      : "Scheduled"}
+                            </span></td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
                 </div>
+
+                {primarySession && (
+                  <section className="plan-next-workout" aria-labelledby="next-workout-title">
+                    <header>
+                      <div>
+                        <Eyebrow>{activeSession?.plannedWorkoutId === primarySession.id
+                          ? "Active workout"
+                          : primarySessionNeedsRefresh
+                            ? "Incomplete legacy workout"
+                          : primarySession.status === "planned"
+                            ? "Up next"
+                            : "Workout details"}</Eyebrow>
+                        <h3 id="next-workout-title">{primarySession.name}</h3>
+                        <p>{primarySession.focus} · {primarySession.estimatedMinutes} min</p>
+                      </div>
+                      {!activeSession && !primarySessionNeedsRefresh && primarySession.status === "planned" && (
+                        <Button
+                          disabled={Boolean(startingId)}
+                          busy={startingId === primarySession.id}
+                          onClick={() => void start(primarySession.id)}
+                        >
+                          {startingId === primarySession.id ? "Starting…" : "Start workout →"}
+                        </Button>
+                      )}
+                    </header>
+                    {primarySessionNeedsRefresh ? (
+                      <div className="plan-invalid-session">
+                        <strong>Legacy workout hidden</strong>
+                        <p>Its exercise selection is not suitable for your current level. Rebuild the plan to replace it with profile-matched working exercises.</p>
+                      </div>
+                    ) : (
+                      <ol className="plan-next-exercises">
+                        {primarySession.exercises.map((exercise, exerciseIndex) => (
+                          <li key={exercise.exerciseId}>
+                            <span>{String(exerciseIndex + 1).padStart(2, "0")}</span>
+                            <strong>{exercise.name}</strong>
+                            <b>{exercise.sets} × {exercise.repRange}</b>
+                            {exercise.video && <ExerciseVideoButton exerciseName={exercise.name} video={exercise.video} />}
+                          </li>
+                        ))}
+                      </ol>
+                    )}
+                  </section>
+                )}
               </section>
-            )}
+
+              {dashboard.activePlan && (
+                <PlanCoachPanel
+                  planId={dashboard.activePlan.id}
+                  planTitle={dashboard.activePlan.title}
+                  weekNumber={selectedWeek.weekNumber}
+                  workoutId={primarySession?.id}
+                  activeSessionId={activeSession?.id}
+                />
+              )}
+            </div>
           </section>
         </section>
       )}
@@ -2131,13 +2326,9 @@ function Plan({
         <PlanHistory
           history={dashboard.planHistory ?? []}
           activePlanId={dashboard.activePlan.id}
-          compareId={comparePlanId}
           restoringId={restoringId}
-          optimizing={generating}
           hasActiveWorkout={Boolean(activeSession)}
-          onCompare={setComparePlanId}
           onRestore={restore}
-          onOptimize={generate}
         />
       )}
       {dashboard.activePlan && <PlanGuide />}
@@ -2168,10 +2359,12 @@ function formatDuration(totalSeconds: number) {
 function WorkoutRunner({
   session,
   onSession,
+  onBack,
   onClose,
 }: {
   session: WorkoutSession;
   onSession: (session: WorkoutSession) => void;
+  onBack: () => void;
   onClose: () => Promise<void>;
 }) {
   const [workingAction, setWorkingAction] = useState("");
@@ -2182,6 +2375,19 @@ function WorkoutRunner({
   const [voiceThread, setVoiceThread] = useState<CoachThread | null>(null);
   const [openingVoice, setOpeningVoice] = useState(false);
   const [movementSignal, setMovementSignal] = useState<LiveMovementSignal | null>(null);
+  const prescribedSets = session.exercises.reduce(
+    (total, exercise) => total + exercise.prescribedSets,
+    0,
+  );
+  const progressPercent = prescribedSets > 0
+    ? Math.min(100, Math.round((session.totalSets / prescribedSets) * 100))
+    : 0;
+  const firstIncompleteExercise = session.exercises.findIndex(
+    (exercise) => exercise.sets.length < exercise.prescribedSets,
+  );
+  const currentExerciseIndex = firstIncompleteExercise >= 0
+    ? firstIncompleteExercise
+    : Math.max(0, session.exercises.length - 1);
 
   async function openLiveCoach() {
     if (voiceThread) {
@@ -2192,7 +2398,7 @@ function WorkoutRunner({
     setError("");
     try {
       const response = await apiRequest<CoachThreadListResponse>("/v1/coach/threads");
-      const existing = response.threads.find((thread) => !thread.archived);
+      const existing = response.threads.find((thread) => !thread.archived && thread.scope === "general");
       if (existing) {
         setVoiceThread(existing);
       } else {
@@ -2268,12 +2474,23 @@ function WorkoutRunner({
 
   return (
     <div className="wrap workout-runner">
-      <PageHeader
-        className="workout-heading"
-        eyebrow={<>Live workout · <StatusBadge tone={session.status === "paused" ? "warning" : "success"}>{session.status}</StatusBadge></>}
-        title={session.name}
-        description={`${session.totalSets} sets · ${session.totalVolumeKg} kg volume · ${formatDuration(session.durationSeconds)}`}
-        actions={
+      <nav className="workout-runner-nav" aria-label="Workout navigation">
+        <button className="workout-back-button" onClick={onBack} type="button">
+          <span aria-hidden="true">←</span>
+          Back to plan
+        </button>
+        <small>Your workout stays in progress</small>
+      </nav>
+      <header className="workout-command-header">
+        <div className="workout-title-row">
+          <div>
+            <div className="workout-live-label">
+              <span className={session.status === "paused" ? "is-paused" : "is-live"} aria-hidden="true" />
+              {session.status === "paused" ? "Workout paused" : "Workout in progress"}
+            </div>
+            <h1>{session.name}</h1>
+            <p>Stay focused. Log each set, then move to the next exercise.</p>
+          </div>
           <div className="workout-live-actions">
             <Button
               variant="secondary"
@@ -2281,14 +2498,37 @@ function WorkoutRunner({
               disabled={openingVoice}
               onClick={() => void openLiveCoach()}
             >
-              {openingVoice ? "Opening coach…" : "Live coach"}
+              <span aria-hidden="true">✦</span>
+              {openingVoice ? "Opening coach…" : "Talk to coach"}
             </Button>
-            <Button variant="secondary" busy={workingAction === "status"} disabled={Boolean(workingAction)} onClick={() => void changeStatus()}>
-              {workingAction === "status" ? "Updating…" : session.status === "paused" ? "Resume workout" : "Pause workout"}
+            <Button variant="ghost" busy={workingAction === "status"} disabled={Boolean(workingAction)} onClick={() => void changeStatus()}>
+              <span aria-hidden="true">{session.status === "paused" ? "▶" : "Ⅱ"}</span>
+              {workingAction === "status" ? "Updating…" : session.status === "paused" ? "Resume" : "Pause"}
             </Button>
           </div>
-        }
-      />
+        </div>
+        <div className="workout-progress-panel">
+          <div className="workout-progress-copy">
+            <span>Session progress</span>
+            <strong>{session.totalSets} of {prescribedSets} sets</strong>
+          </div>
+          <div
+            className="workout-progress-track"
+            role="progressbar"
+            aria-label="Workout progress"
+            aria-valuemin={0}
+            aria-valuemax={prescribedSets}
+            aria-valuenow={Math.min(session.totalSets, prescribedSets)}
+          >
+            <span style={{ width: `${progressPercent}%` }} />
+          </div>
+          <dl className="workout-stats">
+            <div><dt>Time</dt><dd>{formatDuration(session.durationSeconds)}</dd></div>
+            <div><dt>Volume</dt><dd>{session.totalVolumeKg.toLocaleString()} kg</dd></div>
+            <div><dt>Exercises</dt><dd>{session.exercises.length}</dd></div>
+          </dl>
+        </div>
+      </header>
       {liveVoiceOpen && voiceThread && (
         <LiveVoiceCoach
           threadId={voiceThread.id}
@@ -2299,31 +2539,60 @@ function WorkoutRunner({
         />
       )}
       {session.status === "paused" && (
-        <section className="pause-banner">Workout paused. Resume it before recording another set.</section>
+        <section className="pause-banner" role="status">
+          <span aria-hidden="true">Ⅱ</span>
+          <div><strong>Workout paused</strong><small>Your progress is safe. Resume when you&apos;re ready to log another set.</small></div>
+          <Button size="sm" onClick={() => void changeStatus()}>Resume workout</Button>
+        </section>
       )}
       {error && <p className="form-error plan-error" role="alert">{error}</p>}
-      <MovementTracker
-        key={`${session.id}-${session.status}`}
-        session={session}
-        onLiveMovement={setMovementSignal}
-      />
-      <section className="workout-exercises">
-        {session.exercises.map((exercise) => (
-          <ExerciseLogger
-            key={exercise.exerciseId}
-            exercise={exercise}
-            disabled={Boolean(workingAction) || session.status !== "active"}
-            workingAction={workingAction}
-            onLog={logSet}
-            onSubstitute={substitute}
+      <div className="workout-command-grid">
+        <section className="workout-log-column">
+          <div className="workout-section-heading">
+            <div>
+              <Eyebrow>Your workout</Eyebrow>
+              <h2>Log your working sets</h2>
+            </div>
+            <span>{Math.min(currentExerciseIndex + 1, session.exercises.length)} of {session.exercises.length}</span>
+          </div>
+          <section className="workout-exercises" aria-label="Workout exercises">
+            {session.exercises.map((exercise, index) => (
+              <ExerciseLogger
+                key={exercise.exerciseId}
+                exercise={exercise}
+                index={index}
+                isCurrent={index === currentExerciseIndex}
+                disabled={Boolean(workingAction) || session.status !== "active"}
+                workingAction={workingAction}
+                onLog={logSet}
+                onSubstitute={substitute}
+              />
+            ))}
+          </section>
+        </section>
+        <aside className="workout-tools-rail" aria-label="Workout tools">
+          <MovementTracker
+            key={`${session.id}-${session.status}`}
+            session={session}
+            onLiveMovement={setMovementSignal}
           />
-        ))}
-      </section>
+          <Card className="workout-coach-card" padding="md">
+            <span className="workout-coach-icon" aria-hidden="true">✦</span>
+            <div>
+              <strong>Need a spot?</strong>
+              <p>Ask about form, pain, substitutions, or your next set.</p>
+            </div>
+            <Button variant="ghost" size="sm" busy={openingVoice} onClick={() => void openLiveCoach()}>
+              Ask coach →
+            </Button>
+          </Card>
+        </aside>
+      </div>
       <Card className="finish-card" padding="lg">
         <div>
-          <Eyebrow>Session reflection</Eyebrow>
-          <h2>Close the loop.</h2>
-          <p>Your effort and completed work update future load recommendations.</p>
+          <Eyebrow>When you&apos;re done</Eyebrow>
+          <h2>Finish strong.</h2>
+          <p>Rate the workout so your future recommendations get smarter.</p>
         </div>
         <Field label={`Overall effort (RPE ${perceivedEffort}/10)`}>
           <input
@@ -2358,12 +2627,16 @@ function WorkoutRunner({
 
 function ExerciseLogger({
   exercise,
+  index,
+  isCurrent,
   disabled,
   workingAction,
   onLog,
   onSubstitute,
 }: {
   exercise: WorkoutSession["exercises"][number];
+  index: number;
+  isCurrent: boolean;
   disabled: boolean;
   workingAction: string;
   onLog: (
@@ -2375,16 +2648,26 @@ function ExerciseLogger({
   const [reps, setReps] = useState(8);
   const [loadKg, setLoadKg] = useState(0);
   const [effortRpe, setEffortRpe] = useState(7);
+  const completed = exercise.sets.length >= exercise.prescribedSets;
+  const nextSetNumber = Math.min(exercise.sets.length + 1, exercise.prescribedSets);
 
   return (
-    <Card as="article" className="exercise-logger" padding="md">
+    <Card
+      as="article"
+      className={`exercise-logger${isCurrent ? " is-current" : ""}${completed ? " is-complete" : ""}`}
+      padding="md"
+    >
       <header>
-        <div>
-          <Eyebrow>
-            {exercise.sets.length}/{exercise.prescribedSets} PRESCRIBED SETS
-          </Eyebrow>
-          <h3>{exercise.name}</h3>
-          <small>{exercise.repRange} · {exercise.coachingNotes}</small>
+        <span className="exercise-order" aria-hidden="true">
+          {completed ? "✓" : String(index + 1).padStart(2, "0")}
+        </span>
+        <div className="exercise-heading-copy">
+          <div className="exercise-title-line">
+            <h3>{exercise.name}</h3>
+            {isCurrent && !completed && <span className="exercise-now">Up next</span>}
+            {completed && <span className="exercise-done">Complete</span>}
+          </div>
+          <small><strong>{exercise.prescribedSets} × {exercise.repRange}</strong><span aria-hidden="true">•</span>{exercise.coachingNotes}</small>
           {exercise.substitutedFor && (
             <small className="substitution-note">Substituted for {exercise.substitutedFor.name}</small>
           )}
@@ -2405,15 +2688,23 @@ function ExerciseLogger({
           </Button>
         </div>
       </header>
-      <div className="logged-sets">
+      <div className="exercise-set-progress" aria-label={`${exercise.sets.length} of ${exercise.prescribedSets} prescribed sets complete`}>
+        {Array.from({ length: exercise.prescribedSets }, (_, setIndex) => {
+          const loggedSet = exercise.sets[setIndex];
+          return (
+            <span className={loggedSet ? "is-logged" : setIndex === exercise.sets.length ? "is-next" : ""} key={setIndex}>
+              <b>{loggedSet ? "✓" : setIndex + 1}</b>
+              <small>{loggedSet ? `${loggedSet.reps} reps · ${loggedSet.loadKg} kg` : `Set ${setIndex + 1}`}</small>
+            </span>
+          );
+        })}
+      </div>
+      <div className="logged-sets" aria-label="Logged set details">
         {exercise.sets.map((set) => (
-          <span key={set.id}>
-            <b>Set {set.setNumber}</b>
-            {set.reps} reps · {set.loadKg} kg · RPE {set.effortRpe}
-          </span>
+          <span key={set.id}>Set {set.setNumber}: RPE {set.effortRpe}</span>
         ))}
       </div>
-      <div className="set-entry">
+      <div className="set-entry" role="group" aria-label={`Log set ${nextSetNumber} for ${exercise.name}`}>
         <Field label="Reps">
           <input type="number" min="1" max="100" value={reps} onChange={(event) => setReps(Number(event.target.value))} />
         </Field>
@@ -2424,11 +2715,12 @@ function ExerciseLogger({
           <input type="number" min="1" max="10" value={effortRpe} onChange={(event) => setEffortRpe(Number(event.target.value))} />
         </Field>
         <Button
+          size="lg"
           disabled={disabled || exercise.sets.length >= exercise.prescribedSets + 2}
           busy={workingAction === `log-${exercise.exerciseId}`}
           onClick={() => void onLog(exercise.exerciseId, { reps, loadKg, effortRpe })}
         >
-          {workingAction === `log-${exercise.exerciseId}` ? "Logging…" : "Log set"}
+          {workingAction === `log-${exercise.exerciseId}` ? "Saving set…" : completed ? "Log extra set" : `Complete set ${nextSetNumber}`}
         </Button>
       </div>
     </Card>

@@ -18,6 +18,9 @@ export type CoachTrainingContextInput = {
   nextWorkout: PlannedWorkoutDocument | null;
   activeSession: WorkoutSessionDocument | null;
   recentSessions: WorkoutSessionDocument[];
+  selectedWeekNumber?: number | null;
+  selectedWeekWorkouts?: PlannedWorkoutDocument[];
+  selectedWorkoutId?: string | null;
   now?: Date;
 };
 
@@ -50,6 +53,9 @@ export function buildCoachTrainingContext({
   nextWorkout,
   activeSession,
   recentSessions,
+  selectedWeekNumber = null,
+  selectedWeekWorkouts = [],
+  selectedWorkoutId = null,
   now = new Date(),
 }: CoachTrainingContextInput) {
   const serializedPlan = activePlan ? serializePlan(activePlan) : null;
@@ -79,11 +85,39 @@ export function buildCoachTrainingContext({
       notes: readiness.notes,
     } : null,
     activePlan: serializedPlan ? {
+      id: serializedPlan.id,
       version: serializedPlan.version,
       title: serializedPlan.title,
       summary: serializedPlan.summary,
+      experienceLevel: serializedPlan.experienceLevel,
+      trainingPhase: serializedPlan.trainingPhase,
+      durationWeeks: serializedPlan.durationWeeks,
+      daysPerWeek: serializedPlan.daysPerWeek,
       rationale: serializedPlan.rationale,
       weeklyProgression: serializedPlan.weeklyProgression,
+    } : null,
+    selectedWeek: selectedWeekWorkouts.length > 0 ? {
+      weekNumber: selectedWeekNumber,
+      selectedWorkoutId,
+      workouts: selectedWeekWorkouts.map((workout) => {
+        const serialized = serializeWorkout(workout);
+        return {
+          id: serialized.id,
+          name: serialized.name,
+          focus: serialized.focus,
+          scheduledFor: serialized.scheduledFor,
+          estimatedMinutes: serialized.estimatedMinutes,
+          status: serialized.status,
+          exercises: serialized.exercises.map((exercise) => ({
+            name: exercise.name,
+            sets: exercise.sets,
+            repRange: exercise.repRange,
+            restSeconds: exercise.restSeconds,
+            tempo: exercise.tempo,
+            coachingNotes: exercise.coachingNotes,
+          })),
+        };
+      }),
     } : null,
     nextWorkout: serializedWorkout ? {
       name: serializedWorkout.name,

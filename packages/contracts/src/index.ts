@@ -48,6 +48,7 @@ export type CoachMessage = {
 
 export type CoachThread = {
   id: string;
+  scope: "general" | "plan";
   title: string;
   pinned: boolean;
   archived: boolean;
@@ -63,7 +64,10 @@ export type CoachThreadDetail = {
 };
 
 export type CoachThreadListResponse = { threads: CoachThread[] };
-export type CreateCoachThreadRequest = { title?: string };
+export type CreateCoachThreadRequest = {
+  title?: string;
+  scope?: "general" | "plan";
+};
 export type CreateCoachThreadResponse = { thread: CoachThread };
 export type UpdateCoachThreadRequest = {
   title?: string;
@@ -77,6 +81,9 @@ export type CoachRequest = {
   attachmentIds?: string[];
   threadId?: string;
   sessionId?: string;
+  planId?: string;
+  weekNumber?: number;
+  workoutId?: string;
 };
 
 export type UploadCoachAttachmentRequest = {
