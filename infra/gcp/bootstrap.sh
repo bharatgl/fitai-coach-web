@@ -13,6 +13,8 @@ gcloud services enable \
   aiplatform.googleapis.com \
   artifactregistry.googleapis.com \
   cloudbuild.googleapis.com \
+  logging.googleapis.com \
+  monitoring.googleapis.com \
   run.googleapis.com \
   secretmanager.googleapis.com \
   storage.googleapis.com \

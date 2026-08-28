@@ -3,9 +3,8 @@ import rateLimit from "@fastify/rate-limit";
 import { AiProviderError } from "@fitai/ai";
 import Fastify from "fastify";
 import { ZodError } from "zod";
-import { getConfig } from "./config.js";
 import { ensureIndexes, getDatabase } from "./db.js";
-import { generateRequestId, redactPaths } from "./observability/logging.js";
+import { serverOptions } from "./observability/logger.js";
 import { coachRoutes } from "./routes/coach.js";
 import { botRoutes } from "./routes/bots.js";
 import { dashboardRoutes } from "./routes/dashboard.js";
@@ -19,20 +18,7 @@ import { operationsRoutes } from "./routes/operations.js";
 import { registerRequestTelemetry } from "./services/request-telemetry.js";
 
 export async function buildApp() {
-  const config = getConfig();
-  const app = Fastify({
-    logger: config.NODE_ENV === "test"
-      ? false
-      : {
-          level: config.LOG_LEVEL,
-          redact: { paths: redactPaths, remove: true },
-        },
-    // Adopts the caller's x-request-id when present, so one identifier spans
-    // the browser, the frontend proxy, this service, and each model call.
-    genReqId: generateRequestId,
-    trustProxy: true,
-    bodyLimit: 64 * 1024,
-  });
+  const app = Fastify(serverOptions());
 
   await app.register(helmet);
   await app.register(rateLimit, { max: 120, timeWindow: "1 minute" });

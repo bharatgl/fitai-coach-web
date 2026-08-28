@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { NextRequest } from "next/server";
 import { auth } from "@/auth";
 import { createBackendToken } from "@/lib/backend-token";
+import { logger } from "@/lib/logger";
 
 type RouteContext = { params: Promise<{ path: string[] }> };
 
@@ -14,14 +15,6 @@ const acceptableRequestId = /^[A-Za-z0-9_-]{8,64}$/;
 function requestIdFor(request: NextRequest) {
   const supplied = request.headers.get("x-request-id");
   return supplied && acceptableRequestId.test(supplied) ? supplied : randomUUID();
-}
-
-/**
- * One structured line per proxied request. Route path only — never the query
- * string or body, which carry member context.
- */
-function log(entry: Record<string, unknown>) {
-  console.log(JSON.stringify({ at: new Date().toISOString(), ...entry }));
 }
 
 async function proxy(request: NextRequest, context: RouteContext) {
@@ -41,7 +34,10 @@ async function proxy(request: NextRequest, context: RouteContext) {
 
   const backendUrl = process.env.BACKEND_API_URL;
   if (!backendUrl) {
-    log({ msg: "proxy.misconfigured", requestId, reason: "BACKEND_API_URL is not set" });
+    logger.error("proxy.misconfigured", {
+      requestId,
+      reason: "BACKEND_API_URL is not set",
+    });
     return Response.json(
       { error: "Backend API is not configured" },
       { status: 503, headers: { "x-request-id": requestId } },
@@ -82,8 +78,17 @@ async function proxy(request: NextRequest, context: RouteContext) {
 
     const durationMs = Math.round(performance.now() - startedAt);
     if (response.status >= 500) {
-      log({
-        msg: "proxy.upstream_error",
+      logger.error("proxy.upstream_error", {
+        requestId,
+        method: request.method,
+        route,
+        status: response.status,
+        durationMs,
+      });
+    } else {
+      // Route path only, never the query string or body, which carry member
+      // context. Off unless the level is lowered to admit it.
+      logger.debug("proxy.request", {
         requestId,
         method: request.method,
         route,
@@ -114,8 +119,7 @@ async function proxy(request: NextRequest, context: RouteContext) {
     // Record the cause here rather than handing it to the browser: the internal
     // message can name hosts and configuration. The caller gets the request id
     // instead, which is enough to find this line.
-    log({
-      msg: "proxy.failed",
+    logger.error("proxy.failed", {
       requestId,
       method: request.method,
       route,

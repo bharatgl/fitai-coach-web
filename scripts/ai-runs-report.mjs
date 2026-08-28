@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Summarizes `ai.run` log lines into a per-feature, per-model report.
+ * Attributes AI spend from `ai.run` log lines.
  *
  * Run records are emitted as structured log lines rather than stored in a
  * database, so this script is the query layer. It reads NDJSON from files or
@@ -8,29 +8,97 @@
  * be pointed straight at raw container logs.
  *
  *   docker logs fitai-backend 2>&1 | node scripts/ai-runs-report.mjs
- *   node scripts/ai-runs-report.mjs backend.log --since 2026-08-01
- *   node scripts/ai-runs-report.mjs backend.log --json
+ *   gcloud logging read 'jsonPayload.message="ai.run"' --format=json \
+ *     | jq -c '.[]' | node scripts/ai-runs-report.mjs --by user
+ *   node scripts/ai-runs-report.mjs backend.log --by feature
+ *   node scripts/ai-runs-report.mjs backend.log --by user --top 20
+ *   node scripts/ai-runs-report.mjs backend.log --by day,feature --since 2026-08-01
+ *   node scripts/ai-runs-report.mjs backend.log --csv > spend.csv
+ *
+ * `user` groups by `userRef`, the salted pseudonym written to the logs. It is
+ * stable per member, so per-user spend is attributable without the log store
+ * holding an account id or an email.
  */
 import { createReadStream } from "node:fs";
 import { createInterface } from "node:readline";
+import { parseArgs } from "node:util";
 
-const args = process.argv.slice(2);
-const asJson = args.includes("--json");
-const sinceIndex = args.indexOf("--since");
-const since = sinceIndex === -1 ? null : Date.parse(args[sinceIndex + 1] ?? "");
-// Skip both the flag and the value it consumes, so a date is not read as a path.
-const sinceValueIndex = sinceIndex === -1 ? -1 : sinceIndex + 1;
-const files = args.filter(
-  (arg, index) => !arg.startsWith("--") && index !== sinceValueIndex,
-);
+const dimensions = {
+  feature: (run) => run.feature ?? "unknown",
+  model: (run) => run.model ?? "unknown",
+  user: (run) => run.userRef ?? "anonymous",
+  day: (run) => (run.startedAt ?? "").slice(0, 10) || "unknown",
+  month: (run) => (run.startedAt ?? "").slice(0, 7) || "unknown",
+  outcome: (run) => run.outcome ?? "unknown",
+};
 
-if (sinceIndex !== -1 && Number.isNaN(since)) {
-  console.error("--since needs a parseable date, for example 2026-08-01");
+let options;
+let files;
+try {
+  const parsed = parseArgs({
+    args: process.argv.slice(2),
+    allowPositionals: true,
+    options: {
+      by: { type: "string", default: "feature,model" },
+      since: { type: "string" },
+      until: { type: "string" },
+      top: { type: "string" },
+      csv: { type: "boolean", default: false },
+      json: { type: "boolean", default: false },
+      help: { type: "boolean", default: false },
+    },
+  });
+  options = parsed.values;
+  files = parsed.positionals;
+} catch (error) {
+  console.error(error.message);
   process.exit(1);
 }
 
-function emptyBucket() {
+if (options.help) {
+  console.log(`Usage: ai-runs-report [files...] [options]
+
+  --by <dims>     Comma-separated: ${Object.keys(dimensions).join(", ")} (default: feature,model)
+  --since <date>  Only runs at or after this date
+  --until <date>  Only runs before this date
+  --top <n>       Keep the n most expensive rows
+  --csv           Emit CSV, for a spreadsheet
+  --json          Emit JSON
+`);
+  process.exit(0);
+}
+
+const groupBy = options.by.split(",").map((name) => name.trim()).filter(Boolean);
+const unknownDimension = groupBy.find((name) => !(name in dimensions));
+if (unknownDimension) {
+  console.error(
+    `--by does not know "${unknownDimension}". Available: ${Object.keys(dimensions).join(", ")}`,
+  );
+  process.exit(1);
+}
+
+function boundary(flag, value) {
+  if (value === undefined) return null;
+  const parsed = Date.parse(value);
+  if (Number.isNaN(parsed)) {
+    console.error(`${flag} needs a parseable date, for example 2026-08-01`);
+    process.exit(1);
+  }
+  return parsed;
+}
+
+const since = boundary("--since", options.since);
+const until = boundary("--until", options.until);
+
+const top = options.top === undefined ? null : Number(options.top);
+if (top !== null && (!Number.isInteger(top) || top < 1)) {
+  console.error("--top needs a positive whole number");
+  process.exit(1);
+}
+
+function emptyBucket(labels) {
   return {
+    labels,
     calls: 0,
     ok: 0,
     failed: 0,
@@ -48,12 +116,15 @@ function emptyBucket() {
 const byKey = new Map();
 
 function record(run) {
-  if (since && Date.parse(run.startedAt) < since) return;
+  const startedAt = Date.parse(run.startedAt);
+  if (since !== null && !(startedAt >= since)) return;
+  if (until !== null && !(startedAt < until)) return;
 
-  const key = `${run.feature}\u0000${run.model}`;
+  const labels = groupBy.map((name) => dimensions[name](run));
+  const key = labels.join("\u0000");
   let bucket = byKey.get(key);
   if (!bucket) {
-    bucket = { feature: run.feature, model: run.model, ...emptyBucket() };
+    bucket = emptyBucket(labels);
     byKey.set(key, bucket);
   }
 
@@ -91,7 +162,10 @@ async function readLines(stream) {
     if (start === -1) continue;
     try {
       const parsed = JSON.parse(line.slice(start));
-      const run = parsed.ai ?? parsed;
+      // Accepts a raw container line, a Cloud Logging export (which nests the
+      // line under jsonPayload), or a bare run record.
+      const payload = parsed.jsonPayload ?? parsed;
+      const run = payload.ai ?? payload;
       if (typeof run?.schema === "string" && run.schema.startsWith("ai.run/")) {
         record(run);
       }
@@ -105,12 +179,10 @@ for (const file of files.length ? files : [null]) {
   await readLines(file ? createReadStream(file) : process.stdin);
 }
 
-const rows = [...byKey.values()]
+let rows = [...byKey.values()]
   .map((bucket) => {
     const sorted = [...bucket.durations].sort((a, b) => a - b);
-    return {
-      feature: bucket.feature,
-      model: bucket.model,
+    const row = {
       calls: bucket.calls,
       ok: bucket.ok,
       failed: bucket.failed,
@@ -131,11 +203,80 @@ const rows = [...byKey.values()]
         : null,
       unpricedCalls: bucket.unpricedCalls,
     };
+    groupBy.forEach((name, index) => {
+      row[name] = bucket.labels[index];
+    });
+    return row;
   })
   .sort((a, b) => (b.costUsd ?? -1) - (a.costUsd ?? -1) || b.calls - a.calls);
 
-if (asJson) {
-  console.log(JSON.stringify(rows, null, 2));
+const totalCost = rows.reduce((sum, row) => sum + (row.costUsd ?? 0), 0);
+const totalCalls = rows.reduce((sum, row) => sum + row.calls, 0);
+const totalUnpriced = rows.reduce((sum, row) => sum + row.unpricedCalls, 0);
+
+// Totals are computed before --top, so a truncated view still reports honest
+// overall spend rather than the spend of the rows that survived.
+if (top !== null) rows = rows.slice(0, top);
+
+const numericColumns = [
+  ["calls", (row) => row.calls],
+  ["fail%", (row) => `${(row.failureRate * 100).toFixed(1)}%`],
+  ["p50ms", (row) => row.p50Ms],
+  ["p95ms", (row) => row.p95Ms],
+  ["in", (row) => row.promptTokens],
+  ["cached", (row) => row.cachedPromptTokens],
+  ["out", (row) => row.outputTokens],
+];
+
+if (options.json) {
+  console.log(JSON.stringify(
+    { groupBy, totalCostUsd: totalCost, totalCalls, unpricedCalls: totalUnpriced, rows },
+    null,
+    2,
+  ));
+  process.exit(0);
+}
+
+if (options.csv) {
+  const header = [
+    ...groupBy,
+    "calls",
+    "ok",
+    "failed",
+    "failureRate",
+    "p50Ms",
+    "p95Ms",
+    "promptTokens",
+    "cachedPromptTokens",
+    "outputTokens",
+    "costUsd",
+    "costPerOkUsd",
+    "unpricedCalls",
+  ];
+  const escape = (value) => {
+    const text = value === null || value === undefined ? "" : String(value);
+    return /[",\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
+  };
+  console.log(header.join(","));
+  for (const row of rows) {
+    console.log([
+      ...groupBy.map((name) => row[name]),
+      row.calls,
+      row.ok,
+      row.failed,
+      row.failureRate.toFixed(4),
+      row.p50Ms,
+      row.p95Ms,
+      row.promptTokens,
+      row.cachedPromptTokens,
+      row.outputTokens,
+      // Blank rather than 0 for an unknown cost, so a spreadsheet sum does not
+      // quietly treat unpriced calls as free.
+      row.costUsd === null ? "" : row.costUsd.toFixed(6),
+      row.costPerOkUsd === null ? "" : row.costPerOkUsd.toFixed(6),
+      row.unpricedCalls,
+    ].map(escape).join(","));
+  }
   process.exit(0);
 }
 
@@ -144,64 +285,48 @@ if (!rows.length) {
   process.exit(0);
 }
 
+const usd = (value) => (value === null ? "n/a" : `$${value.toFixed(6)}`);
+
 const columns = [
-  { header: "feature", width: 8, align: "start" },
-  { header: "model", width: 26, align: "start" },
-  { header: "calls", width: 7 },
-  { header: "fail%", width: 7 },
-  { header: "p50ms", width: 8 },
-  { header: "p95ms", width: 8 },
-  { header: "in", width: 10 },
-  { header: "cached", width: 10 },
-  { header: "out", width: 10 },
-  { header: "cost", width: 12 },
-  { header: "cost/ok", width: 12 },
+  ...groupBy.map((name) => ({
+    header: name,
+    align: "start",
+    value: (row) => row[name],
+  })),
+  ...numericColumns.map(([header, value]) => ({ header, align: "end", value })),
+  { header: "cost", align: "end", value: (row) => usd(row.costUsd) },
+  { header: "cost/ok", align: "end", value: (row) => usd(row.costPerOkUsd) },
 ];
 
-function line(values) {
-  return values
-    .map((value, index) => {
-      const { width, align } = columns[index];
-      const text = String(value);
-      return align === "start" ? text.padEnd(width) : text.padStart(width);
-    })
-    .join(" ");
-}
+// Size each column to its widest cell so a long model id or a short day label
+// both stay readable.
+const widths = columns.map((column) => Math.max(
+  column.header.length,
+  ...rows.map((row) => String(column.value(row)).length),
+));
 
-const usd = (value) => (value === null ? "n/a" : `$${value.toFixed(6)}`);
+function line(cells) {
+  return cells
+    .map((cell, index) => (columns[index].align === "start"
+      ? String(cell).padEnd(widths[index])
+      : String(cell).padStart(widths[index])))
+    .join("  ")
+    .trimEnd();
+}
 
 console.log(line(columns.map((column) => column.header)));
 for (const row of rows) {
-  console.log(line([
-    row.feature,
-    row.model,
-    row.calls,
-    `${(row.failureRate * 100).toFixed(1)}%`,
-    row.p50Ms,
-    row.p95Ms,
-    row.promptTokens,
-    row.cachedPromptTokens,
-    row.outputTokens,
-    usd(row.costUsd),
-    usd(row.costPerOkUsd),
-  ]));
+  console.log(line(columns.map((column) => column.value(row))));
 
   const reasons = Object.entries(row.reasons);
   if (reasons.length) {
     const detail = reasons.map(([reason, count]) => `${reason}=${count}`).join(", ");
-    console.log(`${" ".repeat(9)}failures: ${detail}`);
-  }
-  if (row.unpricedCalls) {
-    console.log(
-      `${" ".repeat(9)}${row.unpricedCalls} call(s) unpriced; add "${row.model}" to ai/src/pricing.ts`,
-    );
+    console.log(`  failures: ${detail}`);
   }
 }
 
-const totalCost = rows.reduce((sum, row) => sum + (row.costUsd ?? 0), 0);
-const totalCalls = rows.reduce((sum, row) => sum + row.calls, 0);
-const unpriced = rows.reduce((sum, row) => sum + row.unpricedCalls, 0);
 console.log(
   `\nTotal: $${totalCost.toFixed(4)} across ${totalCalls} calls`
-  + (unpriced ? ` (${unpriced} unpriced, excluded from the total)` : ""),
+  + (totalUnpriced ? ` (${totalUnpriced} unpriced, excluded from the total)` : "")
+  + (top !== null && rows.length < byKey.size ? `; showing top ${rows.length} of ${byKey.size}` : ""),
 );

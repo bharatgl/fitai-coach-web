@@ -34,6 +34,27 @@ apt-get install -y \
   google-cloud-cli \
   nodejs
 
+# Cloud Ops Agent: ships container logs and host metrics to Cloud Logging and
+# Cloud Monitoring. Free-tier ingestion covers a hobby workload comfortably.
+# The agent reads /etc/google-cloud-ops-agent/config.yaml, which deploy-backend.sh
+# installs; until then it runs on its defaults.
+curl -fsSL https://dl.google.com/cloudagents/add-google-cloud-ops-agent-repo.sh \
+  -o /tmp/add-google-cloud-ops-agent-repo.sh
+bash /tmp/add-google-cloud-ops-agent-repo.sh --also-install
+rm -f /tmp/add-google-cloud-ops-agent-repo.sh
+
+# Containers log to the journal, so cap what it may keep. Without a cap journald
+# defaults to 10% of the filesystem.
+install -d -m 0755 /etc/systemd/journald.conf.d
+cat > /etc/systemd/journald.conf.d/fitai.conf <<'JOURNALD'
+[Journal]
+Storage=persistent
+SystemMaxUse=512M
+SystemMaxFileSize=64M
+MaxRetentionSec=2week
+JOURNALD
+systemctl restart systemd-journald
+
 systemctl enable --now docker nginx unattended-upgrades
 snap install core
 snap refresh core
@@ -47,3 +68,4 @@ node --version
 docker --version
 nginx -v
 certbot --version
+systemctl is-active google-cloud-ops-agent || true
