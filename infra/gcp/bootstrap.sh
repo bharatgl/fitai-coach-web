@@ -14,6 +14,7 @@ gcloud services enable \
   cloudbuild.googleapis.com \
   run.googleapis.com \
   secretmanager.googleapis.com \
+  storage.googleapis.com \
   --project="${PROJECT_ID}"
 
 if ! gcloud artifacts repositories describe "${REPOSITORY}" \
@@ -80,6 +81,7 @@ BACKEND_SECRETS=(
   fitai-backend-mongodb-uri
   fitai-api-jwt-secret
   fitai-gemini-api-key
+  fitai-provider-credentials-key
 )
 
 for secret in "${FRONTEND_SECRETS[@]}" "${BACKEND_SECRETS[@]}"; do

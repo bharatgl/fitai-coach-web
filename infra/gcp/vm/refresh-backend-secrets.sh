@@ -6,6 +6,8 @@ PROJECT_ID="$(curl --fail --silent --show-error \
   http://metadata.google.internal/computeMetadata/v1/project/project-id)"
 MONGODB_DB="${FITAI_MONGODB_DB:-fitai}"
 GEMINI_MODEL="${FITAI_GEMINI_MODEL:-gemini-3.1-flash-lite}"
+ASSET_BUCKET="${FITAI_ASSET_BUCKET:-${PROJECT_ID}-fitai-assets}"
+ASSET_VERSION="${FITAI_ASSET_VERSION:-v1}"
 ENV_FILE="$(mktemp /etc/fitai/backend.env.XXXXXX)"
 trap 'rm -f "${ENV_FILE}"' EXIT
 umask 077
@@ -21,7 +23,9 @@ secret() {
   printf 'MONGODB_DB=%s\n' "${MONGODB_DB}"
   printf 'API_JWT_SECRET=%s\n' "$(secret fitai-api-jwt-secret)"
   printf 'GEMINI_API_KEY=%s\n' "$(secret fitai-gemini-api-key)"
+  printf 'USER_PROVIDER_CREDENTIALS_KEY=%s\n' "$(secret fitai-provider-credentials-key)"
   printf 'GEMINI_MODEL=%s\n' "${GEMINI_MODEL}"
+  printf 'EXERCISE_ASSET_BASE_URL=https://storage.googleapis.com/%s/%s\n' "${ASSET_BUCKET}" "${ASSET_VERSION}"
   printf 'PORT=8080\n'
   printf 'NODE_ENV=production\n'
 } > "${ENV_FILE}"

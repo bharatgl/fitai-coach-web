@@ -1,51 +1,12 @@
 "use client";
 
-import Image from "next/image";
-import { useDeferredValue, useEffect, useMemo, useState } from "react";
-import referenceLibraryData from "../../backend/src/data/exercises.json";
-import repdbLibraryData from "@/data/repdb-exercises.json";
-import workoutGuideLibraryData from "@/data/workout-guide-exercises.json";
+/* The source media is already SVG, GIF, or WebP and is served directly by GCS/CDN. */
+/* eslint-disable @next/next/no-img-element */
+import type { ExerciseDemo, ExerciseDemoResponse } from "@fitai/contracts";
+import { useInfiniteQuery } from "@tanstack/react-query";
+import { useDeferredValue, useEffect, useState } from "react";
+import { apiRequest } from "@/lib/api";
 import styles from "./ExerciseLibrary.module.css";
-
-type ExerciseImage = { main?: string; start?: string; peak?: string; frames?: string[]; animation?: string };
-type Exercise = {
-  id: string;
-  name: string;
-  description: string;
-  category: string;
-  difficulty: string;
-  equipment: string;
-  bodyPart: string;
-  primaryMuscles: string[];
-  secondaryMuscles: string[];
-  goals: string[];
-  instructions: string[];
-  tips: string[];
-  images: ExerciseImage;
-};
-
-type ReferenceExercise = {
-  id: string;
-  name: string;
-  bodyPart: string;
-  equipment: string;
-  target: string;
-  muscleGroup: string;
-  secondaryMuscles: string[];
-  instructions: string[];
-};
-
-type RepdbExercise = Exercise;
-type WorkoutGuideExercise = {
-  id: string;
-  name: string;
-  exerciseType: string;
-  equipment: string;
-  primaryMuscle: string;
-  secondaryMuscles: string[];
-  frames: string[];
-  animation: string;
-};
 
 const pageSize = 24;
 
@@ -53,87 +14,21 @@ function readable(value: string) {
   return value.replaceAll("_", " ");
 }
 
-function normalizedName(value: string) {
-  return value
-    .normalize("NFKD")
-    .replace(/\p{Diacritic}/gu, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, " ")
-    .trim()
-    .replace(/\s+/g, " ");
-}
-
-function normalizedTaxonomy(value: string) {
-  const normalized = readable(value).trim().toLowerCase();
-  return normalized === "bodyweight" ? "body weight" : normalized;
-}
-
-function bodyPartForMuscle(value: string) {
-  const muscle = value.toLowerCase();
-  if (["chest"].includes(muscle)) return "chest";
-  if (["shoulders", "rear delts"].includes(muscle)) return "shoulders";
-  if (["biceps", "triceps"].includes(muscle)) return "upper arms";
-  if (["forearms"].includes(muscle)) return "lower arms";
-  if (["calves"].includes(muscle)) return "lower legs";
-  if (["core"].includes(muscle)) return "waist";
-  if (["back", "lats", "lower back", "upper back", "posterior chain"].includes(muscle)) return "back";
-  if (["quads", "hamstrings", "glutes", "adductors", "legs", "hips"].includes(muscle)) return "upper legs";
-  return "full body";
-}
-
-const repdbExercises = repdbLibraryData.exercises as RepdbExercise[];
-const repdbByName = new Map(
-  repdbExercises.map((exercise) => [normalizedName(exercise.name), exercise]),
-);
-const workoutGuideExercises = workoutGuideLibraryData.exercises as WorkoutGuideExercise[];
-const referenceByName = new Map(
-  (referenceLibraryData.exercises as ReferenceExercise[])
-    .map((exercise) => [normalizedName(exercise.name), exercise]),
-);
-
-const demoExercises = workoutGuideExercises
-  .map((exercise): Exercise => {
-    const name = normalizedName(exercise.name);
-    const reference = referenceByName.get(name);
-    const illustrated = repdbByName.get(name);
-    const primaryMuscle = reference?.target ?? exercise.primaryMuscle;
-    return {
-      id: exercise.id,
-      name: exercise.name,
-      description: illustrated?.description
-        ?? `A three-position visual demonstration for ${exercise.name.toLowerCase()}.`,
-      category: illustrated?.category ?? readable(exercise.exerciseType),
-      difficulty: illustrated?.difficulty ?? "visual guide",
-      equipment: normalizedTaxonomy(exercise.equipment),
-      bodyPart: reference ? normalizedTaxonomy(reference.bodyPart) : bodyPartForMuscle(exercise.primaryMuscle),
-      primaryMuscles: illustrated?.primaryMuscles ?? [primaryMuscle],
-      secondaryMuscles: [...new Set([
-        ...exercise.secondaryMuscles,
-        ...(reference?.secondaryMuscles ?? []),
-        ...(illustrated?.secondaryMuscles ?? []),
-      ])],
-      goals: illustrated?.goals ?? [],
-      instructions: illustrated?.instructions ?? reference?.instructions ?? [],
-      tips: illustrated?.tips ?? [],
-      images: { frames: exercise.frames, animation: exercise.animation },
-    };
-  })
-  .sort((left, right) => left.name.localeCompare(right.name, "en", { sensitivity: "base" }));
-
-function ExercisePreview({ exercise, active }: { exercise: Exercise; active: boolean }) {
+function ExercisePreview({ exercise, active }: { exercise: ExerciseDemo; active: boolean }) {
   const previewSource = active
-    ? exercise.images.animation ?? exercise.images.frames?.[0] ?? ""
-    : exercise.images.frames?.[0] ?? exercise.images.animation ?? "";
+    ? exercise.animation || exercise.frames[0]
+    : exercise.frames[0] || exercise.animation;
   return (
     <div className={styles.preview} aria-label={`${exercise.name} movement preview`}>
-      <Image
+      <img
         key={previewSource}
         src={previewSource}
         alt=""
         width={512}
         height={512}
-        sizes="(max-width: 42rem) 90vw, (max-width: 70rem) 44vw, 22vw"
-        unoptimized
+        loading="lazy"
+        decoding="async"
+        fetchPriority="low"
       />
       <span className={`${styles.previewBadge} ${active ? styles.previewPlaying : ""}`}>
         {active ? "Playing" : "Hover to play"}
@@ -142,7 +37,7 @@ function ExercisePreview({ exercise, active }: { exercise: Exercise; active: boo
   );
 }
 
-function ExerciseCard({ exercise, onSelect }: { exercise: Exercise; onSelect: () => void }) {
+function ExerciseCard({ exercise, onSelect }: { exercise: ExerciseDemo; onSelect: () => void }) {
   const [previewing, setPreviewing] = useState(false);
   return (
     <button
@@ -167,19 +62,19 @@ function ExerciseCard({ exercise, onSelect }: { exercise: Exercise; onSelect: ()
   );
 }
 
-function ExercisePositions({ exercise }: { exercise: Exercise }) {
-  const frames = exercise.images.frames ?? [];
+function ExercisePositions({ exercise }: { exercise: ExerciseDemo }) {
+  const frames = exercise.frames;
   return (
     <div className={styles.positionStrip} aria-label={`${exercise.name} three-position demonstration`}>
       {frames.map((path, index) => (
         <figure key={path}>
-          <Image
+          <img
             src={path}
             alt={`${exercise.name} — ${["setup", "movement", "finish"][index]} position`}
             width={512}
             height={512}
-            sizes="(max-width: 42rem) 30vw, 15rem"
-            unoptimized
+            loading="lazy"
+            decoding="async"
           />
           <figcaption>{["Setup", "Move", "Finish"][index]}</figcaption>
         </figure>
@@ -192,31 +87,33 @@ export function ExerciseLibrary({ embedded = false }: { embedded?: boolean }) {
   const [query, setQuery] = useState("");
   const [bodyPart, setBodyPart] = useState("all");
   const [equipment, setEquipment] = useState("all");
-  const [visibleCount, setVisibleCount] = useState(pageSize);
-  const [selectedExercise, setSelectedExercise] = useState<Exercise | null>(null);
-  const deferredQuery = useDeferredValue(query.trim().toLowerCase());
-  const bodyParts = useMemo(
-    () => [...new Set(demoExercises.map((exercise) => exercise.bodyPart))].sort(),
-    [],
-  );
-  const equipmentOptions = useMemo(
-    () => [...new Set(demoExercises.map((exercise) => exercise.equipment))].sort(),
-    [],
-  );
-  const matches = useMemo(() => demoExercises.filter((exercise) => {
-    const searchable = [
-      exercise.name,
-      exercise.description,
-      exercise.bodyPart,
-      exercise.equipment,
-      ...exercise.primaryMuscles,
-      ...exercise.secondaryMuscles,
-    ].join(" ").toLowerCase();
-    return (!deferredQuery || searchable.includes(deferredQuery))
-      && (bodyPart === "all" || exercise.bodyPart === bodyPart)
-      && (equipment === "all" || exercise.equipment === equipment);
-  }), [bodyPart, deferredQuery, equipment]);
-  const visible = matches.slice(0, visibleCount);
+  const [selectedExercise, setSelectedExercise] = useState<ExerciseDemo | null>(null);
+  const deferredQuery = useDeferredValue(query.trim());
+  const demosQuery = useInfiniteQuery({
+    queryKey: ["exercise-demos", deferredQuery, bodyPart, equipment],
+    initialPageParam: 0,
+    queryFn: ({ pageParam, signal }) => {
+      const search = new URLSearchParams({
+        offset: String(pageParam),
+        limit: String(pageSize),
+      });
+      if (deferredQuery) search.set("query", deferredQuery);
+      if (bodyPart !== "all") search.set("bodyPart", bodyPart);
+      if (equipment !== "all") search.set("equipment", equipment);
+      return apiRequest<ExerciseDemoResponse>(`/v1/exercise-demos?${search}`, { signal });
+    },
+    getNextPageParam: (lastPage) => {
+      const nextOffset = lastPage.offset + lastPage.items.length;
+      return nextOffset < lastPage.total ? nextOffset : undefined;
+    },
+    gcTime: 24 * 60 * 60 * 1_000,
+    staleTime: 24 * 60 * 60 * 1_000,
+  });
+  const firstPage = demosQuery.data?.pages[0];
+  const visible = demosQuery.data?.pages.flatMap((page) => page.items) ?? [];
+  const total = firstPage?.total ?? 0;
+  const bodyParts = firstPage?.filters.bodyParts ?? [];
+  const equipmentOptions = firstPage?.filters.equipment ?? [];
 
   useEffect(() => {
     if (!selectedExercise) return;
@@ -227,10 +124,6 @@ export function ExerciseLibrary({ embedded = false }: { embedded?: boolean }) {
     return () => window.removeEventListener("keydown", closeOnEscape);
   }, [selectedExercise]);
 
-  function resetResults() {
-    setVisibleCount(pageSize);
-  }
-
   return (
     <section className={`${styles.library} ${embedded ? styles.embedded : ""}`} aria-labelledby="exercise-library-title">
       {embedded ? (
@@ -239,7 +132,7 @@ export function ExerciseLibrary({ embedded = false }: { embedded?: boolean }) {
             <p>Movement library</p>
             <h1 id="exercise-library-title">Exercise demos</h1>
           </div>
-          <span>{demoExercises.length} animated movement guides</span>
+          <span>{total || 302} animated movement guides</span>
         </header>
       ) : (
         <header className={styles.intro}>
@@ -259,19 +152,19 @@ export function ExerciseLibrary({ embedded = false }: { embedded?: boolean }) {
               type="search"
               value={query}
               placeholder="Search movement demos…"
-              onChange={(event) => { setQuery(event.target.value); resetResults(); }}
+              onChange={(event) => setQuery(event.target.value)}
             />
           </label>
           <label>
             <span>Body part</span>
-            <select value={bodyPart} onChange={(event) => { setBodyPart(event.target.value); resetResults(); }}>
+            <select value={bodyPart} onChange={(event) => setBodyPart(event.target.value)}>
               <option value="all">All body parts</option>
               {bodyParts.map((value) => <option value={value} key={value}>{readable(value)}</option>)}
             </select>
           </label>
           <label>
             <span>Equipment</span>
-            <select value={equipment} onChange={(event) => { setEquipment(event.target.value); resetResults(); }}>
+            <select value={equipment} onChange={(event) => setEquipment(event.target.value)}>
               <option value="all">All equipment</option>
               {equipmentOptions.map((value) => <option value={value} key={value}>{readable(value)}</option>)}
             </select>
@@ -280,27 +173,37 @@ export function ExerciseLibrary({ embedded = false }: { embedded?: boolean }) {
       </div>
 
       <div className={styles.resultsLine} aria-live="polite">
-        <strong>{matches.length} visual demos</strong>
+        <strong>{demosQuery.isPending ? "Loading visual demos…" : `${total} visual demos`}</strong>
       </div>
 
-      {visible.length ? (
+      {demosQuery.isError && !firstPage ? (
+        <div className={styles.empty}>
+          <h2>The movement library could not connect.</h2>
+          <button type="button" onClick={() => void demosQuery.refetch()}>Try again</button>
+        </div>
+      ) : visible.length ? (
         <div className={styles.grid}>
           {visible.map((exercise) => (
             <ExerciseCard exercise={exercise} key={exercise.id} onSelect={() => setSelectedExercise(exercise)} />
           ))}
         </div>
-      ) : (
+      ) : !demosQuery.isPending ? (
         <div className={styles.empty}>
           <h2>No exercises match those filters.</h2>
-          <button type="button" onClick={() => { setQuery(""); setBodyPart("all"); setEquipment("all"); resetResults(); }}>
+          <button type="button" onClick={() => { setQuery(""); setBodyPart("all"); setEquipment("all"); }}>
             Clear filters
           </button>
         </div>
-      )}
+      ) : null}
 
-      {visible.length < matches.length && (
-        <button className={styles.loadMore} type="button" onClick={() => setVisibleCount((count) => count + pageSize)}>
-          Show more exercises
+      {demosQuery.hasNextPage && (
+        <button
+          className={styles.loadMore}
+          type="button"
+          disabled={demosQuery.isFetchingNextPage}
+          onClick={() => void demosQuery.fetchNextPage()}
+        >
+          {demosQuery.isFetchingNextPage ? "Loading more…" : "Show more exercises"}
         </button>
       )}
 
@@ -337,8 +240,7 @@ export function ExerciseLibrary({ embedded = false }: { embedded?: boolean }) {
       )}
 
       <footer className={styles.credit}>
-        The catalogue combines the MIT-licensed Exercises Dataset, illustrations and exercise data
-        by <a href="https://repdb.co" target="_blank" rel="noreferrer">RepDB</a>, and
+        The catalogue combines the MIT-licensed Exercises Dataset with{" "}
         <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noreferrer">CC BY-SA 4.0</a> demonstrations
         from <a href="https://bryllim.github.io/workout-guide/" target="_blank" rel="noreferrer">Workout Guide</a>
         by Bryl Lim, derived in part from Everkinetic. Source artwork is unmodified; GIF previews only sequence the supplied frames.

@@ -1,6 +1,6 @@
 import type { UserProfile } from "@fitai/contracts";
 import { z } from "zod";
-import { generateGeminiStructured } from "./gemini.js";
+import { generateStructuredAI, type AIProviderConfig } from "./provider.js";
 
 const planExerciseSchema = z.object({
   exerciseId: z.string().min(1).max(80),
@@ -44,8 +44,7 @@ export type PlanCatalogExercise = {
 };
 
 export type GeneratePlanInput = {
-  apiKey: string;
-  model: string;
+  provider: AIProviderConfig;
   profile: UserProfile;
   exercises: PlanCatalogExercise[];
 };
@@ -277,9 +276,8 @@ Never prescribe drugs, extreme dehydration, crash dieting, or other unsafe conte
 export async function generateAdaptivePlan(
   input: GeneratePlanInput,
 ): Promise<GeneratedPlanDraft> {
-  return generateGeminiStructured({
-    apiKey: input.apiKey,
-    model: input.model,
+  return generateStructuredAI({
+    provider: input.provider,
     schema: generatedPlanSchema,
     systemInstruction: planInstructions,
     maxOutputTokens: 32_000,

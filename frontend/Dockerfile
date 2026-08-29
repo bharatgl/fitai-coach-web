@@ -12,7 +12,6 @@ COPY packages/ui/package.json packages/ui/package.json
 RUN npm ci
 
 COPY frontend frontend
-COPY backend/src/data/exercises.json backend/src/data/exercises.json
 COPY packages/contracts packages/contracts
 COPY packages/ui packages/ui
 RUN npm run build --workspace @fitai/frontend

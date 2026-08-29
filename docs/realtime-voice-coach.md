@@ -78,8 +78,18 @@ Authenticated browser
   |
   |-- explicit visual tool request: analyze_camera_view(focus)
   |     -> one compressed current frame to the authenticated backend
-  |     -> Gemini structured visual analysis with fitness safety constraints
+  |     -> configured AI provider with structured fitness safety constraints
   |     <- observations, limitations, and one actionable next step; no storage
+  |
+  |-- attachment tool request: review_recent_attachment(question)
+  |     -> newest thread-scoped image or PDF bytes from MongoDB
+  |     -> configured AI provider's native file adapter
+  |     <- concise review for the live coach to speak
+  |
+  |-- document tool request: create_pdf_document(title, content)
+  |     -> deterministic backend PDF renderer (no model-specific file API)
+  |     -> user- and thread-scoped MongoDB attachment
+  |     <- downloadable PDF card in the live conversation
   |
   |-- on-device movement signal (corrective or every third rep)
   |     -> exercise, rep, duration, ROM, confidence, and local cue only
@@ -94,6 +104,20 @@ High-frequency audio does not pass through the application containers. Permanent
 `ELEVENLABS_API_KEY`, `GEMINI_API_KEY`, and `SIMLI_API_KEY` values stay in the
 backend. The ElevenLabs agent is private and browser sessions use short-lived
 signed URLs; the member sees only their own name and coaching context.
+
+Members can optionally select Gemini, OpenAI, Anthropic Claude, or an
+OpenAI-compatible model endpoint, and separately bring their own ElevenLabs
+credentials from Profile → AI configuration. Chat, files, plans, camera
+analysis and live attachment review all use the selected general AI provider.
+For a PDF request, whichever chat or live model is active supplies the document
+content; rendering itself is deterministic and provider-neutral.
+Saved keys are encrypted with AES-256-GCM using
+`USER_PROVIDER_CREDENTIALS_KEY`, bound to both the member and provider as
+authenticated data, and returned to the browser only as a four-character hint.
+The platform credentials remain the fallback after a member removes a custom
+configuration. The live call pre-authorizes voice providers while its surface is
+open, starts optional avatar video in parallel, and keeps voice usable if avatar
+startup is slow or unavailable.
 
 ## Real-time workout data
 

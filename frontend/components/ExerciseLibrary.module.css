@@ -294,6 +294,7 @@
   padding: .65rem .95rem;
 }
 .loadMore { display: block; margin: 1.1rem auto 0; }
+.loadMore:disabled { cursor: wait; opacity: .72; }
 .credit { color: #707b90; font-size: .54rem; line-height: 1.6; margin-top: 1.4rem; text-align: center; }
 .credit a { color: #b8e84b; font-weight: 800; }
 
@@ -309,20 +310,19 @@
 @media (max-width: 42rem) {
   .library,.embedded { padding: 1.5rem .9rem 6rem; }
   .compactIntro { align-items: start; flex-direction: column; gap: .55rem; }
-  .filters { grid-template-columns: 1fr 1fr; }
-  .search { grid-column: 1 / -1; }
-  .grid { gap: .65rem; }
+  .filters { grid-template-columns: minmax(0, 1fr); }
+  .filters input,.filters select { font-size: 1rem; min-height: 2.75rem; }
+  .search { grid-column: auto; }
+  .grid { gap: .75rem; grid-template-columns: minmax(0, 1fr); }
+  .positionStrip { overflow-x: auto; overscroll-behavior-x: contain; }
+  .positionStrip figure { min-width: 10rem; }
   .modalBackdrop { padding: .5rem; }
-  .exerciseModal { border-radius: 1rem; max-height: calc(100vh - 1rem); }
+  .exerciseModal { border-radius: 1rem; max-height: calc(100dvh - 1rem); }
   .modalBody ol { columns: 1; }
 }
 
 @media (max-width: 31rem) {
-  .grid { grid-template-columns: 1fr; }
-  .filters { grid-template-columns: 1fr; }
-  .search { grid-column: auto; }
-  .positionStrip { overflow-x: auto; }
-  .positionStrip figure { min-width: 10rem; }
+  .library,.embedded { padding-inline: .75rem; }
 }
 
 @media (prefers-reduced-motion: reduce) {

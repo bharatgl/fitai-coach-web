@@ -2,10 +2,10 @@ import assert from "node:assert/strict";
 import { access, readFile } from "node:fs/promises";
 import test from "node:test";
 
-test("vendors the complete RepDB free tier as attributed in-app exercise visuals", async () => {
-  const [rawData, component, landing] = await Promise.all([
+test("vendors and uploads the complete attributed RepDB free tier", async () => {
+  const [rawData, uploadScript, landing] = await Promise.all([
     readFile(new URL("../data/repdb-exercises.json", import.meta.url), "utf8"),
-    readFile(new URL("../components/ExerciseLibrary.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../../infra/gcp/upload-exercise-assets.sh", import.meta.url), "utf8"),
     readFile(new URL("../components/LandingPage.tsx", import.meta.url), "utf8"),
   ]);
   const data = JSON.parse(rawData);
@@ -30,17 +30,18 @@ test("vendors the complete RepDB free tier as attributed in-app exercise visuals
   }
   assert.equal(paths.size, 459);
   await access(new URL("../public/exercises/repdb/LICENSE-DATA.md", import.meta.url));
-  assert.match(component, /exercise data\s+by/i);
-  assert.match(component, /https:\/\/repdb\.co/);
+  assert.match(uploadScript, /frontend\/public\/exercises/);
+  assert.match(uploadScript, /max-age=31536000,immutable/);
   assert.match(landing, /Exercise data by/);
   assert.match(landing, /href="\/exercises"/);
 });
 
-test("enriches visual demos from licensed sources without exposing a text directory", async () => {
-  const [rawReference, rawRepdb, rawWorkoutGuide, component, styles, page, dockerfile] = await Promise.all([
+test("fetches paginated visual demos without bundling the source catalogs", async () => {
+  const [rawReference, rawRepdb, rawWorkoutGuide, generatedDemos, component, styles, page, dockerfile] = await Promise.all([
     readFile(new URL("../../backend/src/data/exercises.json", import.meta.url), "utf8"),
     readFile(new URL("../data/repdb-exercises.json", import.meta.url), "utf8"),
     readFile(new URL("../data/workout-guide-exercises.json", import.meta.url), "utf8"),
+    readFile(new URL("../../backend/src/data/exercise-demos.json", import.meta.url), "utf8"),
     readFile(new URL("../components/ExerciseLibrary.tsx", import.meta.url), "utf8"),
     readFile(new URL("../components/ExerciseLibrary.module.css", import.meta.url), "utf8"),
     readFile(new URL("../app/exercises/page.tsx", import.meta.url), "utf8"),
@@ -69,13 +70,15 @@ test("enriches visual demos from licensed sources without exposing a text direct
   assert.equal(reference.length, 1_324);
   assert.equal(repdb.length, 250);
   assert.equal(workoutGuide.length, 302);
+  assert.equal(JSON.parse(generatedDemos).exercises.length, 302);
   assert.equal(uniqueNames.size, 1_725);
   assert.equal(illustratedNames.size, 479);
-  assert.match(component, /referenceLibraryData\.exercises/);
-  assert.match(component, /repdbLibraryData\.exercises/);
-  assert.match(component, /workoutGuideLibraryData\.exercises/);
-  assert.match(component, /workoutGuideExercises\s*\.map/);
-  assert.match(dockerfile, /COPY backend\/src\/data\/exercises\.json backend\/src\/data\/exercises\.json/);
+  assert.doesNotMatch(component, /referenceLibraryData|repdbLibraryData|workoutGuideLibraryData/);
+  assert.match(component, /useInfiniteQuery/);
+  assert.match(component, /\/v1\/exercise-demos/);
+  assert.match(component, /staleTime: 24 \* 60 \* 60 \* 1_000/);
+  assert.match(component, /loading="lazy"/);
+  assert.doesNotMatch(dockerfile, /backend\/src\/data\/exercises\.json/);
   assert.doesNotMatch(component, /seenNames|baseExercises|directoryRow/);
   assert.doesNotMatch(component, /LibraryMode|Directory|directory exercises/);
   assert.match(component, /ExercisePreview/);

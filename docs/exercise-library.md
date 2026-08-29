@@ -16,17 +16,16 @@ movements with instructions. The 250 RepDB movements include 459 referenced
 512px WebP illustrations. The browser can be filtered by body part, equipment,
 search term, or illustration availability.
 
-The browser additionally vendors all 302 Workout Guide movements and 906
+The browser additionally presents all 302 Workout Guide movements and 906
 unmodified 512px SVG frames. Each movement is shown as a three-position demo.
 Exact-name overlaps receive the demo while retaining their existing ForgeFit or
 RepDB instructions; 204 additional unique movements expand the combined browser
 to 1,725 exercises. Workout Guide artwork is CC BY-SA 4.0 and is visibly
 attributed to Bryl Lim and its Everkinetic source.
 
-The UI deliberately keeps these collections separate: the Library opens on the
-302 visual demonstrations, while a distinct Full directory tab presents all
-1,725 movements as compact text rows. Text-only records are never rendered as
-empty visual cards.
+The Library fetches those 302 visual demonstrations from a paginated API and
+caches pages in React Query. The frontend no longer bundles the source catalogs.
+Text-only records are never rendered as empty visual cards.
 
 RepDB assets are licensed for commercial in-app use with visible attribution.
 ForgeFit does not expose RepDB records through its exercise API, redistribute
@@ -40,9 +39,25 @@ illustration for a different equipment variant.
 - `GET /v1/exercises` accepts `query`, `bodyPart`, `equipment`, `target`,
   `offset`, and `limit` (maximum 100).
 - `GET /v1/exercises/:id` returns one exercise and source provenance.
+- `GET /v1/exercise-demos` accepts `query`, `bodyPart`, `equipment`, `offset`,
+  and `limit`, and returns licensed visual metadata plus versioned media URLs.
 
 The routes are public so the product can expose an exercise browser before
 sign-in. Global backend rate limiting still applies.
+
+## Media delivery
+
+Production media is uploaded from `frontend/public/exercises` to a versioned
+Google Cloud Storage prefix with immutable one-year caching. The API returns
+the object URLs, but the browser downloads SVG, GIF, and WebP files directly
+from GCS rather than proxying bytes through the application servers. Local
+development falls back to the checked-in `/exercises/...` paths.
+
+```sh
+FITAI_GCP_PROJECT_ID=your-project-id npm run gcp:assets
+```
+
+Increment `FITAI_ASSET_VERSION` before replacing an existing object path.
 
 ## Refreshing the pinned snapshot
 

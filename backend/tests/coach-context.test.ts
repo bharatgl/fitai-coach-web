@@ -156,6 +156,7 @@ test("shares the selected plan week with every coach surface", () => {
     recentSessions: [],
     selectedWeekNumber: 2,
     selectedWorkoutId: "pull-day",
+    canProposePlanChanges: true,
     selectedWeekWorkouts: [{
       id: "pull-day",
       userId: "user",
@@ -182,6 +183,7 @@ test("shares the selected plan week with every coach surface", () => {
   });
 
   assert.equal(context.selectedWeek?.weekNumber, 2);
+  assert.equal(context.planAdjustmentCapability, "proposal_with_member_confirmation");
   assert.equal(context.selectedWeek?.selectedWorkoutId, "pull-day");
   assert.equal(context.selectedWeek?.workouts[0]?.exercises[0]?.name, "Cable row");
 });

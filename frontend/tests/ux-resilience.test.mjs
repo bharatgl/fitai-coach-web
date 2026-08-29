@@ -24,17 +24,20 @@ test("provides branded route, not-found, and sign-out states", async () => {
 });
 
 test("uses an in-memory server-state cache and lazy-loads camera tracking", async () => {
-  const [coach, packageJson] = await Promise.all([
+  const [coach, providers, layout, packageJson] = await Promise.all([
     readFile(new URL("../components/FitAICoach.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/AppProviders.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
     readFile(new URL("../package.json", import.meta.url), "utf8"),
   ]);
 
   assert.match(packageJson, /@tanstack\/react-query/);
-  assert.match(coach, /QueryClientProvider/);
+  assert.match(providers, /QueryClientProvider/);
+  assert.match(layout, /<AppProviders>/);
   assert.match(coach, /queryKey: \["dashboard", user\.id\]/);
-  assert.match(coach, /staleTime: 30_000/);
+  assert.match(providers, /staleTime: 30_000/);
   assert.match(coach, /dynamic\([\s\S]*@\/components\/MovementTracker/);
-  assert.doesNotMatch(coach, /localStorage|sessionStorage|persist\(/);
+  assert.doesNotMatch(providers, /localStorage|sessionStorage|persist\(/);
 });
 
 test("shows scoped progress for workout mutations", async () => {

@@ -5,6 +5,7 @@ import {
   findExerciseLibraryItem,
   searchExerciseLibrary,
 } from "../domain/exercise-library.js";
+import { searchExerciseDemos } from "../domain/exercise-demos.js";
 
 const listQuery = z.object({
   query: z.string().trim().max(100).optional(),
@@ -19,7 +20,17 @@ const itemParams = z.object({
   id: z.string().trim().min(1).max(40),
 });
 
+const demosQuery = listQuery.omit({ target: true }).extend({
+  offset: z.coerce.number().int().min(0).max(302).default(0),
+});
+
 export async function exerciseRoutes(app: FastifyInstance) {
+  app.get("/v1/exercise-demos", async (request, reply) => {
+    return reply
+      .header("cache-control", "public, max-age=300, s-maxage=3600, stale-while-revalidate=86400")
+      .send(searchExerciseDemos(demosQuery.parse(request.query)));
+  });
+
   app.get("/v1/exercises", async (request) => {
     return searchExerciseLibrary(listQuery.parse(request.query));
   });

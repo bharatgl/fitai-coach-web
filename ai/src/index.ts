@@ -7,6 +7,7 @@ export {
   type CoachMovementContext,
   type GeneratedCoachResponse,
   type GenerateCoachResponseInput,
+  type PlanAdjustmentProposalDraft,
 } from "./coach.js";
 export {
   classifySafetyMessage,
@@ -34,6 +35,14 @@ export {
   toGeminiJsonSchema,
   translateGeminiError,
 } from "./gemini.js";
+export {
+  generateStructuredAI,
+  type AIContent,
+  type AIContentPart,
+  type AIFilePart,
+  type AIProviderConfig,
+  type AIProviderKind,
+} from "./provider.js";
 export {
   analyzeCameraFrame,
   buildCameraAnalysisContents,

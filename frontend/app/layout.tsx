@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import "@fitai/ui/styles.css";
 import "@fontsource-variable/manrope";
 import "./globals.css";
+import { AppProviders } from "@/components/AppProviders";
 
 export async function generateMetadata(): Promise<Metadata> {
   const requestHeaders = await headers();
@@ -25,7 +26,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body suppressHydrationWarning>{children}</body>
+      <body suppressHydrationWarning><AppProviders>{children}</AppProviders></body>
     </html>
   );
 }

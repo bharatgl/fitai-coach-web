@@ -19,6 +19,7 @@ import {
 } from "@/lib/movement-tracking";
 
 type CameraStatus = "off" | "starting" | "preview" | "tracking" | "error";
+type CameraFacingMode = "user" | "environment";
 export type LiveCameraFrame = {
   imageBase64: string;
   mimeType: "image/jpeg";
@@ -47,12 +48,16 @@ export function LiveCoachCamera({
   sessionId,
   onMovement,
   onCaptureReady,
+  onActiveChange,
 }: {
   sessionId: string | null;
   onMovement: (signal: LiveMovementSignal) => void;
   onCaptureReady?: (capture: CaptureLiveCameraFrame | null) => void;
+  onActiveChange?: (active: boolean) => void;
 }) {
   const [status, setStatus] = useState<CameraStatus>("off");
+  const [facingMode, setFacingMode] = useState<CameraFacingMode>("user");
+  const [canSwitchCamera, setCanSwitchCamera] = useState(false);
   const [feedback, setFeedback] = useState("Camera is off.");
   const [exercises, setExercises] = useState<TrackableExercise[]>([]);
   const [selectedExerciseId, setSelectedExerciseId] = useState("");
@@ -92,6 +97,13 @@ export function LiveCoachCamera({
     onCaptureReady?.(captureCurrentFrame);
     return () => onCaptureReady?.(null);
   }, [captureCurrentFrame, onCaptureReady]);
+
+  useEffect(() => {
+    if (!navigator.mediaDevices?.enumerateDevices) return;
+    void navigator.mediaDevices.enumerateDevices().then((devices) => {
+      setCanSwitchCamera(devices.filter((device) => device.kind === "videoinput").length > 1);
+    }).catch(() => undefined);
+  }, []);
 
   const stopCamera = useCallback((updateUi = true) => {
     runIdRef.current += 1;
@@ -166,8 +178,8 @@ export function LiveCoachCamera({
     }
   }
 
-  async function startCamera() {
-    if (status === "starting" || status === "tracking" || status === "preview") return;
+  async function startCamera(requestedFacingMode: CameraFacingMode = facingMode, force = false) {
+    if (!force && (status === "starting" || status === "tracking" || status === "preview")) return;
     const runId = runIdRef.current + 1;
     runIdRef.current = runId;
     setStatus("starting");
@@ -186,7 +198,7 @@ export function LiveCoachCamera({
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: false,
         video: {
-          facingMode: "user",
+          facingMode: { ideal: requestedFacingMode },
           width: { ideal: runtime.captureWidth },
           height: { ideal: runtime.captureHeight },
           frameRate: { ideal: runtime.captureFrameRate, max: runtime.captureFrameRate },
@@ -197,6 +209,12 @@ export function LiveCoachCamera({
         return;
       }
       streamRef.current = stream;
+      setFacingMode(requestedFacingMode);
+      void navigator.mediaDevices.enumerateDevices().then((devices) => {
+        if (runId === runIdRef.current) {
+          setCanSwitchCamera(devices.filter((device) => device.kind === "videoinput").length > 1);
+        }
+      }).catch(() => undefined);
       const video = videoRef.current;
       const canvas = canvasRef.current;
       if (!video || !canvas) throw new Error("Camera preview could not be initialized.");
@@ -307,8 +325,25 @@ export function LiveCoachCamera({
   }
 
   const cameraOn = status === "preview" || status === "tracking";
+  useEffect(() => {
+    onActiveChange?.(cameraOn);
+    return () => onActiveChange?.(false);
+  }, [cameraOn, onActiveChange]);
+
+  async function switchCamera() {
+    const nextFacingMode: CameraFacingMode = facingMode === "user" ? "environment" : "user";
+    if (!cameraOn) {
+      setFacingMode(nextFacingMode);
+      return;
+    }
+    stopCamera(false);
+    setStatus("starting");
+    setFeedback(`Switching to the ${nextFacingMode === "environment" ? "rear" : "front"} camera…`);
+    await startCamera(nextFacingMode, true);
+  }
+
   return (
-    <div className="live-workout-camera" data-state={status}>
+    <div className="live-workout-camera" data-state={status} data-facing={facingMode}>
       <video ref={videoRef} muted playsInline aria-label="Private workout camera preview" />
       <canvas ref={canvasRef} aria-hidden="true" />
       {cameraOn && <span className="live-camera-self-label">You</span>}
@@ -325,6 +360,19 @@ export function LiveCoachCamera({
               ))}
             </select>
           </label>
+        )}
+        {(canSwitchCamera || cameraOn) && (
+          <button
+            className="live-camera-switch"
+            type="button"
+            onClick={() => void switchCamera()}
+            disabled={status === "starting"}
+            aria-label={`Use ${facingMode === "user" ? "rear" : "front"} camera`}
+            title={`Use ${facingMode === "user" ? "rear" : "front"} camera`}
+          >
+            <span aria-hidden="true">↻</span>
+            Switch camera
+          </button>
         )}
         <button
           type="button"

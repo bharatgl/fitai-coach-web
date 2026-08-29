@@ -8,11 +8,15 @@ import type {
   CoachThreadDetail,
   CoachThreadListResponse,
   CreateCoachThreadResponse,
+  ConfirmPlanAdjustmentResponse,
   DashboardResponse,
   GeneratePlanRequest,
   GeneratePlanResponse,
   PlanHistoryEntry,
+  PendingPlanAdjustmentResponse,
+  PlanAdjustmentProposal,
   PlannedWorkout,
+  ProviderSettingsResponse,
   StartWorkoutResponse,
   UploadCoachAttachmentResponse,
   UserProfile,
@@ -30,8 +34,9 @@ import {
 import Link from "next/link";
 import Image from "next/image";
 import dynamic from "next/dynamic";
-import { QueryClient, QueryClientProvider, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  CSSProperties,
   FormEvent,
   useEffect,
   useMemo,
@@ -40,7 +45,9 @@ import {
   useSyncExternalStore,
 } from "react";
 import { ApiRequestError, apiRequest } from "@/lib/api";
+import { mostRecentActiveCoachThread } from "@/lib/coach-threads";
 import type { LiveMovementSignal } from "@/lib/live-voice";
+import type { LiveCoachActivity } from "@/components/LiveVoiceCoach";
 import {
   collectSpeechTranscript,
   speechRecognitionConstructor,
@@ -64,9 +71,53 @@ const MovementTracker = dynamic(
   { ssr: false, loading: () => <MovementTrackerSkeleton /> },
 );
 
+function LiveVoiceCoachLoadingShell() {
+  return (
+    <section
+      className="coach-voice-home coach-voice-home-live live-voice-panel live-voice-inline is-connecting is-visual-only live-voice-loading-shell"
+      aria-label="Opening live coaching"
+    >
+      <div className="coach-voice-home-copy">
+        <span className="coach-voice-home-status"><i aria-hidden="true" /> OPENING LIVE COACH</span>
+        <h1>Your coach is ready to <em>talk.</em></h1>
+        <p>Have a natural, real-time conversation about today’s workout, recovery, form, or plan.</p>
+        <ul className="coach-voice-home-context" aria-label="Live coach capabilities">
+          <li><i aria-hidden="true">✓</i><span><b>Remembers you</b>Your profile, goals, and coaching history.</span></li>
+          <li><i aria-hidden="true">✓</i><span><b>Workout aware</b>Your active session stays in context.</span></li>
+          <li><i aria-hidden="true">✓</i><span><b>Visual feedback</b>Optional on-device movement tracking.</span></li>
+        </ul>
+        <button className="coach-voice-home-action" type="button" disabled>
+          <span className="coach-voice-home-action-icon" aria-hidden="true">
+            <span className="live-voice-wave"><i /><i /><i /></span>
+          </span>
+          <span>
+            <strong>Opening your live coach…</strong>
+            <small>Your conversation stays right where it is</small>
+          </span>
+          <b aria-hidden="true">•••</b>
+        </button>
+        <small className="coach-voice-home-privacy">Connecting securely to your private live session.</small>
+      </div>
+      <div className="coach-voice-home-visual" aria-hidden="true">
+        <span className="coach-voice-home-orbit"><i /><i /></span>
+        <Image
+          className="coach-voice-home-avatar"
+          src="/coach/forge-coach-avatar.webp"
+          alt=""
+          width={682}
+          height={1024}
+          priority
+          sizes="(max-width: 900px) 55vw, 34vw"
+        />
+        <span className="coach-voice-home-listening"><i /> Connecting</span>
+      </div>
+    </section>
+  );
+}
+
 const LiveVoiceCoach = dynamic(
   () => import("@/components/LiveVoiceCoach").then((module) => module.LiveVoiceCoach),
-  { ssr: false },
+  { ssr: false, loading: () => <LiveVoiceCoachLoadingShell /> },
 );
 
 const ExerciseLibrary = dynamic(
@@ -213,21 +264,7 @@ function NavIcon({ name }: { name: NavIconName }) {
 }
 
 export default function FitAICoach({ user }: { user: CurrentUser }) {
-  const [queryClient] = useState(() => new QueryClient({
-    defaultOptions: {
-      queries: {
-        gcTime: 10 * 60 * 1_000,
-        retry: 1,
-        staleTime: 30_000,
-      },
-    },
-  }));
-
-  return (
-    <QueryClientProvider client={queryClient}>
-      <FitAIWorkspace user={user} />
-    </QueryClientProvider>
-  );
+  return <FitAIWorkspace user={user} />;
 }
 
 function FitAIWorkspace({ user }: { user: CurrentUser }) {
@@ -737,7 +774,195 @@ function ProfileSettings({
           {saving ? "Saving…" : "Save and review plan"}
         </Button>
       </form>
+      <ProviderConfiguration />
     </div>
+  );
+}
+
+function ProviderConfiguration() {
+  const [settings, setSettings] = useState<ProviderSettingsResponse | null>(null);
+  const [aiKey, setAIKey] = useState("");
+  const [aiProvider, setAIProvider] = useState<ProviderSettingsResponse["ai"]["provider"]>("gemini");
+  const [aiModel, setAIModel] = useState("");
+  const [aiBaseUrl, setAIBaseUrl] = useState("");
+  const [elevenLabsKey, setElevenLabsKey] = useState("");
+  const [elevenLabsModel, setElevenLabsModel] = useState("");
+  const [agentId, setAgentId] = useState("");
+  const [voiceId, setVoiceId] = useState("");
+  const [saving, setSaving] = useState<"ai" | "elevenlabs" | null>(null);
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+
+  function applySettings(next: ProviderSettingsResponse) {
+    setSettings(next);
+    setAIProvider(next.ai.provider);
+    setAIModel(next.ai.model);
+    setAIBaseUrl(next.ai.baseUrl ?? "");
+    setElevenLabsModel(next.elevenlabs.model);
+    setAgentId(next.elevenlabs.agentId ?? "");
+    setVoiceId(next.elevenlabs.voiceId ?? "");
+  }
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void apiRequest<ProviderSettingsResponse>("/v1/provider-settings", {
+      signal: controller.signal,
+    }).then(applySettings).catch((cause) => {
+      if (!controller.signal.aborted) {
+        setError(cause instanceof Error ? cause.message : "Unable to load provider settings");
+      }
+    });
+    return () => controller.abort();
+  }, []);
+
+  async function saveProvider(provider: "ai" | "elevenlabs") {
+    setSaving(provider);
+    setError("");
+    setMessage("");
+    try {
+      const body = provider === "ai"
+        ? {
+            ai: {
+              provider: aiProvider,
+              ...(aiKey.trim() ? { apiKey: aiKey.trim() } : {}),
+              model: aiModel.trim(),
+              baseUrl: aiBaseUrl.trim() || null,
+            },
+          }
+        : {
+            elevenlabs: {
+              ...(elevenLabsKey.trim() ? { apiKey: elevenLabsKey.trim() } : {}),
+              model: elevenLabsModel.trim(),
+              agentId: agentId.trim(),
+              voiceId: voiceId.trim(),
+            },
+          };
+      const next = await apiRequest<ProviderSettingsResponse>("/v1/provider-settings", {
+        method: "PUT",
+        body: JSON.stringify(body),
+      });
+      applySettings(next);
+      setAIKey("");
+      setElevenLabsKey("");
+      setMessage(`${provider === "ai" ? "AI model" : "ElevenLabs"} configuration saved securely.`);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Unable to save provider settings");
+    } finally {
+      setSaving(null);
+    }
+  }
+
+  async function resetToPlatformProvider(provider: "ai" | "elevenlabs") {
+    setSaving(provider);
+    setError("");
+    setMessage("");
+    try {
+      const next = await apiRequest<ProviderSettingsResponse>(`/v1/provider-settings/${provider}`, {
+        method: "DELETE",
+      });
+      applySettings(next);
+      setMessage(`Using ForgeFit's ${provider === "ai" ? "default AI model" : "ElevenLabs configuration"}.`);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Unable to reset provider settings");
+    } finally {
+      setSaving(null);
+    }
+  }
+
+  const storageEnabled = settings?.secureStorageAvailable !== false;
+  const aiProviderChanged = Boolean(settings && aiProvider !== settings.ai.provider);
+  const aiConfigurationIncomplete = !aiKey.trim()
+    && (settings?.ai.source !== "user" || aiProviderChanged);
+  const compatibleBaseUrlMissing = aiProvider === "openai_compatible" && !aiBaseUrl.trim();
+  return (
+    <section className="provider-configuration" aria-labelledby="provider-configuration-title">
+      <div className="provider-configuration-heading">
+        <div>
+          <Eyebrow>AI configuration</Eyebrow>
+          <h2 id="provider-configuration-title">Bring your own provider keys</h2>
+        </div>
+        <p>Saved keys are encrypted on the server and are never returned to this browser.</p>
+      </div>
+      {!settings && !error && <p className="provider-configuration-status">Loading provider configuration…</p>}
+      {settings && !settings.secureStorageAvailable && (
+        <p className="form-error" role="alert">
+          Secure key storage is not enabled on this deployment. Set USER_PROVIDER_CREDENTIALS_KEY on the backend first.
+        </p>
+      )}
+      <div className="provider-configuration-grid">
+        <form onSubmit={(event) => { event.preventDefault(); void saveProvider("ai"); }}>
+          <header>
+            <div><strong>AI model</strong><small>Chat, files, plans, and camera analysis</small></div>
+            <span>{settings?.ai.source === "user" ? `Custom ${settings.ai.keyHint}` : "ForgeFit default"}</span>
+          </header>
+          <Field label="Provider">
+            <select value={aiProvider} onChange={(event) => setAIProvider(event.target.value as ProviderSettingsResponse["ai"]["provider"])} disabled={!storageEnabled}>
+              <option value="gemini">Google Gemini</option>
+              <option value="openai">OpenAI</option>
+              <option value="anthropic">Anthropic Claude</option>
+              <option value="openai_compatible">OpenAI-compatible / local</option>
+            </select>
+          </Field>
+          <Field label="API key" hint={aiProviderChanged ? "A new key is required when changing providers." : "Leave blank to keep the currently configured key."}>
+            <input
+              type="password"
+              autoComplete="new-password"
+              value={aiKey}
+              onChange={(event) => setAIKey(event.target.value)}
+              placeholder={settings?.ai.keyHint ?? "Provider API key"}
+              disabled={!storageEnabled}
+            />
+          </Field>
+          <Field label="Model">
+            <input value={aiModel} onChange={(event) => setAIModel(event.target.value)} disabled={!storageEnabled} />
+          </Field>
+          <Field label="Base URL" hint={aiProvider === "openai_compatible" ? "Required for a local or compatible server." : "Optional provider override."}>
+            <input type="url" value={aiBaseUrl} onChange={(event) => setAIBaseUrl(event.target.value)} placeholder={aiProvider === "openai_compatible" ? "http://localhost:11434/v1" : "Use provider default"} disabled={!storageEnabled} />
+          </Field>
+          <div className="provider-configuration-actions">
+            <Button type="submit" busy={saving === "ai"} disabled={!storageEnabled || !settings || aiConfigurationIncomplete || compatibleBaseUrlMissing}>Save AI provider</Button>
+            {settings?.ai.source === "user" && (
+              <button type="button" onClick={() => void resetToPlatformProvider("ai")}>Use ForgeFit provider</button>
+            )}
+          </div>
+        </form>
+        <form onSubmit={(event) => { event.preventDefault(); void saveProvider("elevenlabs"); }}>
+          <header>
+            <div><strong>ElevenLabs</strong><small>Natural live coach voice</small></div>
+            <span>{settings?.elevenlabs.source === "user" ? `Custom ${settings.elevenlabs.keyHint}` : "ForgeFit default"}</span>
+          </header>
+          <Field label="ElevenLabs API key" hint="Leave blank to keep the currently configured key.">
+            <input
+              type="password"
+              autoComplete="new-password"
+              value={elevenLabsKey}
+              onChange={(event) => setElevenLabsKey(event.target.value)}
+              placeholder={settings?.elevenlabs.keyHint ?? "sk_…"}
+              disabled={!storageEnabled}
+            />
+          </Field>
+          <div className="provider-configuration-pair">
+            <Field label="Agent ID" hint="Optional; ForgeFit can provision one.">
+              <input value={agentId} onChange={(event) => setAgentId(event.target.value)} disabled={!storageEnabled} />
+            </Field>
+            <Field label="Voice ID" hint="Optional custom voice.">
+              <input value={voiceId} onChange={(event) => setVoiceId(event.target.value)} disabled={!storageEnabled} />
+            </Field>
+          </div>
+          <Field label="Agent LLM model">
+            <input value={elevenLabsModel} onChange={(event) => setElevenLabsModel(event.target.value)} disabled={!storageEnabled} />
+          </Field>
+          <div className="provider-configuration-actions">
+            <Button type="submit" busy={saving === "elevenlabs"} disabled={!storageEnabled || !settings || (!elevenLabsKey.trim() && settings.elevenlabs.source !== "user")}>Save ElevenLabs</Button>
+            {settings?.elevenlabs.source === "user" && (
+              <button type="button" onClick={() => void resetToPlatformProvider("elevenlabs")}>Use ForgeFit key</button>
+            )}
+          </div>
+        </form>
+      </div>
+      {error && <p className="form-error" role="alert">{error}</p>}
+      {message && <p className="provider-configuration-status" role="status">{message}</p>}
+    </section>
   );
 }
 
@@ -1045,6 +1270,7 @@ function Coach({
   >("idle");
   const [voiceError, setVoiceError] = useState("");
   const [liveVoiceOpen, setLiveVoiceOpen] = useState(false);
+  const [liveCoachActivity, setLiveCoachActivity] = useState<LiveCoachActivity | null>(null);
   const attachmentInputRef = useRef<HTMLInputElement>(null);
   const messagesRef = useRef<HTMLDivElement>(null);
   const pendingAttachmentsRef = useRef<PendingCoachAttachment[]>([]);
@@ -1093,7 +1319,14 @@ function Coach({
       if (messageList) messageList.scrollTop = messageList.scrollHeight;
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [activeThread?.id, loadingThreads, messages.length]);
+  }, [
+    activeThread?.id,
+    liveCoachActivity?.coachCaption,
+    liveCoachActivity?.userCaption,
+    liveVoiceOpen,
+    loadingThreads,
+    messages.length,
+  ]);
 
   useEffect(() => () => {
     pendingAttachmentsRef.current.forEach((attachment) => {
@@ -1179,7 +1412,7 @@ function Coach({
       try {
         const response = await apiRequest<CoachThreadListResponse>("/v1/coach/threads");
         if (!active) return;
-        const existing = response.threads.find((thread) => !thread.archived && thread.scope === "general");
+        const existing = mostRecentActiveCoachThread(response.threads, "general");
         if (existing) {
           const detail = await apiRequest<CoachThreadDetail>(`/v1/coach/threads/${existing.id}`);
           if (!active) return;
@@ -1248,6 +1481,7 @@ function Coach({
         name: attachment.file.name,
         mimeType: attachment.file.type,
         dataBase64: await fileToBase64(attachment.file),
+        threadId: activeThread?.id,
       }),
     });
   }
@@ -1329,7 +1563,24 @@ function Coach({
 
   return (
     <div className="wrap coach-page">
-      <section className={`coach-workspace coach-voice-first-workspace${liveVoiceOpen ? " is-live" : ""}`}>
+      <section className={`coach-workspace coach-voice-first-workspace${liveVoiceOpen ? " has-live-coach" : ""}`}>
+        {activeThread && liveVoiceOpen ? (
+          <LiveVoiceCoach
+            threadId={activeThread.id}
+            activeSessionId={activeSessionId}
+            autoStart
+            visualOnly
+            onActivityChange={setLiveCoachActivity}
+            onClose={() => {
+              setLiveVoiceOpen(false);
+              setLiveCoachActivity(null);
+            }}
+            onThreadUpdate={(detail) => {
+              setActiveThread(detail.thread);
+              setMessages(detail.messages);
+            }}
+          />
+        ) : (
         <section className="coach-voice-home" aria-labelledby="coach-voice-home-title">
           <div className="coach-voice-home-copy">
             <span className="coach-voice-home-status"><i aria-hidden="true" /> YOUR COACH IS ONLINE</span>
@@ -1372,15 +1623,27 @@ function Coach({
             <span className="coach-voice-home-listening"><i /> Ready when you are</span>
           </div>
         </section>
-        <Card className="chat coach-chat-side" padding="md">
+        )}
+        <Card className={`chat coach-chat-side${liveVoiceOpen ? " is-live-chat" : ""}`} id="coach-text-chat" padding="md">
           <header className="chat-header">
             <div className="chat-header-copy">
-              <small>TEXT CHAT</small>
-              <strong>Conversation</strong>
-              <span>Synced with your live coach.</span>
+              <small>{liveVoiceOpen ? "LIVE CHAT" : "TEXT CHAT"}</small>
+              <strong>{liveVoiceOpen ? "Live conversation" : "Conversation"}</strong>
+              <span>{liveCoachActivity?.label ?? "Synced with your live coach."}</span>
             </div>
             <div className="chat-header-actions">
-              {activeThread && <small>{activeThread.messageCount} messages</small>}
+              {liveVoiceOpen ? (
+                <button
+                  className="live-chat-end"
+                  type="button"
+                  onClick={() => {
+                    setLiveVoiceOpen(false);
+                    setLiveCoachActivity(null);
+                  }}
+                >
+                  End live coaching
+                </button>
+              ) : activeThread && <small>{activeThread.messageCount} messages</small>}
             </div>
           </header>
           <div className="messages" ref={messagesRef}>
@@ -1390,7 +1653,7 @@ function Coach({
                 <span className="ui-visually-hidden" role="status">Loading your coach…</span>
               </>
             )}
-            {messages.length === 0 && !loadingThreads && (
+            {messages.length === 0 && !loadingThreads && !liveVoiceOpen && (
               <div className="chat-starter">
                 <div className="coach-starter-mark" aria-hidden="true">
                   <span /><span /><b>FF</b>
@@ -1432,8 +1695,26 @@ function Coach({
                 </div>
               </article>
             ))}
+            {liveCoachActivity?.userCaption && (
+              <article className="mine live-transcript-message" aria-live="polite">
+                <i>YOU</i>
+                <div className="message-body"><p>{liveCoachActivity.userCaption}</p><small>Live transcript</small></div>
+              </article>
+            )}
+            {liveCoachActivity?.coachCaption && (
+              <article className="theirs live-transcript-message" aria-live="polite">
+                <i>✦</i>
+                <div className="message-body"><p>{liveCoachActivity.coachCaption}</p><small>Coach speaking live</small></div>
+              </article>
+            )}
+            {liveVoiceOpen && !liveCoachActivity?.userCaption && !liveCoachActivity?.coachCaption && (
+              <div className="live-chat-listening" role="status">
+                <i aria-hidden="true" />
+                <span>{liveCoachActivity?.error || liveCoachActivity?.label || "Starting live coaching…"}</span>
+              </div>
+            )}
           </div>
-          {messages.length === 0 && !loadingThreads && (
+          {messages.length === 0 && !loadingThreads && !liveVoiceOpen && (
             <div className="coach-suggestions" aria-label="Suggested coach prompts">
               {templates.map((template) => (
                 <button type="button" key={template.title} onClick={() => selectTemplate(template.prompt)}>
@@ -1442,7 +1723,7 @@ function Coach({
               ))}
             </div>
           )}
-          {messages.length > 0 && showSuggestions && (
+          {messages.length > 0 && showSuggestions && !liveVoiceOpen && (
             <div className="coach-suggestions active-coach-suggestions" id="composer-suggestions" aria-label="Suggested coach prompts">
               {templates.map((template) => (
                 <button type="button" key={template.title} onClick={() => selectTemplate(template.prompt)}>
@@ -1582,6 +1863,16 @@ function Coach({
               </button>
             </div>
           </form>
+          {liveVoiceOpen && (
+            <div className="live-chat-footer" role="status">
+              <span className="live-voice-wave" aria-hidden="true"><i /><i /><i /></span>
+              <span>
+                {liveCoachActivity?.isPaused
+                  ? "Conversation paused. Resume whenever you want to continue."
+                  : "Speak naturally. Your live conversation is saved here automatically."}
+              </span>
+            </div>
+          )}
           <div
             className={`voice-experience-status${voiceStatus === "idle" ? "" : " is-active"}`}
             aria-live="polite"
@@ -1601,17 +1892,6 @@ function Coach({
           {voiceError && <small className="form-error voice-error" role="alert">{voiceError}</small>}
           {error && <small className="form-error" role="alert">{error}</small>}
         </Card>
-        {activeThread && liveVoiceOpen && (
-          <LiveVoiceCoach
-            threadId={activeThread.id}
-            activeSessionId={activeSessionId}
-            onClose={() => setLiveVoiceOpen(false)}
-            onThreadUpdate={(detail) => {
-              setActiveThread(detail.thread);
-              setMessages(detail.messages);
-            }}
-          />
-        )}
       </section>
     </div>
   );
@@ -1783,12 +2063,14 @@ function PlanCoachPanel({
   weekNumber,
   workoutId,
   activeSessionId,
+  refresh,
 }: {
   planId: string;
   planTitle: string;
   weekNumber: number;
   workoutId?: string;
   activeSessionId?: string;
+  refresh: () => Promise<void>;
 }) {
   const [thread, setThread] = useState<CoachThread | null>(null);
   const [messages, setMessages] = useState<CoachMessage[]>([]);
@@ -1796,14 +2078,21 @@ function PlanCoachPanel({
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [proposal, setProposal] = useState<PlanAdjustmentProposal | null>(null);
+  const [proposalAction, setProposalAction] = useState<"confirm" | "reject" | "">("");
   const visibleMessages = messages.slice(-6);
 
   useEffect(() => {
     let active = true;
     async function loadPlanCoach() {
       try {
-        const response = await apiRequest<CoachThreadListResponse>("/v1/coach/threads");
-        const existing = response.threads.find((item) => !item.archived && item.scope === "plan");
+        const [response, pending] = await Promise.all([
+          apiRequest<CoachThreadListResponse>("/v1/coach/threads"),
+          apiRequest<PendingPlanAdjustmentResponse>(`/v1/plan-adjustments/pending?planId=${encodeURIComponent(planId)}`),
+        ]);
+        if (active) setProposal(pending.proposal);
+        const existing = mostRecentActiveCoachThread(response.threads, "plan");
         if (existing) {
           const detail = await apiRequest<CoachThreadDetail>(`/v1/coach/threads/${existing.id}`);
           if (!active) return;
@@ -1825,7 +2114,7 @@ function PlanCoachPanel({
     }
     void loadPlanCoach();
     return () => { active = false; };
-  }, []);
+  }, [planId]);
 
   async function sendPlanMessage(event: FormEvent) {
     event.preventDefault();
@@ -1847,6 +2136,7 @@ function PlanCoachPanel({
       });
       setThread(response.thread);
       setMessages((current) => [...current, response.userMessage, response.message]);
+      if (response.planAdjustmentProposal) setProposal(response.planAdjustmentProposal);
       setDraft("");
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Your coach could not respond");
@@ -1855,8 +2145,37 @@ function PlanCoachPanel({
     }
   }
 
+  async function resolveProposal(action: "confirm" | "reject") {
+    if (!proposal || proposal.status !== "pending" || proposalAction) return;
+    setProposalAction(action);
+    setError("");
+    setNotice("");
+    try {
+      if (action === "confirm") {
+        const response = await apiRequest<ConfirmPlanAdjustmentResponse>(
+          `/v1/plan-adjustments/${proposal.id}/confirm`,
+          { method: "POST" },
+        );
+        setProposal(response.proposal);
+        setNotice("Saved plan updated. The weekly schedule now reflects these dates.");
+        await refresh();
+      } else {
+        const response = await apiRequest<{ proposal: PlanAdjustmentProposal }>(
+          `/v1/plan-adjustments/${proposal.id}/reject`,
+          { method: "POST" },
+        );
+        setProposal(response.proposal);
+        setNotice("No changes were made to your saved plan.");
+      }
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Unable to update this plan change");
+    } finally {
+      setProposalAction("");
+    }
+  }
+
   return (
-    <aside className="plan-coach-panel" aria-labelledby="plan-coach-title">
+    <aside className="plan-coach-panel" id="plan-coach-panel" aria-labelledby="plan-coach-title">
       <header>
         <span className="plan-coach-mark" aria-hidden="true">✦</span>
         <div>
@@ -1892,6 +2211,37 @@ function PlanCoachPanel({
           ))
         )}
       </div>
+      {proposal?.status === "pending" && (
+        <section className="plan-adjustment-proposal" aria-label="Proposed plan change">
+          <header>
+            <span>Review before saving</span>
+            <strong>{proposal.summary}</strong>
+          </header>
+          <p>{proposal.rationale}</p>
+          <ul>
+            {proposal.changes.slice(0, 6).map((change) => (
+              <li key={change.workoutId}>
+                <strong>{change.workoutName}</strong>
+                <span>
+                  <time dateTime={change.before}>{new Intl.DateTimeFormat("en", { weekday: "short", month: "short", day: "numeric" }).format(new Date(`${change.before}T12:00:00`))}</time>
+                  <b aria-hidden="true">→</b>
+                  <time dateTime={change.after}>{new Intl.DateTimeFormat("en", { weekday: "short", month: "short", day: "numeric" }).format(new Date(`${change.after}T12:00:00`))}</time>
+                </span>
+              </li>
+            ))}
+          </ul>
+          {proposal.changes.length > 6 && <small>Plus {proposal.changes.length - 6} later workouts shifted by the same amount.</small>}
+          <div>
+            <Button busy={proposalAction === "confirm"} onClick={() => void resolveProposal("confirm")}>
+              Apply to saved plan
+            </Button>
+            <Button variant="ghost" busy={proposalAction === "reject"} onClick={() => void resolveProposal("reject")}>
+              Keep current plan
+            </Button>
+          </div>
+        </section>
+      )}
+      {notice && <small className="plan-adjustment-notice" role="status">{notice}</small>}
       <form className="plan-coach-composer" onSubmit={(event) => void sendPlanMessage(event)}>
         <label className="ui-visually-hidden" htmlFor="plan-coach-message">Message your plan-aware coach</label>
         <textarea
@@ -1941,6 +2291,36 @@ function hasAdvancedRegression(workout: PlannedWorkout, profile: UserProfile | n
     && workout.exercises.some((exercise) => advancedRegressionExerciseIds.has(exercise.exerciseId));
 }
 
+const planFocusMatchers = [
+  { label: "Chest", pattern: /chest|pec/ },
+  { label: "Back", pattern: /back|lat/ },
+  { label: "Shoulders", pattern: /shoulder|delt/ },
+  { label: "Arms", pattern: /bicep|tricep|arm/ },
+  { label: "Quads", pattern: /quad/ },
+  { label: "Hamstrings", pattern: /hamstring|posterior/ },
+  { label: "Glutes", pattern: /glute/ },
+  { label: "Calves", pattern: /calf|calves/ },
+  { label: "Core", pattern: /core|abdominal|abs/ },
+] as const;
+
+function summarizePlanFocus(workouts: PlannedWorkout[]) {
+  const totals = new Map<string, number>();
+  for (const workout of workouts) {
+    const workoutSets = workout.exercises.reduce((sum, exercise) => sum + exercise.sets, 0);
+    const focusAreas = planFocusMatchers.filter(({ pattern }) => pattern.test(workout.focus.toLowerCase()));
+    const matchedAreas = focusAreas.length > 0 ? focusAreas : [{ label: "Full body" }];
+    const setsPerArea = workoutSets / matchedAreas.length;
+    for (const area of matchedAreas) {
+      totals.set(area.label, (totals.get(area.label) ?? 0) + setsPerArea);
+    }
+  }
+  const total = [...totals.values()].reduce((sum, value) => sum + value, 0) || 1;
+  return [...totals.entries()]
+    .sort(([, left], [, right]) => right - left)
+    .slice(0, 4)
+    .map(([label, sets]) => ({ label, percent: Math.round((sets / total) * 100) }));
+}
+
 function Plan({
   dashboard,
   activeSession,
@@ -1961,6 +2341,7 @@ function Plan({
   const [notice, setNotice] = useState("");
   const [selectedWeekNumber, setSelectedWeekNumber] = useState(0);
   const rescheduleAttemptRef = useRef("");
+  const savedPlanWorkouts = dashboard.planWorkouts ?? dashboard.upcomingWorkouts;
 
   useEffect(() => {
     const plan = dashboard.activePlan;
@@ -1986,7 +2367,7 @@ function Plan({
 
   const weeklyWorkouts = useMemo(() => {
     const weeks = new Map<number, Map<string, PlannedWorkout[]>>();
-    for (const workout of dashboard.upcomingWorkouts) {
+    for (const workout of savedPlanWorkouts) {
       const date = workout.scheduledFor.slice(0, 10);
       const days = weeks.get(workout.weekNumber) ?? new Map<string, PlannedWorkout[]>();
       days.set(date, [...(days.get(date) ?? []), workout]);
@@ -2000,12 +2381,16 @@ function Plan({
           .sort(([left], [right]) => left.localeCompare(right))
           .map(([date, workouts]) => ({ date, workouts })),
       }));
-  }, [dashboard.upcomingWorkouts]);
+  }, [savedPlanWorkouts]);
 
-  const defaultWeekNumber = dashboard.upcomingWorkouts.find(
+  const defaultWeekNumber = savedPlanWorkouts.find(
     (workout) => workout.id === activeSession?.plannedWorkoutId,
   )?.weekNumber
-    ?? dashboard.upcomingWorkouts.find((workout) => workout.status === "planned" || workout.status === "in_progress")?.weekNumber
+    ?? savedPlanWorkouts.find((workout) => workout.status === "in_progress")?.weekNumber
+    ?? savedPlanWorkouts.find((workout) => (
+      workout.status === "planned" && workout.scheduledFor.slice(0, 10) >= localDateKey(new Date())
+    ))?.weekNumber
+    ?? savedPlanWorkouts.find((workout) => workout.status === "planned")?.weekNumber
     ?? weeklyWorkouts[0]?.weekNumber;
   const selectedWeek = weeklyWorkouts.find(
     (week) => week.weekNumber === selectedWeekNumber,
@@ -2017,8 +2402,27 @@ function Plan({
     (sum, workout) => sum + workout.exercises.length,
     0,
   );
+  const weeklyMinutes = selectedWeekSessions.reduce(
+    (sum, workout) => sum + workout.estimatedMinutes,
+    0,
+  );
+  const weeklySets = selectedWeekSessions.reduce(
+    (sum, workout) => sum + workout.exercises.reduce((sets, exercise) => sets + exercise.sets, 0),
+    0,
+  );
+  const completedWorkouts = selectedWeekSessions.filter((workout) => workout.status === "completed").length;
+  const completionPercent = selectedWeekSessions.length > 0
+    ? Math.round((completedWorkouts / selectedWeekSessions.length) * 100)
+    : 0;
+  const largestSessionLoad = Math.max(
+    1,
+    ...selectedWeekSessions.map((workout) => workout.exercises.reduce((sets, exercise) => sets + exercise.sets, 0)),
+  );
+  const focusSummary = summarizePlanFocus(selectedWeekSessions);
+  const todayKey = localDateKey(new Date());
   const primarySession = selectedWeekSessions.find((workout) => workout.id === activeSession?.plannedWorkoutId)
     ?? selectedWeekSessions.find((workout) => workout.status === "in_progress")
+    ?? selectedWeekSessions.find((workout) => workout.status === "planned" && workout.date >= todayKey)
     ?? selectedWeekSessions.find((workout) => workout.status === "planned")
     ?? selectedWeekSessions[0];
   const profileLevel = dashboard.profile?.experienceLevel ?? "beginner";
@@ -2030,10 +2434,10 @@ function Plan({
       ? "Cut"
       : `${profilePhase.charAt(0).toUpperCase()}${profilePhase.slice(1)}`;
   const minimumMovements = minimumMovementsForProfile(dashboard.profile);
-  const underPrescribedWorkouts = dashboard.upcomingWorkouts.filter(
+  const underPrescribedWorkouts = savedPlanWorkouts.filter(
     (workout) => workout.exercises.length < minimumMovements,
   );
-  const regressionWorkouts = dashboard.upcomingWorkouts.filter(
+  const regressionWorkouts = savedPlanWorkouts.filter(
     (workout) => hasAdvancedRegression(workout, dashboard.profile),
   );
   const planProfileMismatch = Boolean(
@@ -2148,12 +2552,12 @@ function Plan({
             )}
           </div>
           <div className="plan-overview-meta" aria-label="Program summary">
-            <span><b>{dashboard.activePlan.durationWeeks}</b> week block</span>
-            <span><b>{dashboard.activePlan.daysPerWeek}</b> sessions per week</span>
+            <span><b>{dashboard.activePlan.durationWeeks}</b><small>Week block</small></span>
+            <span><b>{dashboard.activePlan.daysPerWeek}</b><small>Sessions per week</small></span>
             {dashboard.profile && (
-              <span><b>{dashboard.profile.preferredSessionMinutes}</b> min target</span>
+              <span><b>{dashboard.profile.preferredSessionMinutes}</b><small>Minute target</small></span>
             )}
-            <span><b>{totalExercises}</b> movements this week</span>
+            <span><b>{totalExercises}</b><small>Movements this week</small></span>
           </div>
         </section>
       ) : (
@@ -2167,6 +2571,25 @@ function Plan({
             </Button>
           }
         />
+      )}
+      {dashboard.activePlan && weeklyWorkouts.length > 0 && selectedWeek && (
+        <button
+          className="plan-coach-mobile-launch"
+          type="button"
+          aria-controls="plan-coach-panel"
+          onClick={() => {
+            const composer = document.querySelector<HTMLTextAreaElement>("#plan-coach-message");
+            composer?.scrollIntoView({ behavior: "smooth", block: "center" });
+            composer?.focus({ preventScroll: true });
+          }}
+        >
+          <span className="plan-coach-mark" aria-hidden="true">✦</span>
+          <span>
+            <strong>Adjust this plan with Coach</strong>
+            <small>Ask about schedule, recovery, volume, or exercises</small>
+          </span>
+          <b aria-hidden="true">→</b>
+        </button>
       )}
       {notice && <p className="plan-generation-success" role="status">{notice}</p>}
       {error && !planNeedsRefresh && <p className="form-error plan-error" role="alert">{error}</p>}
@@ -2220,18 +2643,78 @@ function Plan({
                 ?? "Build quality repetitions and keep each movement controlled."}</p>
             </header>
 
+            <section className="plan-insights-grid" aria-label="Week at a glance">
+              <article className="plan-load-card">
+                <header>
+                  <div>
+                    <span>Training load</span>
+                    <strong>{weeklySets} <small>Work sets</small></strong>
+                  </div>
+                  <span className="plan-load-duration">{weeklyMinutes} min</span>
+                </header>
+                <div
+                  className="plan-load-chart"
+                  role="img"
+                  aria-label={`${weeklySets} work sets across ${selectedWeekSessions.length} workouts this week`}
+                >
+                  {selectedWeekSessions.map((workout) => {
+                    const date = new Date(`${workout.date}T12:00:00`);
+                    const sessionSets = workout.exercises.reduce((sets, exercise) => sets + exercise.sets, 0);
+                    const isPrimary = primarySession?.id === workout.id;
+                    return (
+                      <div className={`plan-load-day ${isPrimary ? "is-primary" : ""}`} key={workout.id}>
+                        <span className="plan-load-value">{sessionSets}</span>
+                        <span className="plan-load-track">
+                          <i
+                            className={`is-${workout.status}`}
+                            style={{ "--plan-load": `${Math.max(20, Math.round((sessionSets / largestSessionLoad) * 100))}%` } as CSSProperties}
+                          />
+                        </span>
+                        <strong>{new Intl.DateTimeFormat("en", { weekday: "short" }).format(date).slice(0, 1)}</strong>
+                      </div>
+                    );
+                  })}
+                </div>
+                <footer><i /> Balanced across {selectedWeekSessions.length} training days</footer>
+              </article>
+
+              <article className="plan-focus-card">
+                <header>
+                  <span>Muscle balance</span>
+                  <strong>{focusSummary[0]?.label ?? "Full body"} <small>primary</small></strong>
+                </header>
+                <div className="plan-focus-bars">
+                  {focusSummary.map((focus, index) => (
+                    <div key={focus.label}>
+                      <span><b>{focus.label}</b><small>{focus.percent}%</small></span>
+                      <i><b className={`tone-${index + 1}`} style={{ width: `${focus.percent}%` }} /></i>
+                    </div>
+                  ))}
+                </div>
+              </article>
+
+              <article className="plan-progress-card">
+                <header><span>Week progress</span><b>{completedWorkouts}/{selectedWeekSessions.length}</b></header>
+                <div
+                  className="plan-progress-ring"
+                  role="img"
+                  aria-label={`${completionPercent}% of this week's workouts completed`}
+                  style={{ "--plan-progress": `${completionPercent * 3.6}deg` } as CSSProperties}
+                >
+                  <span><strong>{completionPercent}%</strong><small>complete</small></span>
+                </div>
+                <footer>{completedWorkouts === 0 ? "Your week starts here" : `${selectedWeekSessions.length - completedWorkouts} sessions remaining`}</footer>
+              </article>
+            </section>
+
             <div className="plan-dashboard-layout">
               <section className="plan-schedule-dashboard" aria-labelledby="weekly-schedule-title">
                 <header>
                   <div>
                     <h3 id="weekly-schedule-title">Weekly schedule</h3>
-                    <p>One view of every session planned for this week.</p>
+                    <p>{selectedWeekSessions.length} sessions · {weeklyMinutes} minutes</p>
                   </div>
-                  <dl>
-                    <div><dt>Workouts</dt><dd>{selectedWeekSessions.length}</dd></div>
-                    <div><dt>Time</dt><dd>{selectedWeekSessions.reduce((sum, workout) => sum + workout.estimatedMinutes, 0)} min</dd></div>
-                    <div><dt>Work sets</dt><dd>{selectedWeekSessions.reduce((sum, workout) => sum + workout.exercises.reduce((sets, exercise) => sets + exercise.sets, 0), 0)}</dd></div>
-                  </dl>
+                  <span className="plan-schedule-legend"><i /> Up next</span>
                 </header>
 
                 {planNeedsRefresh && (
@@ -2260,8 +2743,14 @@ function Plan({
                   </div>
                 )}
 
-                <div className="plan-table-wrap">
-                  <table className="plan-schedule-table">
+                <details className="plan-schedule-details">
+                  <summary>
+                    <span><i aria-hidden="true">▦</i> All sessions</span>
+                    <small>Dates, duration and status</small>
+                    <b aria-hidden="true">⌄</b>
+                  </summary>
+                  <div className="plan-table-wrap">
+                    <table className="plan-schedule-table">
                     <thead>
                       <tr><th>Date</th><th>Workout</th><th>Duration</th><th>Movements</th><th>Status</th></tr>
                     </thead>
@@ -2269,6 +2758,7 @@ function Plan({
                       {selectedWeekSessions.map((workout) => {
                         const date = new Date(`${workout.date}T12:00:00`);
                         const isActiveWorkout = activeSession?.plannedWorkoutId === workout.id;
+                        const isPastUnlogged = workout.status === "planned" && workout.date < todayKey;
                         const needsRebuild = workout.exercises.length < minimumMovements
                           || hasAdvancedRegression(workout, dashboard.profile);
                         const isNext = !isActiveWorkout && !needsRebuild && workout.status === "planned" && primarySession?.id === workout.id;
@@ -2287,6 +2777,8 @@ function Plan({
                                   ? "Up next"
                                   : workout.status === "completed"
                                     ? "Complete"
+                                    : isPastUnlogged
+                                      ? "Not logged"
                                     : workout.status === "skipped"
                                       ? "Skipped"
                                       : "Scheduled"}
@@ -2295,8 +2787,9 @@ function Plan({
                         );
                       })}
                     </tbody>
-                  </table>
-                </div>
+                    </table>
+                  </div>
+                </details>
 
                 {primarySession && (
                   <section className="plan-next-workout" aria-labelledby="next-workout-title">
@@ -2328,16 +2821,33 @@ function Plan({
                         <p>Its exercise selection is not suitable for your current level. Rebuild the plan to replace it with profile-matched working exercises.</p>
                       </div>
                     ) : (
-                      <ol className="plan-next-exercises">
-                        {primarySession.exercises.map((exercise, exerciseIndex) => (
-                          <li key={exercise.exerciseId}>
-                            <span>{String(exerciseIndex + 1).padStart(2, "0")}</span>
-                            <strong>{exercise.name}</strong>
-                            <b>{exercise.sets} × {exercise.repRange}</b>
-                            {exercise.video && <ExerciseVideoButton exerciseName={exercise.name} video={exercise.video} />}
-                          </li>
-                        ))}
-                      </ol>
+                      <>
+                        <ol className="plan-next-exercises">
+                          {primarySession.exercises.slice(0, 4).map((exercise, exerciseIndex) => (
+                            <li key={exercise.exerciseId}>
+                              <span>{String(exerciseIndex + 1).padStart(2, "0")}</span>
+                              <strong>{exercise.name}</strong>
+                              <b>{exercise.sets} × {exercise.repRange}</b>
+                              {exercise.video && <ExerciseVideoButton exerciseName={exercise.name} video={exercise.video} />}
+                            </li>
+                          ))}
+                        </ol>
+                        {primarySession.exercises.length > 4 && (
+                          <details className="plan-exercise-details">
+                            <summary>View {primarySession.exercises.length - 4} more exercises <b aria-hidden="true">⌄</b></summary>
+                            <ol className="plan-next-exercises">
+                              {primarySession.exercises.slice(4).map((exercise, exerciseIndex) => (
+                                <li key={exercise.exerciseId}>
+                                  <span>{String(exerciseIndex + 5).padStart(2, "0")}</span>
+                                  <strong>{exercise.name}</strong>
+                                  <b>{exercise.sets} × {exercise.repRange}</b>
+                                  {exercise.video && <ExerciseVideoButton exerciseName={exercise.name} video={exercise.video} />}
+                                </li>
+                              ))}
+                            </ol>
+                          </details>
+                        )}
+                      </>
                     )}
                   </section>
                 )}
@@ -2350,6 +2860,7 @@ function Plan({
                   weekNumber={selectedWeek.weekNumber}
                   workoutId={primarySession?.id}
                   activeSessionId={activeSession?.id}
+                  refresh={refresh}
                 />
               )}
             </div>
@@ -2432,7 +2943,7 @@ function WorkoutRunner({
     setError("");
     try {
       const response = await apiRequest<CoachThreadListResponse>("/v1/coach/threads");
-      const existing = response.threads.find((thread) => !thread.archived && thread.scope === "general");
+      const existing = mostRecentActiveCoachThread(response.threads, "general");
       if (existing) {
         setVoiceThread(existing);
       } else {

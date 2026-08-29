@@ -21,6 +21,7 @@ export type CoachTrainingContextInput = {
   selectedWeekNumber?: number | null;
   selectedWeekWorkouts?: PlannedWorkoutDocument[];
   selectedWorkoutId?: string | null;
+  canProposePlanChanges?: boolean;
   now?: Date;
 };
 
@@ -56,6 +57,7 @@ export function buildCoachTrainingContext({
   selectedWeekNumber = null,
   selectedWeekWorkouts = [],
   selectedWorkoutId = null,
+  canProposePlanChanges = false,
   now = new Date(),
 }: CoachTrainingContextInput) {
   const serializedPlan = activePlan ? serializePlan(activePlan) : null;
@@ -70,6 +72,9 @@ export function buildCoachTrainingContext({
 
   return {
     generatedAt: now.toISOString(),
+    planAdjustmentCapability: canProposePlanChanges
+      ? "proposal_with_member_confirmation"
+      : "conversation_only",
     readiness: readiness ? {
       source: "self_reported" as const,
       date: readiness.date,
@@ -87,6 +92,8 @@ export function buildCoachTrainingContext({
     activePlan: serializedPlan ? {
       id: serializedPlan.id,
       version: serializedPlan.version,
+      revision: serializedPlan.revision,
+      startDate: serializedPlan.startDate,
       title: serializedPlan.title,
       summary: serializedPlan.summary,
       experienceLevel: serializedPlan.experienceLevel,

@@ -15,13 +15,16 @@ test("builds a private personalized Indian-English ElevenLabs coach", () => {
   const serialized = JSON.stringify(config);
 
   assert.equal(config.name, "ForgeFit Personal Coach");
-  assert.match(config.conversation_config.agent.first_message, /\{\{user_name\}\}/);
-  assert.match(config.conversation_config.agent.first_message, /What's on your mind/);
+  assert.match(config.conversation_config.agent.first_message, /\{\{session_opening\}\}/);
+  assert.equal(config.conversation_config.agent.first_message, "{{session_opening}}");
   assert.match(config.conversation_config.agent.prompt.prompt, /\{\{member_context\}\}/);
   assert.match(config.conversation_config.agent.prompt.prompt, /\{\{conversation_history\}\}/);
   assert.match(config.conversation_config.agent.prompt.prompt, /\{\{current_local_datetime\}\}/);
   assert.match(config.conversation_config.agent.prompt.prompt, /\{\{user_timezone\}\}/);
   assert.match(config.conversation_config.agent.prompt.prompt, /natural Indian English/);
+  assert.match(config.conversation_config.agent.prompt.prompt, /Do not start with bro, bhai, veere/);
+  assert.match(config.conversation_config.agent.prompt.prompt, /emotionally neutral delivery/);
+  assert.match(config.conversation_config.agent.prompt.prompt, /Never assume they are working out/);
   assert.match(config.conversation_config.agent.prompt.prompt, /without agreeing automatically/);
   assert.match(config.conversation_config.agent.prompt.prompt, /Never tease, flirt, use sarcasm/);
   assert.match(config.conversation_config.agent.prompt.prompt, /Use the recent conversation to avoid repetition/);
@@ -46,6 +49,11 @@ test("builds a private personalized Indian-English ElevenLabs coach", () => {
   assert.equal(config.platform_settings.auth.enable_auth, true);
   assert.match(serialized, /get_live_workout_snapshot/);
   assert.match(serialized, /analyze_camera_view/);
+  assert.match(serialized, /review_recent_attachment/);
+  assert.match(serialized, /create_pdf_document/);
+  assert.match(config.conversation_config.agent.prompt.prompt, /configured AI provider to inspect the actual file/);
+  assert.match(config.conversation_config.agent.prompt.prompt, /Never ask the member to paste its text/);
+  assert.match(config.conversation_config.agent.prompt.prompt, /download is visible in the chat/);
   assert.match(config.conversation_config.agent.prompt.prompt, /Never say you cannot see/);
   assert.match(config.conversation_config.agent.prompt.prompt, /exact body-fat percentage/);
   assert.doesNotMatch(serialized, /server-only-key/);

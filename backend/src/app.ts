@@ -9,6 +9,7 @@ import { coachRoutes } from "./routes/coach.js";
 import { dashboardRoutes } from "./routes/dashboard.js";
 import { exerciseRoutes } from "./routes/exercises.js";
 import { profileRoutes } from "./routes/profile.js";
+import { providerSettingsRoutes } from "./routes/provider-settings.js";
 import { readinessRoutes } from "./routes/readiness.js";
 import { planRoutes } from "./routes/plans.js";
 import { workoutRoutes } from "./routes/workouts.js";
@@ -32,6 +33,7 @@ export async function buildApp() {
   });
 
   await app.register(profileRoutes);
+  await app.register(providerSettingsRoutes);
   await app.register(exerciseRoutes);
   await app.register(readinessRoutes);
   await app.register(planRoutes);

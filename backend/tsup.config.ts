@@ -11,6 +11,6 @@ export default defineConfig({
   sourcemap: true,
   splitting: false,
   treeshake: true,
-  external: ["@google/genai"],
+  external: ["@google/genai", "pdfkit"],
   noExternal: ["@fitai/ai", "@fitai/contracts"],
 });

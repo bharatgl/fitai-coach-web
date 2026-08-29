@@ -29,6 +29,42 @@ export type UserProfile = {
   onboardingCompletedAt: string | null;
 };
 
+export type ProviderCredentialStatus = {
+  configured: boolean;
+  source: "user" | "platform";
+  keyHint: string | null;
+  model: string;
+};
+
+export type AIProviderKind = "gemini" | "openai" | "anthropic" | "openai_compatible";
+
+export type ProviderSettingsResponse = {
+  secureStorageAvailable: boolean;
+  ai: ProviderCredentialStatus & {
+    provider: AIProviderKind;
+    baseUrl: string | null;
+  };
+  elevenlabs: ProviderCredentialStatus & {
+    agentId: string | null;
+    voiceId: string | null;
+  };
+};
+
+export type UpdateProviderSettingsRequest = {
+  ai?: {
+    provider: AIProviderKind;
+    apiKey?: string;
+    model?: string;
+    baseUrl?: string | null;
+  };
+  elevenlabs?: {
+    apiKey?: string;
+    agentId?: string;
+    voiceId?: string;
+    model?: string;
+  };
+};
+
 export type CoachAttachment = {
   id: string;
   name: string;
@@ -90,6 +126,7 @@ export type UploadCoachAttachmentRequest = {
   name: string;
   mimeType: CoachAttachment["mimeType"];
   dataBase64: string;
+  threadId?: string;
 };
 
 export type UploadCoachAttachmentResponse = {
@@ -102,6 +139,40 @@ export type CoachResponse = {
   message: CoachMessage;
   shouldPauseWorkout: boolean;
   suggestedAdjustment: string | null;
+  planAdjustmentProposal: PlanAdjustmentProposal | null;
+};
+
+export type PlanAdjustmentProposalStatus = "pending" | "applied" | "rejected" | "expired";
+
+export type PlanAdjustmentChange = {
+  workoutId: string;
+  workoutName: string;
+  before: string;
+  after: string;
+};
+
+export type PlanAdjustmentProposal = {
+  id: string;
+  planId: string;
+  basePlanRevision: number;
+  action: "move_workouts" | "reschedule_plan";
+  status: PlanAdjustmentProposalStatus;
+  summary: string;
+  rationale: string;
+  changes: PlanAdjustmentChange[];
+  createdAt: string;
+  expiresAt: string;
+  appliedAt: string | null;
+};
+
+export type PendingPlanAdjustmentResponse = {
+  proposal: PlanAdjustmentProposal | null;
+};
+
+export type ConfirmPlanAdjustmentResponse = {
+  proposal: PlanAdjustmentProposal;
+  plan: WorkoutPlan;
+  workouts: PlannedWorkout[];
 };
 
 export type LiveCoachTokenResponse = {
@@ -109,6 +180,7 @@ export type LiveCoachTokenResponse = {
   model: string;
   voiceName: string;
   expiresAt: string;
+  sessionOpening: string;
   initialHistory: Array<{
     role: "user" | "model";
     text: string;
@@ -125,6 +197,7 @@ export type ElevenLabsCoachSessionResponse = {
   userName: string;
   dynamicVariables: {
     user_name: string;
+    session_opening: string;
     member_context: string;
     conversation_history: string;
     current_local_datetime: string;
@@ -150,7 +223,18 @@ export type LiveCameraAnalysisResponse = {
   nextStep: string;
 };
 
+export type LiveAttachmentReviewResponse = {
+  attachments: CoachAttachment[];
+  review: string;
+};
+
+export type GeneratedCoachPdfResponse = {
+  attachment: CoachAttachment;
+  thread: CoachThreadDetail;
+};
+
 export type SaveLiveCoachTurnRequest = {
+  clientTurnId?: string;
   threadId: string;
   sessionId?: string;
   userTranscript: string;
@@ -196,6 +280,44 @@ export type ExerciseLibraryResponse = {
     targets: string[];
   };
   source: ExerciseLibrarySource;
+};
+
+export type ExerciseDemo = {
+  id: string;
+  name: string;
+  description: string;
+  category: string;
+  difficulty: string;
+  equipment: string;
+  bodyPart: string;
+  primaryMuscles: string[];
+  secondaryMuscles: string[];
+  instructions: string[];
+  tips: string[];
+  frames: string[];
+  animation: string;
+};
+
+export type ExerciseDemoSource = {
+  name: string;
+  repository: string;
+  homepage: string;
+  commit: string;
+  license: string;
+  attribution: string;
+  changes: string;
+};
+
+export type ExerciseDemoResponse = {
+  items: ExerciseDemo[];
+  total: number;
+  offset: number;
+  limit: number;
+  filters: {
+    bodyParts: string[];
+    equipment: string[];
+  };
+  source: ExerciseDemoSource;
 };
 
 export type PlanExercise = {
@@ -363,6 +485,7 @@ export type FinishWorkoutRequest = {
 export type WorkoutPlan = {
   id: string;
   version: number;
+  revision: number;
   status: "active" | "archived";
   experienceLevel: ExperienceLevel | null;
   trainingPhase: TrainingPhase | null;
@@ -404,6 +527,7 @@ export type DashboardResponse = {
   latestReadiness: ReadinessCheckIn | null;
   activePlan: WorkoutPlan | null;
   planHistory: PlanHistoryEntry[];
+  planWorkouts: PlannedWorkout[];
   upcomingWorkouts: PlannedWorkout[];
   activeSession: WorkoutSession | null;
   recentSessions: WorkoutSession[];

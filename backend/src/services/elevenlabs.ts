@@ -1,4 +1,5 @@
 import { coachBehaviorContract } from "@fitai/ai";
+import { createHash } from "node:crypto";
 import { z } from "zod";
 import type { AppConfig } from "../config.js";
 
@@ -28,12 +29,21 @@ type ElevenLabsConfig = Pick<
   "ELEVENLABS_API_KEY" | "ELEVENLABS_AGENT_ID" | "ELEVENLABS_VOICE_ID" | "ELEVENLABS_LLM_MODEL"
 >;
 
-let agentPromise: Promise<string> | undefined;
-let quotaCache: {
+const agentPromises = new Map<string, Promise<string>>();
+const quotaCaches = new Map<string, {
   checkedAt: number;
   exhausted: boolean;
   retryAfterSeconds: number | null;
-} | undefined;
+}>();
+
+function configurationCacheKey(config: ElevenLabsConfig) {
+  return createHash("sha256").update(JSON.stringify([
+    config.ELEVENLABS_API_KEY,
+    config.ELEVENLABS_AGENT_ID,
+    config.ELEVENLABS_VOICE_ID,
+    config.ELEVENLABS_LLM_MODEL,
+  ])).digest("hex");
+}
 
 export function elevenLabsQuotaAvailability(
   subscription: z.infer<typeof subscriptionResponse>,
@@ -94,12 +104,13 @@ export function buildElevenLabsCoachAgentConfig(config: ElevenLabsConfig) {
     tags: ["forgefit", "coach", "india"],
     conversation_config: {
       agent: {
-        first_message: "Hi {{user_name}}. What's on your mind?",
+        first_message: "{{session_opening}}",
         language: "en",
         disable_first_message_interruptions: false,
         dynamic_variables: {
           dynamic_variable_placeholders: {
             user_name: "there",
+            session_opening: "Hey there. How are you doing, and what would be useful right now?",
             member_context: "No member context was supplied.",
             conversation_history: "No earlier conversation was supplied.",
             current_local_datetime: "The current local date and time was not supplied.",
@@ -121,14 +132,20 @@ export function buildElevenLabsCoachAgentConfig(config: ElevenLabsConfig) {
             "",
             "# Tone",
             "Use contractions, varied sentence lengths, and conversational pauses. Never read headings, JSON keys, or a report aloud.",
+            "Default to a grounded, emotionally neutral delivery rather than sounding excited. Adapt gently to the member's wording, pace, pauses, and energy when available. Slow down and soften for stress, fatigue, sadness, or uncertainty; raise your energy only when the member genuinely does.",
+            "Never manufacture enthusiasm. Avoid hype, motivational slogans, and exclamation marks unless the moment clearly warrants them.",
             "Keep your vocal delivery grounded, calm, and slightly weighty, as if speaking in a comfortable lower register. Never force a theatrical bass or announcer voice.",
             "Answer first, usually in 15 to 35 seconds, then pause. Address the member by name only when it feels natural.",
             "Use metric units and India-relevant food and gym examples when useful. Never repeat a question already answered by profile or history.",
+            "Open in neutral, natural language. Do not start with bro, bhai, veere, or similar slang unless the member explicitly asks for that style.",
             "",
             "# Goal",
             "Give specific, personalized coaching for training, workout logging, recovery, nutrition habits, and bodybuilding preparation.",
+            "The member may be planning, reflecting, eating, recovering, winding down, or simply talking. Never assume they are working out because ForgeFit is open or a workout exists in saved state.",
             "Before time-sensitive set or workout guidance, call get_live_workout_snapshot and use the newest data.",
             "When the member explicitly asks you to look at, inspect, analyze, or assess their physique, posture, exercise form, or current camera view, call analyze_camera_view before answering.",
+            "When the member asks about an uploaded file, attachment, PDF, document, image, scan, or report, call review_recent_attachment before answering. The tool uses the configured AI provider to inspect the actual file. Never ask the member to paste its text unless the tool reports that the specific file is unreadable or protected.",
+            "When the member asks you to create, generate, export, save, or download a PDF, call create_pdf_document with a concise title and the complete polished document content. Never say PDF creation is unavailable and never ask the member to copy and paste the content elsewhere. After the tool succeeds, tell them the download is visible in the chat.",
             "Never say you cannot see the member before trying analyze_camera_view. If it reports that the camera is off or the framing is insufficient, tell the member exactly how to reposition and offer to look again. If it reports unavailable, explain that visual analysis is temporarily unavailable and retry only when the member asks.",
             "Treat a camera result as one limited still-frame observation. Never identify the member, estimate exact body-fat percentage, judge attractiveness, diagnose an injury, or infer a health condition from it.",
             "Treat this as one continuous conversation. If interrupted, stop and listen.",
@@ -161,6 +178,42 @@ export function buildElevenLabsCoachAgentConfig(config: ElevenLabsConfig) {
                   },
                 },
                 required: ["focus"],
+              },
+            },
+            {
+              type: "client",
+              name: "review_recent_attachment",
+              description: "Review the actual bytes of the most recently uploaded files in this conversation using the configured AI provider. Call this before answering any question about an attachment, PDF, document, image, scan, or report.",
+              expects_response: true,
+              parameters: {
+                type: "object",
+                properties: {
+                  question: {
+                    type: "string",
+                    description: "The member's exact question about the uploaded file.",
+                  },
+                },
+                required: ["question"],
+              },
+            },
+            {
+              type: "client",
+              name: "create_pdf_document",
+              description: "Create a polished downloadable PDF and attach it directly to the current ForgeFit conversation. Call whenever the member asks to generate, create, export, save, or download a PDF.",
+              expects_response: true,
+              parameters: {
+                type: "object",
+                properties: {
+                  title: {
+                    type: "string",
+                    description: "A short descriptive document title.",
+                  },
+                  content: {
+                    type: "string",
+                    description: "The complete document content using short Markdown headings and lists.",
+                  },
+                },
+                required: ["title", "content"],
               },
             },
           ],
@@ -251,6 +304,8 @@ async function provisionAgent(config: ElevenLabsConfig) {
 
 async function ensureQuotaAvailable(config: ElevenLabsConfig) {
   const now = Date.now();
+  const cacheKey = configurationCacheKey(config);
+  let quotaCache = quotaCaches.get(cacheKey);
   if (!quotaCache || now - quotaCache.checkedAt >= 60_000) {
     const response = await elevenLabsRequest(config, "/v1/user/subscription");
     const availability = elevenLabsQuotaAvailability(
@@ -262,6 +317,7 @@ async function ensureQuotaAvailable(config: ElevenLabsConfig) {
       exhausted: availability.exhausted,
       retryAfterSeconds: availability.retryAfterSeconds,
     };
+    quotaCaches.set(cacheKey, quotaCache);
   }
   if (quotaCache.exhausted) {
     throw Object.assign(
@@ -272,16 +328,22 @@ async function ensureQuotaAvailable(config: ElevenLabsConfig) {
 }
 
 export function ensureElevenLabsCoachAgent(config: ElevenLabsConfig) {
-  agentPromise ??= provisionAgent(config).catch((cause) => {
-    agentPromise = undefined;
+  const cacheKey = configurationCacheKey(config);
+  const existing = agentPromises.get(cacheKey);
+  if (existing) return existing;
+  const promise = provisionAgent(config).catch((cause) => {
+    agentPromises.delete(cacheKey);
     throw cause;
   });
-  return agentPromise;
+  agentPromises.set(cacheKey, promise);
+  return promise;
 }
 
 export async function createElevenLabsSignedUrl(config: ElevenLabsConfig) {
-  await ensureQuotaAvailable(config);
-  const agentId = await ensureElevenLabsCoachAgent(config);
+  const [, agentId] = await Promise.all([
+    ensureQuotaAvailable(config),
+    ensureElevenLabsCoachAgent(config),
+  ]);
   const response = await elevenLabsRequest(
     config,
     `/v1/convai/conversation/get_signed_url?agent_id=${encodeURIComponent(agentId)}`,
@@ -290,6 +352,6 @@ export async function createElevenLabsSignedUrl(config: ElevenLabsConfig) {
 }
 
 export function resetElevenLabsAgentForTests() {
-  agentPromise = undefined;
-  quotaCache = undefined;
+  agentPromises.clear();
+  quotaCaches.clear();
 }

@@ -10,8 +10,9 @@ import {
   type ExerciseDefinition,
 } from "./exercise-catalog.js";
 
-export type WorkoutPlanDocument = Omit<WorkoutPlan, "startDate" | "createdAt"> & {
+export type WorkoutPlanDocument = Omit<WorkoutPlan, "startDate" | "createdAt" | "revision"> & {
   userId: string;
+  revision?: number;
   startDate: Date;
   createdAt: Date;
   model: string;
@@ -195,6 +196,7 @@ export function materializePlan({
     id: planId,
     userId,
     version,
+    revision: 0,
     status: "active",
     experienceLevel: profile.experienceLevel,
     trainingPhase: profile.trainingPhase,
@@ -243,6 +245,7 @@ export function serializePlan(plan: WorkoutPlanDocument): WorkoutPlan {
   return {
     id: plan.id,
     version: plan.version,
+    revision: plan.revision ?? 0,
     status: plan.status,
     experienceLevel: plan.experienceLevel ?? null,
     trainingPhase: plan.trainingPhase ?? null,
@@ -307,6 +310,7 @@ export function restorePlanVersion({
     id: planId,
     userId,
     version,
+    revision: 0,
     status: "active",
     restoredFromVersion: sourcePlan.version,
     startDate,

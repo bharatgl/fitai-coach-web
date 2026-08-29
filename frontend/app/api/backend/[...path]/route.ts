@@ -5,11 +5,6 @@ import { createBackendToken } from "@/lib/backend-token";
 type RouteContext = { params: Promise<{ path: string[] }> };
 
 async function proxy(request: NextRequest, context: RouteContext) {
-  const session = await auth();
-  if (!session?.user?.id || !session.user.email) {
-    return Response.json({ error: "Authentication required" }, { status: 401 });
-  }
-
   const backendUrl = process.env.BACKEND_API_URL;
   if (!backendUrl) {
     return Response.json({ error: "Backend API is not configured" }, { status: 503 });
@@ -17,14 +12,22 @@ async function proxy(request: NextRequest, context: RouteContext) {
 
   try {
     const { path } = await context.params;
+    const isPublicExerciseRequest = request.method === "GET" &&
+      (path[0] === "exercises" || path[0] === "exercise-demos");
+    const session = isPublicExerciseRequest ? null : await auth();
+    if (!isPublicExerciseRequest && (!session?.user?.id || !session.user.email)) {
+      return Response.json({ error: "Authentication required" }, { status: 401 });
+    }
     const requestUrl = new URL(request.url);
     const target = new URL(`/v1/${path.join("/")}`, backendUrl);
     target.search = requestUrl.search;
-    const token = await createBackendToken({
-      id: session.user.id,
-      email: session.user.email,
-      name: session.user.name ?? session.user.email,
-    });
+    const token = session?.user?.id && session.user.email
+      ? await createBackendToken({
+        id: session.user.id,
+        email: session.user.email,
+        name: session.user.name ?? session.user.email,
+      })
+      : null;
     const canHaveBody = request.method !== "GET" && request.method !== "HEAD";
     const requestBody = canHaveBody ? await request.arrayBuffer() : undefined;
     const hasBody = Boolean(requestBody?.byteLength);
@@ -32,7 +35,7 @@ async function proxy(request: NextRequest, context: RouteContext) {
     const response = await fetch(target, {
       method: request.method,
       headers: {
-        authorization: `Bearer ${token}`,
+        ...(token ? { authorization: `Bearer ${token}` } : {}),
         accept: "application/json",
         ...(hasBody && request.headers.get("content-type")
           ? { "content-type": request.headers.get("content-type")! }
@@ -46,7 +49,12 @@ async function proxy(request: NextRequest, context: RouteContext) {
     const responseHeaders = new Headers({
       "content-type": response.headers.get("content-type") ?? "application/json",
     });
-    for (const header of ["content-disposition", "content-length", "cache-control"]) {
+    for (const header of [
+      "content-disposition",
+      "content-length",
+      "cache-control",
+      "retry-after",
+    ]) {
       const value = response.headers.get(header);
       if (value) responseHeaders.set(header, value);
     }

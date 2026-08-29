@@ -16,6 +16,7 @@
         "GEMINI_MODEL",
         "MONGODB_DB",
         "MONGODB_URI",
+        "EXERCISE_ASSET_BASE_URL",
         "NODE_ENV"
       ]
     },

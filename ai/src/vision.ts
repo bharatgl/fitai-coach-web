@@ -1,6 +1,9 @@
-import type { ContentListUnion } from "@google/genai";
 import { z } from "zod";
-import { generateGeminiStructured } from "./gemini.js";
+import {
+  generateStructuredAI,
+  type AIContent,
+  type AIProviderConfig,
+} from "./provider.js";
 
 const liveCameraAnalysisSchema = z.object({
   status: z.enum(["analyzed", "needs_better_view"]),
@@ -24,8 +27,7 @@ export const liveCameraAnalysisSystemPrompt = [
 ].join("\n");
 
 export type AnalyzeCameraFrameInput = {
-  apiKey: string;
-  model: string;
+  provider: AIProviderConfig;
   focus: "physique" | "posture" | "form" | "general";
   memberContext: unknown;
   imageBase64: string;
@@ -34,8 +36,8 @@ export type AnalyzeCameraFrameInput = {
 };
 
 export function buildCameraAnalysisContents(
-  input: Omit<AnalyzeCameraFrameInput, "apiKey" | "model">,
-): ContentListUnion {
+  input: Omit<AnalyzeCameraFrameInput, "provider">,
+): AIContent {
   return [{
     role: "user",
     parts: [
@@ -48,9 +50,10 @@ export function buildCameraAnalysisContents(
         }),
       },
       {
-        inlineData: {
-          data: input.imageBase64,
+        file: {
+          name: "live-camera-frame.jpg",
           mimeType: input.mimeType,
+          dataBase64: input.imageBase64,
         },
       },
     ],
@@ -60,9 +63,8 @@ export function buildCameraAnalysisContents(
 export async function analyzeCameraFrame(
   input: AnalyzeCameraFrameInput,
 ): Promise<LiveCameraAnalysis> {
-  return generateGeminiStructured({
-    apiKey: input.apiKey,
-    model: input.model,
+  return generateStructuredAI({
+    provider: input.provider,
     schema: liveCameraAnalysisSchema,
     systemInstruction: liveCameraAnalysisSystemPrompt,
     contents: buildCameraAnalysisContents(input),
