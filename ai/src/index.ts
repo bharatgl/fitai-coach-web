@@ -32,8 +32,14 @@ export {
   type CreateLiveCoachTokenInput,
 } from "./live.js";
 export {
+  generateGroundedResearch,
+  groundedResearchFromResponse,
+  researchClientOptions,
   toGeminiJsonSchema,
   translateGeminiError,
+  type GenerateGroundedResearchInput,
+  type GeminiResearchAuth,
+  type GroundedResearchResult,
 } from "./gemini.js";
 export {
   generateStructuredAI,

@@ -16,6 +16,11 @@ infra/                Portable runtime contract and cloud deployment adapters
 docs/                 Architecture and delivery roadmap
 ```
 
+The authenticated `/studio` workspace provides the reusable Forge Studio bot
+builder for personal fitness, interview, resume, and custom specialists. Its
+scope and clean-room product boundary are documented in
+[`docs/forge-studio.md`](docs/forge-studio.md).
+
 The `ai/` directory is an internal package, not a third public service. The
 backend build bundles it into the backend container, keeping one secure
 server-side Gemini integration without an extra network hop. Turborepo runs and
@@ -26,7 +31,8 @@ caches dependency-aware tasks across all workspaces.
 - Node.js `>=22.13.0`
 - A MongoDB Atlas deployment
 - Google OAuth credentials
-- A Gemini API key from Google AI Studio
+- A Gemini API key from Google AI Studio for Gemini Live voice and general generation
+- Vertex AI application-default credentials for production Google Search grounding
 
 ## Local setup
 

@@ -128,14 +128,19 @@ function writeText(
   return doc;
 }
 
-function drawPageFooter(doc: PDFKit.PDFDocument, pageNumber: number, pageCount: number) {
+function drawPageFooter(
+  doc: PDFKit.PDFDocument,
+  pageNumber: number,
+  pageCount: number,
+  footerText: string,
+) {
   const bottom = doc.page.height - 34;
   const originalBottomMargin = doc.page.margins.bottom;
   doc.page.margins.bottom = 0;
   doc.save();
   doc.moveTo(54, bottom - 10).lineTo(doc.page.width - 54, bottom - 10).lineWidth(0.5).strokeColor("#d8dfd2").stroke();
   doc.font("Helvetica").fontSize(8).fillColor("#687267");
-  doc.text("forgefit.space - fitness guidance, not medical care", 54, bottom, {
+  doc.text(footerText, 54, bottom, {
     lineBreak: false,
   });
   doc.text(`${pageNumber} / ${pageCount}`, doc.page.width - 100, bottom, {
@@ -155,10 +160,12 @@ export async function generateCoachPdf({
   title,
   content,
   generatedAt = new Date(),
+  footerText = "forgefit.space - fitness guidance, not medical care",
 }: {
   title: string;
   content: string;
   generatedAt?: Date;
+  footerText?: string;
 }) {
   const safeTitle = printableText(title) || "ForgeFit Coach Document";
   const safeContent = printableText(content);
@@ -261,7 +268,7 @@ export async function generateCoachPdf({
   const range = doc.bufferedPageRange();
   for (let index = 0; index < range.count; index += 1) {
     doc.switchToPage(range.start + index);
-    drawPageFooter(doc, index + 1, range.count);
+    drawPageFooter(doc, index + 1, range.count, footerText);
   }
   doc.end();
   return completed;

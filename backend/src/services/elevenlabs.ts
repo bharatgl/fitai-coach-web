@@ -1,7 +1,9 @@
 import { coachBehaviorContract } from "@fitai/ai";
+import type { BotDefinition } from "@fitai/contracts";
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import type { AppConfig } from "../config.js";
+import { buildStudioBotSystemPrompt } from "../domain/bots.js";
 
 const agentName = "ForgeFit Personal Coach";
 const defaultVoice = {
@@ -262,6 +264,130 @@ export function buildElevenLabsCoachAgentConfig(config: ElevenLabsConfig) {
   };
 }
 
+export function buildElevenLabsStudioAgentConfig(
+  config: ElevenLabsConfig,
+  bot: BotDefinition,
+) {
+  const voiceId = bot.voice.voiceId ?? config.ELEVENLABS_VOICE_ID ?? defaultVoice.id;
+  return {
+    name: `Forge Studio · ${bot.name} · ${bot.id.slice(0, 6)}`,
+    tags: ["forgefit", "forge-studio", bot.vertical],
+    conversation_config: {
+      agent: {
+        first_message: bot.instructions.firstMessage,
+        language: "en",
+        disable_first_message_interruptions: false,
+        prompt: {
+          prompt: [
+            buildStudioBotSystemPrompt(bot),
+            "",
+            "# Live tools",
+            "When the user asks about an uploaded file, resume, PDF, document, image, scan, or report, call review_recent_attachment before answering. Never claim you cannot access uploads before calling it.",
+            "When the user asks to create, generate, export, save, or download a PDF, call create_pdf_document with the complete polished content. After it succeeds, tell them the download is visible in the chat.",
+            bot.capabilities.webResearch
+              ? "When the user asks about current market values, salary, hiring, company expectations, recent trends, technologies, or news, call research_current_market before answering. Cite its numbered sources and clearly label estimates."
+              : "Live web research is disabled. Never guess current market facts.",
+          ].join("\n"),
+          llm: config.ELEVENLABS_LLM_MODEL,
+          temperature: 0.35,
+          max_tokens: 520,
+          tools: [
+            {
+              type: "client",
+              name: "review_recent_attachment",
+              description: "Review the actual bytes of the most recently uploaded files in this bot conversation before answering questions about them.",
+              expects_response: true,
+              parameters: {
+                type: "object",
+                properties: {
+                  question: { type: "string", description: "The user's exact question about the uploaded file." },
+                },
+                required: ["question"],
+              },
+            },
+            {
+              type: "client",
+              name: "create_pdf_document",
+              description: "Create a polished downloadable PDF and attach it to this bot conversation.",
+              expects_response: true,
+              parameters: {
+                type: "object",
+                properties: {
+                  title: { type: "string" },
+                  content: { type: "string", description: "Complete polished content for the PDF." },
+                },
+                required: ["title", "content"],
+              },
+            },
+            ...(bot.capabilities.webResearch ? [{
+              type: "client",
+              name: "research_current_market",
+              description: "Search the current web for verifiable market values, salary ranges, hiring trends, company expectations, recent technologies, or other time-sensitive facts before answering.",
+              expects_response: true,
+              parameters: {
+                type: "object",
+                properties: {
+                  question: { type: "string", description: "A specific research question including role, seniority, location, company, and time range when known." },
+                },
+                required: ["question"],
+              },
+            }] : []),
+          ],
+        },
+      },
+      tts: {
+        voice_id: voiceId,
+        model_id: "eleven_flash_v2",
+        stability: 0.5,
+        similarity_boost: 0.8,
+        speed: 0.98,
+        expressive_mode: true,
+        agent_output_audio_format: "pcm_16000",
+      },
+      asr: {
+        quality: "high",
+        provider: "scribe_realtime",
+        user_input_audio_format: "pcm_16000",
+      },
+      turn: {
+        turn_eagerness: bot.voice.turnEagerness,
+        turn_timeout: 8,
+        turn_model: "turn_v3",
+        silence_end_call_timeout: -1,
+      },
+      conversation: {
+        max_duration_seconds: 1_800,
+        client_events: [
+          "audio",
+          "user_transcript",
+          "agent_response",
+          "agent_response_correction",
+          "interruption",
+          "agent_response_complete",
+        ],
+      },
+    },
+    platform_settings: {
+      summary_language: "en",
+      auth: { enable_auth: true },
+      privacy: { record_voice: false },
+      call_limits: { agent_concurrency_limit: 5, daily_limit: 250 },
+      trust_context: "low",
+      guardrails: {
+        version: "1",
+        focus: { is_enabled: true },
+        prompt_injection: { is_enabled: true },
+        content: {
+          config: {
+            harassment: { is_enabled: true, threshold: 0.5 },
+            self_harm: { is_enabled: true, threshold: 0.5 },
+          },
+        },
+      },
+    },
+  };
+}
+
 async function ensureDefaultVoice(config: ElevenLabsConfig) {
   if (config.ELEVENLABS_VOICE_ID) return;
   const response = await elevenLabsRequest(config, "/v1/voices");
@@ -302,6 +428,30 @@ async function provisionAgent(config: ElevenLabsConfig) {
   return agentResponse.parse(await response.json()).agent_id;
 }
 
+export async function provisionStudioAgent(
+  config: ElevenLabsConfig,
+  bot: BotDefinition,
+) {
+  await ensureDefaultVoice({
+    ...config,
+    ELEVENLABS_VOICE_ID: bot.voice.voiceId ?? config.ELEVENLABS_VOICE_ID,
+  });
+  const payload = JSON.stringify(buildElevenLabsStudioAgentConfig(config, bot));
+  if (bot.providerAgentId) {
+    await elevenLabsRequest(
+      config,
+      `/v1/convai/agents/${encodeURIComponent(bot.providerAgentId)}`,
+      { method: "PATCH", body: payload },
+    );
+    return bot.providerAgentId;
+  }
+  const response = await elevenLabsRequest(config, "/v1/convai/agents/create", {
+    method: "POST",
+    body: payload,
+  });
+  return agentResponse.parse(await response.json()).agent_id;
+}
+
 async function ensureQuotaAvailable(config: ElevenLabsConfig) {
   const now = Date.now();
   const cacheKey = configurationCacheKey(config);
@@ -321,7 +471,7 @@ async function ensureQuotaAvailable(config: ElevenLabsConfig) {
   }
   if (quotaCache.exhausted) {
     throw Object.assign(
-      new Error("ElevenLabs voice quota is exhausted. Using the backup live voice."),
+      new Error("ElevenLabs voice quota is exhausted."),
       { statusCode: 429, retryAfterSeconds: quotaCache.retryAfterSeconds },
     );
   }
@@ -349,6 +499,18 @@ export async function createElevenLabsSignedUrl(config: ElevenLabsConfig) {
     `/v1/convai/conversation/get_signed_url?agent_id=${encodeURIComponent(agentId)}`,
   );
   return { agentId, signedUrl: signedUrlResponse.parse(await response.json()).signed_url };
+}
+
+export async function createStudioAgentSignedUrl(
+  config: ElevenLabsConfig,
+  agentId: string,
+) {
+  await ensureQuotaAvailable(config);
+  const response = await elevenLabsRequest(
+    config,
+    `/v1/convai/conversation/get_signed_url?agent_id=${encodeURIComponent(agentId)}`,
+  );
+  return signedUrlResponse.parse(await response.json()).signed_url;
 }
 
 export function resetElevenLabsAgentForTests() {

@@ -25,6 +25,12 @@ const features = [
   },
 ] as const;
 
+const solutions = [
+  { icon: "ϟ", name: "ForgeFit Coach", label: "Live now", copy: "Adaptive training, recovery context, movement guidance, and a coach that remembers your plan.", href: "/signin" },
+  { icon: "◎", name: "Interview Coach", label: "Build in Studio", copy: "Role-specific mock interviews, useful follow-ups, and candid feedback on every answer.", href: "/signin?callbackUrl=/studio" },
+  { icon: "▤", name: "Resume Reviewer", label: "Build in Studio", copy: "Practical resume review for a target role, with honest edits that never invent your experience.", href: "/signin?callbackUrl=/studio" },
+] as const;
+
 function Arrow() {
   return <span aria-hidden="true">↗</span>;
 }
@@ -144,43 +150,70 @@ export default function LandingPage() {
           <BrandLockup />
         </Link>
         <nav className={styles.nav} aria-label="Landing page navigation">
+          <a href="#solutions">Solutions</a>
           <a href="#how-it-works">How it works</a>
-          <a href="#features">Product</a>
+          <Link href="/studio">Forge Studio</Link>
           <Link href="/exercises">Exercises</Link>
           <a href="#privacy">Privacy</a>
         </nav>
         <div className={styles.headerActions}>
           <Link className={styles.signIn} href="/signin">Sign in</Link>
-          <Link className={styles.headerCta} href="/signin">Start training <Arrow /></Link>
+          <Link className={styles.headerCta} href="/signin?callbackUrl=/studio">Build a specialist <Arrow /></Link>
         </div>
       </header>
 
       <section className={styles.hero} aria-labelledby="landing-heading">
         <div className={styles.heroCopy}>
-          <p className={styles.eyebrow}><span aria-hidden="true">✦</span> Built around you</p>
-          <h1 id="landing-heading">Build strength.<br /><em>Stay on track.</em></h1>
+          <p className={styles.eyebrow}><span aria-hidden="true">✦</span> Personal AI, with a clear job</p>
+          <h1 id="landing-heading">One space.<br /><em>Your specialists.</em></h1>
           <p className={styles.heroText}>
-            One focused training system. One clear next move.
+            Focused AI guides for fitness, interviews, resumes, and the goals you choose to build next.
           </p>
           <div className={styles.heroActions}>
-            <Link className={styles.primaryCta} href="/signin">Build my plan <Arrow /></Link>
-            <a className={styles.secondaryCta} href="#how-it-works">Explore the system <span aria-hidden="true">↓</span></a>
+            <Link className={styles.primaryCta} href="/signin?callbackUrl=/studio">Build my specialist <Arrow /></Link>
+            <a className={styles.secondaryCta} href="#solutions">Explore solutions <span aria-hidden="true">↓</span></a>
           </div>
         </div>
         <ProductPreview />
+      </section>
+
+      <section className={styles.solutions} id="solutions" aria-labelledby="solutions-heading">
+        <header className={styles.featuresHeader}>
+          <div>
+            <p className={styles.sectionEyebrow}>The specialist network</p>
+            <h2 id="solutions-heading">Different goals.<br /><em>Different experts.</em></h2>
+          </div>
+          <p>Each bot has a deliberately narrow role, its own context, and explicit boundaries. Your fitness coach stays focused on fitness.</p>
+        </header>
+        <div className={styles.solutionGrid}>
+          {solutions.map((solution) => (
+            <article key={solution.name}>
+              <div><i>{solution.icon}</i><span>{solution.label}</span></div>
+              <h3>{solution.name}</h3>
+              <p>{solution.copy}</p>
+              <Link href={solution.href}>Open solution <Arrow /></Link>
+            </article>
+          ))}
+          <article className={styles.studioCard}>
+            <div><i>✦</i><span>Bot builder</span></div>
+            <h3>Forge Studio</h3>
+            <p>Create a specialist with its own identity, goal, boundaries, conversation starters, and natural voice.</p>
+            <Link href="/signin?callbackUrl=/studio">Create a bot <Arrow /></Link>
+          </article>
+        </div>
       </section>
 
       <section className={styles.how} id="how-it-works" aria-labelledby="how-heading">
         <div className={styles.sectionIntro}>
           <div>
             <p className={styles.sectionEyebrow}>How it works</p>
-            <h2 id="how-heading">Three steps. <em>One plan.</em></h2>
+            <h2 id="how-heading">Focused help.<br /><em>No identity crisis.</em></h2>
           </div>
         </div>
         <div className={styles.steps}>
-          <article><span>01</span><h3>Share context</h3></article>
-          <article><span>02</span><h3>Follow the plan</h3></article>
-          <article><span>03</span><h3>Log and adapt</h3></article>
+          <article><span>01</span><h3>Choose the right specialist</h3></article>
+          <article><span>02</span><h3>Share only relevant context</h3></article>
+          <article><span>03</span><h3>Practice, improve, repeat</h3></article>
         </div>
       </section>
 
@@ -188,7 +221,7 @@ export default function LandingPage() {
         <header className={styles.featuresHeader}>
           <div>
             <p className={styles.sectionEyebrow}>The system</p>
-            <h2 id="features-heading">Everything <em>connected.</em></h2>
+          <h2 id="features-heading">ForgeFit Coach.<br /><em>Fitness, deeply.</em></h2>
           </div>
         </header>
         <div className={styles.featureGrid}>
@@ -206,18 +239,18 @@ export default function LandingPage() {
         <div className={styles.privacyMark} aria-hidden="true"><span /><b /><i /></div>
         <div className={styles.privacyCopy}>
           <p className={styles.sectionEyebrow}>Private by design</p>
-          <h2 id="privacy-heading">Your workout.<br /><em>Your data.</em></h2>
-          <p>Movement tracking stays on your device.</p>
+          <h2 id="privacy-heading">Your context.<br /><em>Your control.</em></h2>
+          <p>Movement tracking stays on your device. Voice recording is disabled for Studio bots.</p>
         </div>
         <div className={styles.finalCta}>
-          <Link className={styles.lightCta} href="/signin">Build my plan <Arrow /></Link>
+          <Link className={styles.lightCta} href="/signin?callbackUrl=/studio">Build a specialist <Arrow /></Link>
         </div>
       </section>
 
       <footer className={styles.footer}>
         <BrandLockup />
-        <div><a href="#how-it-works">How it works</a><a href="#features">Product</a><Link href="/exercises">Exercises</Link><a href="#privacy">Privacy</a><Link href="/signin">Sign in</Link></div>
-        <small>© {new Date().getFullYear()} forgefit.space · Fitness guidance, not medical care. Exercise data by <a href="https://repdb.co" target="_blank" rel="noreferrer">RepDB</a>.</small>
+        <div><a href="#solutions">Solutions</a><a href="#how-it-works">How it works</a><Link href="/studio">Forge Studio</Link><Link href="/exercises">Exercises</Link><a href="#privacy">Privacy</a><Link href="/signin">Sign in</Link></div>
+        <small>© {new Date().getFullYear()} forgefit.space · Personal specialist tools. ForgeFit Coach provides fitness guidance, not medical care. Exercise data by <a href="https://repdb.co" target="_blank" rel="noreferrer">RepDB</a>.</small>
       </footer>
     </main>
   );

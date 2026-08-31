@@ -35,8 +35,11 @@ export async function apiRequest<T>(path: string, init?: RequestInit): Promise<T
     | ({ error?: string; message?: string } & T)
     | null;
   if (!response.ok) {
+    const fallbackMessage = response.status === 413
+      ? "That upload is too large for the server. Choose a file under 5 MB."
+      : `API request failed with ${response.status}`;
     throw new ApiRequestError(
-      body?.message ?? body?.error ?? `API request failed with ${response.status}`,
+      body?.message ?? body?.error ?? fallbackMessage,
       response.status,
       retryAfterSeconds(response),
     );

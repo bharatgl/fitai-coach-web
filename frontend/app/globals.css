@@ -16,6 +16,7 @@
 
 /* Product layout rules built on top of @fitai/ui. */
 .mobile-header,.mobile-nav{display:none}
+.studio-link{align-items:center;background:linear-gradient(135deg,rgb(200 255 75 / 10%),rgb(91 230 210 / 7%));border:1px solid rgb(200 255 75 / 16%);border-radius:.75rem;color:#d9ff80;display:flex;font-size:.7rem;font-weight:800;justify-content:space-between;margin-top:1rem;padding:.75rem;text-decoration:none}.studio-link span{color:#7e899f;font-size:.55rem;font-weight:650}
 .wrap{max-width:var(--ui-content-max);padding-inline:clamp(1.5rem,4vw,3rem)}
 .hero.ui-card{background:#143c41;border-color:#143c41;box-shadow:0 20px 45px rgb(18 59 64 / 14%);min-height:17rem}
 .hero .ui-eyebrow{color:#9bcfc4}

@@ -357,6 +357,7 @@ function FitAIWorkspace({ user }: { user: CurrentUser }) {
             </button>
           ))}
         </nav>
+        <Link className="studio-link" href="/studio">✦ Forge Studio <span>Build bots</span></Link>
         <div className="sidebar-foot">
           <p>✦ Fitness guidance, not medical care.</p>
           <button className="profile" onClick={() => setView("profile")}>

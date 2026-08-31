@@ -17,6 +17,13 @@ const configSchema = z.object({
   GEMINI_MODEL: z.string().min(1).default("gemini-3.1-flash-lite"),
   GEMINI_LIVE_MODEL: z.string().min(1).default("gemini-3.1-flash-live-preview"),
   GEMINI_LIVE_VOICE: z.string().min(1).default("Charon"),
+  VERTEX_AI_PROJECT: optionalSetting,
+  VERTEX_AI_LOCATION: z.string().min(1).default("global"),
+  VERTEX_AI_RESEARCH_MODEL: z.string().min(1).default("gemini-2.5-flash"),
+  RESEARCH_DAILY_LIMIT: z.coerce.number().int().min(1).max(1_000).default(20),
+  OPS_MONTHLY_TOKEN_LIMIT: z.coerce.number().int().min(1_000).default(2_000_000),
+  OPS_MONTHLY_CREDIT_LIMIT: z.coerce.number().int().min(1).default(2_000),
+  OPS_TELEMETRY_RETENTION_DAYS: z.coerce.number().int().min(1).max(365).default(30),
   ELEVENLABS_API_KEY: optionalSetting,
   ELEVENLABS_AGENT_ID: optionalSetting,
   ELEVENLABS_VOICE_ID: optionalSetting,
@@ -27,6 +34,7 @@ const configSchema = z.object({
   EXERCISE_ASSET_BASE_URL: optionalSetting.pipe(z.url().optional()),
   PORT: z.coerce.number().int().positive().default(4000),
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
+  RELEASE_VERSION: z.string().min(1).default("0.1.0"),
 });
 
 export type AppConfig = z.infer<typeof configSchema>;

@@ -1,6 +1,7 @@
 import type { FastifyRequest } from "fastify";
 import { jwtVerify } from "jose";
 import { getConfig } from "./config.js";
+import { identifyTelemetryUser } from "./services/request-telemetry.js";
 
 export type AuthenticatedUser = {
   id: string;
@@ -28,6 +29,8 @@ export async function authenticate(
       statusCode: 401,
     });
   }
+
+  identifyTelemetryUser(request, payload.sub);
 
   return {
     id: payload.sub,

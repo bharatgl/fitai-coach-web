@@ -19,9 +19,10 @@ test("shows a public landing page and protects the coaching workspace", async ()
   assert.match(page, /await auth\(\)/);
   assert.match(page, /return <LandingPage \/>/);
   assert.match(landing, /href="\/signin"/);
-  assert.match(landing, /Build strength/);
+  assert.match(landing, /One space/);
   assert.doesNotMatch(landing, /Adapt as you go/);
-  assert.match(landing, /One focused training system/);
+  assert.match(landing, /Focused AI guides for fitness, interviews, resumes/);
+  assert.match(landing, /Forge Studio/);
   assert.match(landing, /BrandLockup/);
   assert.match(landing, /On-device tracking/);
   assert.match(landingStyles, /@media \(max-width: 60rem\)/);
@@ -224,6 +225,15 @@ test("contains no obsolete Cloudflare application entry points", async () => {
   );
   assert.doesNotMatch(packageJson, /vinext|wrangler|cloudflare/i);
   await assert.rejects(access(new URL("../vite.config.ts", import.meta.url)));
+});
+
+test("keeps the VM proxy upload limit above the base64 attachment envelope", async () => {
+  const nginx = await readFile(
+    new URL("../../infra/gcp/vm/nginx-fitai-backend.conf", import.meta.url),
+    "utf8",
+  );
+  assert.equal((nginx.match(/client_max_body_size 8m;/g) ?? []).length, 2);
+  assert.doesNotMatch(nginx, /client_max_body_size 1m;/);
 });
 
 test("uses the shared responsive design system", async () => {

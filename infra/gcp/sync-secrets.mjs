@@ -16,6 +16,7 @@ const secretValues = new Map([
   ["fitai-google-oauth-id", frontend.AUTH_GOOGLE_ID],
   ["fitai-google-oauth-secret", frontend.AUTH_GOOGLE_SECRET],
   ["fitai-gemini-api-key", backend.GEMINI_API_KEY],
+  ["fitai-elevenlabs-api-key", backend.ELEVENLABS_API_KEY],
 ]);
 
 for (const [name, value] of secretValues) {
