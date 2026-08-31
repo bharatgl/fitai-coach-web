@@ -142,22 +142,33 @@ export async function dashboardRoutes(app: FastifyInstance) {
       ]);
     }
 
-    const upcomingWorkouts = activePlan
-      ? await database
-          .collection<PlannedWorkoutDocument>("plannedWorkouts")
-          .find(
-            {
-              userId: user.id,
-              planId: activePlan.id,
-              status: { $in: ["planned", "in_progress"] },
-              scheduledFor: { $gte: today },
-            },
-            { projection: { _id: 0 } },
-          )
-          .sort({ weekNumber: 1, dayOffset: 1 })
-          .limit(84)
-          .toArray()
-      : [];
+    const [planWorkouts, upcomingWorkouts] = activePlan
+      ? await Promise.all([
+          database
+            .collection<PlannedWorkoutDocument>("plannedWorkouts")
+            .find(
+              { userId: user.id, planId: activePlan.id },
+              { projection: { _id: 0 } },
+            )
+            .sort({ weekNumber: 1, dayOffset: 1 })
+            .limit(84)
+            .toArray(),
+          database
+            .collection<PlannedWorkoutDocument>("plannedWorkouts")
+            .find(
+              {
+                userId: user.id,
+                planId: activePlan.id,
+                status: { $in: ["planned", "in_progress"] },
+                scheduledFor: { $gte: today },
+              },
+              { projection: { _id: 0 } },
+            )
+            .sort({ weekNumber: 1, dayOffset: 1 })
+            .limit(84)
+            .toArray(),
+        ])
+      : [[], []];
 
     return {
       profile: profile ? serializeProfile(profile) : null,
@@ -168,6 +179,7 @@ export async function dashboardRoutes(app: FastifyInstance) {
         historyWorkoutsByPlan.get(plan.id) ?? [],
         completedSessionsByPlan.get(plan.id) ?? [],
       )),
+      planWorkouts: planWorkouts.map(serializeWorkout),
       upcomingWorkouts: upcomingWorkouts.map(serializeWorkout),
       activeSession: activeSession ? serializeWorkoutSession(activeSession) : null,
       recentSessions: recentSessions.map((session) => serializeWorkoutSession(session)),

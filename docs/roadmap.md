@@ -29,7 +29,7 @@ data and can be tested before the next capability depends on it.
 
 ## 4. AI coach foundation — implemented in code
 
-- Gemini API runs only in the backend through `ai/`.
+- AI provider APIs run only in the backend through provider adapters in `ai/`.
 - Structured output is schema-validated before persistence.
 - Deterministic urgent-symptom and pain checks run before model calls.
 - Provider credentials and prompts remain server-only; deterministic safety checks run before every eligible model call.

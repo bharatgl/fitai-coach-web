@@ -10,10 +10,12 @@ BUILDER_ACCOUNT="fitai-builder@${PROJECT_ID}.iam.gserviceaccount.com"
 SOURCE_BUCKET="gs://${PROJECT_ID}_cloudbuild"
 
 gcloud services enable \
+  aiplatform.googleapis.com \
   artifactregistry.googleapis.com \
   cloudbuild.googleapis.com \
   run.googleapis.com \
   secretmanager.googleapis.com \
+  storage.googleapis.com \
   --project="${PROJECT_ID}"
 
 if ! gcloud artifacts repositories describe "${REPOSITORY}" \
@@ -69,6 +71,10 @@ gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
   --member="serviceAccount:${BUILDER_ACCOUNT}" \
   --role="roles/logging.logWriter" >/dev/null
 
+gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
+  --member="serviceAccount:${BACKEND_ACCOUNT}" \
+  --role="roles/aiplatform.user" >/dev/null
+
 FRONTEND_SECRETS=(
   fitai-frontend-mongodb-uri
   fitai-auth-secret
@@ -80,6 +86,8 @@ BACKEND_SECRETS=(
   fitai-backend-mongodb-uri
   fitai-api-jwt-secret
   fitai-gemini-api-key
+  fitai-elevenlabs-api-key
+  fitai-provider-credentials-key
 )
 
 for secret in "${FRONTEND_SECRETS[@]}" "${BACKEND_SECRETS[@]}"; do

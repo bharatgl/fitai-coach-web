@@ -6,7 +6,11 @@ if (!projectId) {
   throw new Error("Set FITAI_GCP_PROJECT_ID before initializing app secrets.");
 }
 
-for (const name of ["fitai-auth-secret", "fitai-api-jwt-secret"]) {
+for (const name of [
+  "fitai-auth-secret",
+  "fitai-api-jwt-secret",
+  "fitai-provider-credentials-key",
+]) {
   const versions = spawnSync(
     "gcloud",
     [
@@ -28,7 +32,9 @@ for (const name of ["fitai-auth-secret", "fitai-api-jwt-secret"]) {
   }
   if (versions.stdout.trim()) continue;
 
-  const value = randomBytes(48).toString("base64url");
+  const value = name === "fitai-provider-credentials-key"
+    ? randomBytes(32).toString("base64")
+    : randomBytes(48).toString("base64url");
   const upload = spawnSync(
     "gcloud",
     [
@@ -52,4 +58,4 @@ for (const name of ["fitai-auth-secret", "fitai-api-jwt-secret"]) {
   }
 }
 
-console.log("Production-only Auth.js and API JWT secrets are initialized.");
+console.log("Production-only Auth.js, API JWT, and provider-encryption secrets are initialized.");

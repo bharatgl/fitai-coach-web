@@ -40,6 +40,20 @@ export async function ensureIndexes() {
   await Promise.all([
     database.collection("appUsers").createIndex({ externalId: 1 }, { unique: true }),
     database.collection("profiles").createIndex({ userId: 1 }, { unique: true }),
+    database.collection("providerSettings").createIndex({ userId: 1 }, { unique: true }),
+    database.collection("bots").createIndex({ userId: 1, updatedAt: -1 }),
+    database.collection("bots").createIndex({ userId: 1, id: 1 }, { unique: true }),
+    database.collection("bots").createIndex({ userId: 1, slug: 1 }, { unique: true }),
+    database.collection("botMessages").createIndex({ userId: 1, botId: 1, createdAt: 1 }),
+    database.collection("botMessages").createIndex(
+      { userId: 1, botId: 1, clientTurnId: 1, role: 1 },
+      { unique: true, partialFilterExpression: { clientTurnId: { $type: "string" } } },
+    ),
+    database.collection("botAttachments").createIndex({ id: 1 }, { unique: true }),
+    database.collection("botAttachments").createIndex({ userId: 1, botId: 1, messageId: 1 }),
+    database.collection("researchUsage").createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
+    database.collection("systemRequestLogs").createIndex({ userId: 1, timestamp: -1 }),
+    database.collection("systemRequestLogs").createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
     database.collection("readinessCheckIns").createIndex({ userId: 1, date: 1 }, { unique: true }),
     database.collection("readinessCheckIns").createIndex({ userId: 1, date: -1 }),
     database.collection("workoutPlans").createIndex({ userId: 1, status: 1 }),
@@ -60,6 +74,10 @@ export async function ensureIndexes() {
     database.collection("movementEvents").createIndex({ userId: 1, sessionId: 1, occurredAt: 1 }),
     database.collection("coachMessages").createIndex({ userId: 1, createdAt: -1 }),
     database.collection("coachMessages").createIndex({ userId: 1, threadId: 1, createdAt: 1 }),
+    database.collection("coachMessages").createIndex(
+      { userId: 1, clientTurnId: 1, role: 1 },
+      { unique: true, partialFilterExpression: { clientTurnId: { $type: "string" } } },
+    ),
     database.collection("coachAttachments").createIndex({ id: 1 }, { unique: true }),
     database.collection("coachAttachments").createIndex({ userId: 1, messageId: 1 }),
     database.collection("coachAttachments").createIndex({ userId: 1, threadId: 1 }),
@@ -72,5 +90,8 @@ export async function ensureIndexes() {
     ),
     database.collection("planGenerationLocks").createIndex({ userId: 1 }, { unique: true }),
     database.collection("planGenerationLocks").createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
+    database.collection("planAdjustmentProposals").createIndex({ id: 1 }, { unique: true }),
+    database.collection("planAdjustmentProposals").createIndex({ userId: 1, planId: 1, status: 1, createdAt: -1 }),
+    database.collection("planAdjustmentEvents").createIndex({ userId: 1, planId: 1, occurredAt: -1 }),
   ]);
 }

@@ -16,6 +16,7 @@
 
 /* Product layout rules built on top of @fitai/ui. */
 .mobile-header,.mobile-nav{display:none}
+.studio-link{align-items:center;background:linear-gradient(135deg,rgb(200 255 75 / 10%),rgb(91 230 210 / 7%));border:1px solid rgb(200 255 75 / 16%);border-radius:.75rem;color:#d9ff80;display:flex;font-size:.7rem;font-weight:800;justify-content:space-between;margin-top:1rem;padding:.75rem;text-decoration:none}.studio-link span{color:#7e899f;font-size:.55rem;font-weight:650}
 .wrap{max-width:var(--ui-content-max);padding-inline:clamp(1.5rem,4vw,3rem)}
 .hero.ui-card{background:#143c41;border-color:#143c41;box-shadow:0 20px 45px rgb(18 59 64 / 14%);min-height:17rem}
 .hero .ui-eyebrow{color:#9bcfc4}
@@ -198,12 +199,14 @@
 /* Editable body-aware training profile. */
 .profile-settings{max-width:58rem}
 .profile-card{margin:2rem auto 0;max-width:48rem}
+.provider-configuration{margin:2rem auto 0;max-width:58rem}.provider-configuration-heading{align-items:end;display:flex;gap:1rem;justify-content:space-between;margin-bottom:1rem}.provider-configuration-heading h2{font:800 clamp(1.35rem,3vw,2rem)/1.05 var(--font-body);letter-spacing:-.04em;margin:.35rem 0 0}.provider-configuration-heading>p{color:var(--muted);font-size:.7rem;line-height:1.5;margin:0;max-width:22rem;text-align:right}.provider-configuration-grid{display:grid;gap:1rem;grid-template-columns:1fr 1fr}.provider-configuration-grid>form{background:#fff;border:1px solid var(--line);border-radius:1rem;display:grid;gap:1rem;padding:1.2rem}.provider-configuration-grid>form>header{align-items:start;border-bottom:1px solid var(--line);display:flex;gap:.75rem;justify-content:space-between;padding-bottom:.9rem}.provider-configuration-grid>form>header strong{display:block;font-size:.9rem}.provider-configuration-grid>form>header small{color:var(--muted);display:block;font-size:.57rem;line-height:1.4;margin-top:.2rem}.provider-configuration-grid>form>header>span{background:#eff6ef;border-radius:999px;color:#527069;font-size:.5rem;font-weight:800;padding:.35rem .5rem;white-space:nowrap}.provider-configuration-pair{display:grid;gap:.7rem;grid-template-columns:1fr 1fr}.provider-configuration-actions{align-items:center;display:flex;gap:.75rem}.provider-configuration-actions .ui-button{flex:1}.provider-configuration-actions>button:not(.ui-button){color:#68726e;font-size:.58rem;text-decoration:underline}.provider-configuration-status{color:#527069;font-size:.65rem;margin:.8rem 0 0}
 .body-metrics{grid-template-columns:repeat(3,1fr)}
 .mobile-avatar{border:0}
 
 @media(max-width:700px){
   .body-metrics{grid-template-columns:1fr}
   .profile-card{margin-top:1.5rem}
+  .provider-configuration-heading{align-items:start;display:grid}.provider-configuration-heading>p{text-align:left}.provider-configuration-grid{grid-template-columns:1fr}.provider-configuration-pair{grid-template-columns:1fr}
 }
 
 @media(max-width:800px){
@@ -484,8 +487,9 @@ body{
 .plan-overview-action{align-items:center;display:flex}
 .plan-generate.ui-button{min-height:2.6rem;white-space:nowrap}
 .plan-overview-meta{display:flex;gap:.5rem;grid-column:1/-1}
-.plan-overview-meta span{background:rgb(255 255 255 / 5%);border:1px solid rgb(255 255 255 / 7%);border-radius:99px;color:#8f9b96;font-size:.56rem;padding:.35rem .55rem;text-transform:uppercase}
+.plan-overview-meta span{align-items:baseline;background:rgb(255 255 255 / 5%);border:1px solid rgb(255 255 255 / 7%);border-radius:99px;color:#8f9b96;display:flex;gap:.2rem;padding:.35rem .55rem}
 .plan-overview-meta b{color:#ecf3ed}
+.plan-overview-meta small{font-size:.56rem;text-transform:uppercase}
 
 .plan-page .plan-weeks{gap:1rem;margin-top:1rem}
 .plan-week-summary{align-items:center;border-bottom:0;display:flex;gap:2rem;justify-content:space-between;padding:.55rem 0 .15rem}
@@ -1646,6 +1650,7 @@ details.plan-history{padding:0}
 
 /* Plan dashboard — one schedule, one workout action, one connected coach. */
 .plan-dashboard-layout{align-items:start;display:grid;gap:1rem;grid-template-columns:minmax(0,1fr) minmax(19rem,23rem)}
+.plan-coach-mobile-launch{display:none}
 .plan-schedule-dashboard,.plan-coach-panel{background:linear-gradient(145deg,rgb(17 22 36 / 96%),rgb(8 12 22 / 97%));border:1px solid rgb(255 255 255 / 9%);border-radius:1.05rem;box-shadow:0 1.4rem 3.4rem rgb(0 0 0 / 18%);min-width:0}
 .plan-schedule-dashboard>header{align-items:end;border-bottom:1px solid rgb(255 255 255 / 8%);display:flex;gap:1.25rem;justify-content:space-between;padding:1.1rem 1.15rem}
 .plan-schedule-dashboard>header h3{color:#f3f6fb;font-size:1rem;letter-spacing:-.02em}
@@ -1705,6 +1710,12 @@ details.plan-history{padding:0}
 .plan-coach-conversation article.is-user{align-self:flex-end;background:#c8ff4b;color:#11150e}.plan-coach-conversation article.is-coach{align-self:flex-start;background:rgb(255 255 255 / 5%);border:1px solid rgb(255 255 255 / 7%)}
 .plan-coach-conversation article>small{display:block;font-size:.38rem;font-weight:850;letter-spacing:.08em;margin-bottom:.2rem;opacity:.62;text-transform:uppercase}
 .plan-coach-conversation article p{margin:0}.plan-coach-conversation .coach-message-content{font-size:inherit}.plan-coach-conversation .coach-message-content>*{margin:.35rem 0 0}.plan-coach-conversation .coach-message-content>*:first-child{margin-top:0}
+.plan-adjustment-proposal{background:linear-gradient(145deg,rgb(200 255 75 / 9%),rgb(91 230 210 / 5%));border:1px solid rgb(200 255 75 / 22%);border-radius:.8rem;margin-top:.75rem;padding:.75rem}
+.plan-adjustment-proposal>header{display:grid;gap:.15rem}.plan-adjustment-proposal>header span{color:#bce75c;font-size:.42rem;font-weight:900;letter-spacing:.1em;text-transform:uppercase}.plan-adjustment-proposal>header strong{color:#f1f5f3;font-size:.72rem}
+.plan-adjustment-proposal>p{color:#8f9ba8;font-size:.52rem;line-height:1.45;margin:.35rem 0 .55rem}
+.plan-adjustment-proposal ul{display:grid;gap:.35rem;list-style:none;margin:0;padding:0}.plan-adjustment-proposal li{align-items:center;background:rgb(5 10 18 / 34%);border-radius:.55rem;display:grid;gap:.25rem;padding:.5rem .55rem}.plan-adjustment-proposal li>strong{color:#dce3e8;font-size:.56rem}.plan-adjustment-proposal li>span{align-items:center;color:#84909e;display:flex;font-size:.49rem;gap:.35rem}.plan-adjustment-proposal li b{color:#c8ff4b}.plan-adjustment-proposal li time:last-child{color:#d8e8bf;font-weight:800}
+.plan-adjustment-proposal>small{color:#819080;display:block;font-size:.46rem;margin-top:.4rem}.plan-adjustment-proposal>div{display:grid;gap:.4rem;grid-template-columns:1fr 1fr;margin-top:.65rem}.plan-adjustment-proposal .ui-button{justify-content:center;min-height:2.35rem;padding:.5rem;font-size:.52rem}
+.plan-adjustment-notice{background:rgb(91 230 210 / 8%);border:1px solid rgb(91 230 210 / 16%);border-radius:.6rem;color:#9edfd5;display:block;font-size:.52rem;line-height:1.45;margin-top:.65rem;padding:.55rem .65rem}
 .plan-coach-composer{align-items:end;background:rgb(255 255 255 / 4%);border:1px solid rgb(255 255 255 / 9%);border-radius:.75rem;display:grid;gap:.45rem;grid-template-columns:minmax(0,1fr) auto;margin-top:.75rem;padding:.4rem}
 .plan-coach-composer:focus-within{border-color:rgb(200 255 75 / 38%);box-shadow:0 0 0 3px rgb(200 255 75 / 5%)}
 .plan-coach-composer textarea{background:transparent;border:0;color:#edf1f7;font:inherit;font-size:.55rem;line-height:1.45;min-height:2.5rem;outline:0;padding:.35rem;resize:vertical;width:100%}.plan-coach-composer textarea::placeholder{color:#667185}
@@ -2500,6 +2511,34 @@ details.plan-history{padding:0}
   .live-voice-inline .live-workout-camera:is([data-state="preview"],[data-state="tracking"]){width:6.75rem}
 }
 
+/* Gym camera mode: the member is the primary view and the coach remains visible in picture-in-picture. */
+.live-coach-provider-preview{inset:0;overflow:hidden;position:absolute;z-index:1}
+.live-coach-provider-preview>audio{display:none}
+.live-workout-camera[data-facing="environment"] video,
+.live-workout-camera[data-facing="environment"] canvas{transform:none}
+.live-coach-stage.has-member-camera{grid-template-columns:minmax(0,1.35fr) minmax(18rem,.65fr)}
+.live-coach-presence.has-member-camera .live-workout-camera:is([data-state="preview"],[data-state="tracking"]){aspect-ratio:auto;border:0;border-radius:0;bottom:0;box-shadow:none;height:auto;inset:0;right:0;width:auto;z-index:4}
+.live-coach-presence.has-member-camera .live-coach-provider-preview{background:#07111b;border:1px solid rgb(255 255 255 / 26%);border-radius:.85rem;bottom:4.2rem;box-shadow:0 .8rem 2.5rem rgb(0 0 0 / 58%);height:clamp(7rem,32%,10rem);inset:auto .7rem 4.2rem auto;width:clamp(5.25rem,23%,7.5rem);z-index:6}
+.live-coach-presence.has-member-camera .live-coach-provider-preview .live-coach-light{display:none}
+.live-coach-presence.has-member-camera .live-coach-provider-preview .live-coach-avatar{bottom:-12%;height:112%}
+.live-coach-presence.has-member-camera .live-coach-provider-preview .live-coach-presence-badge{bottom:.35rem;font-size:.42rem;left:50%;padding:.3rem .4rem;transform:translateX(-50%)}
+.live-coach-presence.has-member-camera .live-camera-self-label{font-size:.58rem;padding:.4rem .58rem}
+.live-coach-presence.has-member-camera .live-camera-controls{left:auto;right:.65rem;top:.65rem}
+.live-coach-presence.has-member-camera .live-camera-controls button{font-size:.52rem;min-height:2.35rem;padding:.5rem .6rem;width:auto}
+.live-coach-presence.has-member-camera .live-camera-controls button span{font-size:.58rem}
+.live-coach-presence.has-member-camera .live-camera-feedback{padding-right:calc(clamp(5.25rem,23%,7.5rem) + 1rem)}
+
+@media(max-width:900px){
+  .live-voice-inline .live-coach-stage.has-member-camera{grid-template-columns:1fr;grid-template-rows:minmax(18rem,54%) minmax(0,1fr)}
+}
+
+@media(max-width:600px){
+  .live-voice-inline .live-coach-stage.has-member-camera{grid-template-rows:minmax(17rem,50%) minmax(0,1fr)}
+  .live-coach-presence.has-member-camera .live-coach-provider-preview{bottom:3.85rem;height:6.7rem;width:5rem}
+  .live-coach-presence.has-member-camera .live-camera-controls button{border-radius:999px;font-size:0;min-height:2.4rem;padding:.5rem;width:2.4rem}
+  .live-coach-presence.has-member-camera .live-camera-feedback{padding-right:6rem}
+}
+
 /* Today v3 — dark training console. */
 .today-page{max-width:78rem;padding:1.35rem 1rem 6.75rem}
 .today-heading{align-items:flex-end;border-bottom:1px solid rgb(255 255 255 / 8%);padding-bottom:1rem}
@@ -2562,13 +2601,377 @@ details.plan-history{padding:0}
 }
 
 @media(min-width:1100px){
-  .today-primary-grid{grid-template-columns:minmax(0,1.75fr) minmax(17rem,.62fr)}
-  .today-session-card.ui-card{gap:0 1.5rem;grid-template-columns:minmax(0,.84fr) minmax(18rem,1.16fr);min-height:27rem;padding:1.5rem}
-  .today-session-copy{margin-top:1.15rem}
-  .today-session-copy h2{font-size:clamp(2.85rem,3.8vw,3.8rem)}
+  .today-primary-grid{grid-template-columns:minmax(0,1fr)}
+  .today-session-card.ui-card{align-items:start;gap:.9rem 1.5rem;grid-template-columns:minmax(0,.95fr) minmax(22rem,1.05fr);grid-template-rows:auto auto auto auto;min-height:0;padding:1.5rem}
+  .today-session-copy{align-self:start;margin-top:.85rem}
+  .today-session-copy h2{font-size:clamp(2.35rem,3.2vw,3.25rem);line-height:.92}
   .today-session-metrics{margin-top:.9rem}
-  .today-exercise-preview{background:rgb(255 255 255 / 2.5%);border:0;border-left:1px solid rgb(255 255 255 / 8%);border-radius:0;margin-top:1rem;padding:1rem 0 1rem 1.5rem}
+  .today-exercise-preview{align-self:start;background:rgb(255 255 255 / 2.5%);border:0;border-left:1px solid rgb(255 255 255 / 8%);border-radius:0;display:block;margin-top:.85rem;padding:.8rem 0 .8rem 1.5rem}
+  .today-exercise-preview ol{display:grid;flex:none;justify-content:initial}
+  .today-exercise-preview li{min-height:3rem}
   .today-session-action{margin-top:1rem;padding-top:.6rem}
+  .today-session-action .ui-button{white-space:nowrap;width:auto}
+  .today-side-stack{grid-template-columns:minmax(0,1.1fr) minmax(15rem,.9fr)}
+  .today-side-stack .readiness-summary.ui-card{min-height:0}
+}
+
+@media(min-width:1440px){
+  .today-primary-grid{grid-template-columns:minmax(0,1.75fr) minmax(17rem,.62fr)}
   .today-side-stack{grid-template-columns:1fr}
   .today-side-stack .readiness-summary.ui-card{min-height:13.5rem}
+}
+
+/* Mobile product contract — every workspace view must fit and remain usable first. */
+html,body,.app-shell,.main{max-width:100%;min-width:0}
+html,body{overflow-x:clip}
+img,video,canvas,svg{max-width:100%}
+button,a,input,select,textarea{touch-action:manipulation}
+
+@media(max-width:900px){
+  .main{margin-left:0;width:100%}
+  .wrap:not(.coach-page){max-width:none;width:100%}
+  .today-primary-grid,.plan-dashboard-layout,.history-baseline,.history-progress-overview,.history-analysis-grid,.workout-command-grid{grid-template-columns:minmax(0,1fr)}
+  .today-session-card,.today-side-stack,.plan-schedule-dashboard,.plan-coach-panel,.history-page>*,.workout-command-header,.workout-log-column,.workout-tools-rail{min-width:0}
+  .history-baseline-unlocks{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .plan-coach-panel,.workout-tools-rail{position:static}
+}
+
+@media(max-width:600px){
+  input,select,textarea{font-size:1rem!important}
+  .wrap:not(.coach-page){padding:1.25rem .75rem calc(5.75rem + env(safe-area-inset-bottom))}
+  .mobile-header.hidden{height:3.75rem;padding-inline:.75rem}
+  .mobile-nav.hidden{gap:.2rem;grid-template-columns:repeat(5,minmax(3.5rem,1fr));overflow-x:auto;overscroll-behavior-x:contain;padding:.35rem max(.45rem,env(safe-area-inset-right)) max(.35rem,env(safe-area-inset-bottom)) max(.45rem,env(safe-area-inset-left));scrollbar-width:none}
+  .mobile-nav.hidden::-webkit-scrollbar{display:none}
+  .mobile-nav button{background:transparent;border:0;border-radius:.65rem;box-shadow:none;color:#838da2;gap:.25rem;min-height:3.35rem;min-width:3.5rem;padding:.35rem .2rem;position:relative;transform:none}
+  .mobile-nav button::before{background:transparent;border-radius:999px;content:"";height:.16rem;left:50%;position:absolute;top:-.35rem;transform:translateX(-50%);width:1.5rem}
+  .mobile-nav button .nav-icon{height:1.2rem;width:1.2rem}
+  .mobile-nav button small{font-size:.6rem;font-weight:750;line-height:1}
+  .mobile-nav button.active{background:rgb(200 255 75 / 7%);border:0;box-shadow:none;color:#d7ff78}
+  .mobile-nav button.active::before{background:#c8ff4b;box-shadow:0 0 .75rem rgb(200 255 75 / 45%)}
+  .mobile-nav button:focus-visible{background:rgb(255 255 255 / 6%);outline:2px solid rgb(200 255 75 / 55%);outline-offset:-2px}
+  .mobile-nav button:active{background:rgb(200 255 75 / 10%)}
+
+  .today-heading{align-items:start;display:grid;gap:.8rem}
+  .today-heading h1{font-size:clamp(2rem,11vw,2.75rem);overflow-wrap:anywhere}
+  .today-week-chip{grid-template-columns:auto auto;justify-items:start;min-width:0;width:100%}
+  .today-session-card.ui-card{border-radius:1rem;padding:1rem}
+  .today-session-topline{align-items:flex-start;gap:.75rem}
+  .today-session-topline>span:last-child{text-align:right}
+  .today-session-copy{margin-top:1.1rem}
+  .today-session-copy h2{font-size:clamp(2rem,12vw,2.8rem);line-height:.92;overflow-wrap:anywhere}
+  .today-session-metrics{gap:.35rem;margin-top:1rem}
+  .today-session-metrics>span{min-width:0;padding:.55rem .45rem}
+  .today-exercise-preview{padding:.75rem}
+  .today-exercise-preview li{gap:.25rem .55rem;grid-template-columns:1.2rem minmax(0,1fr);padding:.45rem 0}
+  .today-exercise-preview li>strong{font-size:.75rem;white-space:normal}
+  .today-exercise-preview li>small{font-size:.65rem;grid-column:2;justify-self:start}
+  .today-session-action{align-items:stretch}
+  .today-session-action .ui-button{min-height:3rem;width:100%}
+  .today-side-stack{grid-template-columns:minmax(0,1fr)}
+  .activity-calendar{border-radius:1rem;padding:.85rem}
+  .activity-calendar-summary{display:grid;grid-template-columns:1fr 1fr}
+  .activity-calendar-summary span{font-size:.55rem;min-width:0;white-space:normal}
+  .activity-calendar-grid{gap:.2rem}
+  .activity-calendar-day{min-height:2.9rem;padding:.3rem}
+
+  .plan-page{padding-inline:.75rem}
+  .plan-coach-mobile-launch{align-items:center;background:linear-gradient(135deg,rgb(200 255 75 / 10%),rgb(91 230 210 / 6%));border:1px solid rgb(200 255 75 / 20%);border-radius:.85rem;color:#eef5f2;display:grid;gap:.7rem;grid-template-columns:2.25rem minmax(0,1fr) auto;margin:.85rem 0 .2rem;min-height:4rem;padding:.65rem .75rem;text-align:left;width:100%}
+  .plan-coach-mobile-launch .plan-coach-mark{height:2.25rem;width:2.25rem}
+  .plan-coach-mobile-launch>span:nth-child(2){display:grid;gap:.18rem;min-width:0}
+  .plan-coach-mobile-launch strong{font-size:.74rem}
+  .plan-coach-mobile-launch small{color:#8d99aa;font-size:.56rem;line-height:1.35}
+  .plan-coach-mobile-launch>b{color:#c8ff4b;font-size:1rem}
+  .plan-coach-mobile-launch:focus-visible{outline:2px solid #c8ff4b;outline-offset:2px}
+  .plan-overview{gap:1rem;padding:1rem}
+  .plan-kicker{display:grid;gap:.4rem;grid-template-columns:repeat(3,minmax(0,1fr));margin-bottom:.8rem}
+  .plan-kicker>span{grid-column:1/-1;line-height:1;white-space:nowrap}
+  .plan-kicker>b{align-items:center;border-radius:.65rem;display:flex;font-size:.58rem;justify-content:center;line-height:1.3;min-height:2.5rem;padding:.4rem;text-align:center}
+  .plan-overview-meta{display:grid;gap:.4rem;grid-template-columns:repeat(2,minmax(0,1fr))}
+  .plan-overview-meta span{align-content:center;align-items:start;border-radius:.7rem;display:grid;gap:.22rem;justify-content:stretch;justify-items:start;min-height:3.35rem;padding:.65rem .7rem;text-align:left}
+  .plan-overview-meta b{color:#f5f8ff;font-size:.9rem;line-height:1}
+  .plan-overview-meta small{color:#7f899d;font-size:.48rem;font-weight:800;letter-spacing:.06em;line-height:1.3}
+  .plan-week-picker{width:100%}
+  .plan-schedule-dashboard,.plan-coach-panel{border-radius:.9rem}
+  .plan-schedule-dashboard>header,.plan-next-workout,.plan-coach-panel{padding:.8rem}
+  .plan-table-wrap{padding:.35rem .55rem}
+  .plan-schedule-table tr{background:rgb(255 255 255 / 2.5%);border-color:rgb(255 255 255 / 8%);border-radius:.85rem;box-shadow:none;gap:.5rem 1rem;grid-template-areas:"date status" "workout workout" "duration movements";grid-template-columns:minmax(0,1fr) auto;margin:.55rem 0;padding:.75rem}
+  .plan-schedule-table tbody tr.is-next,.plan-schedule-table tbody tr.is-active{background:linear-gradient(135deg,rgb(200 255 75 / 7%),rgb(91 230 210 / 3%));border-color:rgb(200 255 75 / 18%);box-shadow:inset 3px 0 #c8ff4b}
+  .plan-schedule-table td{min-width:0;padding:0}
+  .plan-schedule-table td::before{display:none}
+  .plan-schedule-table td:nth-child(1){align-items:center;display:flex;grid-area:date}
+  .plan-schedule-table td:nth-child(1) time{align-items:baseline;display:flex;gap:.35rem}
+  .plan-schedule-table td:nth-child(1) time strong{font-size:.72rem}
+  .plan-schedule-table td:nth-child(1) time strong::after{color:#667187;content:" ·"}
+  .plan-schedule-table td:nth-child(1) time span{font-size:.58rem;margin:0}
+  .plan-schedule-table td:nth-child(2){border-bottom:1px solid rgb(255 255 255 / 7%);display:block;grid-area:workout;padding:.15rem 0 .65rem}
+  .plan-schedule-table td:nth-child(2)>strong{font-size:.74rem;line-height:1.35}
+  .plan-schedule-table td:nth-child(2)>small{font-size:.58rem;line-height:1.45;margin-top:.22rem;overflow:visible;white-space:normal}
+  .plan-schedule-table td:nth-child(3){grid-area:duration}
+  .plan-schedule-table td:nth-child(4){grid-area:movements;justify-items:end;text-align:right}
+  .plan-schedule-table td:nth-child(3),.plan-schedule-table td:nth-child(4){color:#c4ccda;display:grid;font-size:.63rem;gap:.14rem;justify-content:initial}
+  .plan-schedule-table td:nth-child(3)::before,.plan-schedule-table td:nth-child(4)::before{color:#657086;display:block;font-size:.43rem;font-weight:850;letter-spacing:.08em;margin:0;text-transform:uppercase}
+  .plan-schedule-table td:nth-child(3)::before{content:"Duration"}
+  .plan-schedule-table td:nth-child(4)::before{content:"Movements"}
+  .plan-schedule-table td:nth-child(5){align-self:start;grid-area:status;justify-self:end}
+  .plan-table-status{font-size:.5rem;padding:.32rem .48rem}
+  .plan-next-exercises li{align-items:start;grid-template-columns:1.15rem minmax(0,1fr)}
+  .plan-next-exercises li>b,.plan-next-exercises .exercise-video-button{grid-column:2;justify-self:start}
+  .plan-coach-prompts{flex-wrap:nowrap;overflow-x:auto;padding-bottom:.25rem;scrollbar-width:none}
+  .plan-coach-prompts::-webkit-scrollbar{display:none}
+  .plan-coach-prompts button{flex:none;font-size:.65rem;min-height:2.5rem}
+  .plan-coach-panel{scroll-margin-top:4.5rem}
+  .plan-coach-conversation{min-height:5rem}
+  .plan-coach-empty{min-height:5rem}
+  .plan-coach-conversation article{font-size:.7rem;max-width:94%}
+  .plan-adjustment-proposal{padding:.75rem}
+  .plan-adjustment-proposal>header strong{font-size:.76rem}
+  .plan-adjustment-proposal>p{font-size:.62rem}
+  .plan-adjustment-proposal li{padding:.6rem}.plan-adjustment-proposal li>strong{font-size:.66rem}.plan-adjustment-proposal li>span{font-size:.59rem}
+  .plan-adjustment-proposal>div{grid-template-columns:minmax(0,1fr)}
+  .plan-adjustment-proposal .ui-button{font-size:.68rem;min-height:2.75rem;width:100%}
+  .plan-coach-composer textarea{min-height:3rem}
+  .plan-history-body{padding:.75rem}
+  .plan-history-summary{padding:.75rem}
+
+  .coach-page{height:calc(100dvh - 7.9rem - env(safe-area-inset-bottom));min-height:0;padding:0}
+  .coach-active .coach-voice-first-workspace{display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:auto auto;height:auto;min-height:100%;overflow:visible;padding:.5rem}
+  .coach-voice-home{min-height:clamp(23rem,48dvh,25rem);padding:1rem}
+  .coach-voice-home-copy{align-content:start}
+  .coach-voice-home h1{font-size:clamp(2.2rem,11vw,2.85rem);margin-top:.75rem;max-width:8ch}
+  .coach-voice-home-copy>p{font-size:.67rem;line-height:1.5;margin-top:.7rem;max-width:58%}
+  .coach-voice-home-action{bottom:1rem;left:1rem;min-height:3.55rem;width:calc(100% - 2rem)}
+  .coach-voice-home-action-icon{height:2.35rem;width:2.35rem}
+  .coach-voice-home-privacy,.coach-voice-home-listening{display:none}
+  .coach-voice-home-orbit{height:18rem;left:78%;top:47%;width:18rem}
+  .coach-voice-home-avatar{bottom:4%;height:68%;left:79%;opacity:.76}
+  .coach-active .coach-workspace .coach-chat-side.ui-card{height:calc(100dvh - 8rem);min-height:30rem;scroll-margin-top:4rem}
+  .coach-active .messages>article .message-body{max-width:92%}
+  .coach-suggestions{overflow-x:auto;scrollbar-width:none}
+  .coach-suggestions::-webkit-scrollbar{display:none}
+  .coach-suggestions button{font-size:.68rem;min-height:2.5rem}
+
+  .history-page{padding-inline:.75rem}
+  .history-header{align-items:start;display:grid;gap:.75rem}
+  .history-header p{max-width:none}
+  .history-baseline{grid-template-columns:minmax(0,1fr)}
+  .history-baseline-unlocks{grid-template-columns:minmax(0,1fr)}
+  .history-baseline-copy .ui-button{width:100%}
+  .history-progress-overview,.history-analysis-grid{grid-template-columns:minmax(0,1fr)}
+  .history-log-header{display:grid;gap:.75rem}
+  .history-filters{max-width:100%;overflow-x:auto;scrollbar-width:none}
+  .history-filters::-webkit-scrollbar{display:none}
+  .history-filters button{flex:none;font-size:.68rem;min-height:2.5rem}
+  .history-session summary{min-height:4.6rem}
+  .history-session-name strong{font-size:.72rem}
+  .history-load-chart{overflow-x:auto}
+
+  .workout-runner{padding-inline:.75rem}
+  .workout-command-header{padding:1rem}
+  .workout-command-header h1{font-size:clamp(2rem,11vw,2.7rem);overflow-wrap:anywhere}
+  .workout-live-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}
+  .workout-live-actions .ui-button{justify-content:center;width:100%}
+  .exercise-logger.ui-card{padding:.9rem}
+  .exercise-actions{display:grid;gap:.45rem;padding-left:2.55rem}
+  .exercise-actions .ui-button{width:100%}
+  .set-entry{grid-template-columns:minmax(0,1fr)}
+  .set-entry>.ui-field:nth-child(3),.set-entry>.ui-button{grid-column:auto}
+  .workout-coach-card.ui-card{grid-template-columns:2.2rem minmax(0,1fr)}
+  .workout-coach-card .ui-button{grid-column:1/-1;width:100%}
+  .finish-card.ui-card{grid-template-columns:minmax(0,1fr)}
+
+  .profile-settings{padding-inline:.75rem}
+  .profile-card,.onboarding-card,.auth-card.ui-card{border-radius:1rem;margin-top:1rem;padding:1rem}
+  .auth-shell,.onboarding-shell{align-items:flex-start;padding:max(1rem,env(safe-area-inset-top)) .75rem max(1rem,env(safe-area-inset-bottom))}
+  .form-row,.body-metrics,.readiness-basics,.readiness-ratings{grid-template-columns:minmax(0,1fr)}
+  .readiness-form-card.ui-card{margin-inline:0}
+}
+
+@media(max-width:420px){
+  .workout-live-actions{grid-template-columns:minmax(0,1fr)}
+  .today-session-metrics b{font-size:1rem}
+  .today-session-metrics small{font-size:.43rem}
+  .history-lifetime-metrics{grid-template-columns:minmax(0,1fr)}
+  .history-lifetime-metrics>div{border-left:0}
+}
+
+@media(max-width:340px){
+  .plan-kicker{grid-template-columns:minmax(0,1fr)}
+  .plan-kicker>span{grid-column:auto}
+  .plan-kicker>b{justify-content:flex-start;min-height:2.35rem;padding-inline:.65rem;text-align:left}
+}
+
+/* One-click live coaching keeps the camera and the existing conversation together. */
+.coach-active .coach-voice-first-workspace.has-live-coach{align-items:stretch;justify-items:stretch}
+.coach-active .coach-voice-first-workspace.has-live-coach>.live-voice-inline.live-voice-panel{
+  border-radius:1.35rem 0 0 1.35rem;
+  grid-column:1;
+  grid-row:1;
+  height:100%;
+  max-width:none;
+  min-height:0;
+  width:100%;
+}
+.coach-active .coach-voice-first-workspace.has-live-coach>.coach-chat-side.is-live-chat.ui-card{grid-column:2;grid-row:1}
+.live-voice-inline.is-visual-only{grid-template-rows:auto minmax(0,1fr)}
+.live-voice-inline.is-visual-only .live-coach-stage,
+.live-voice-inline.is-visual-only .live-coach-stage.has-member-camera{
+  grid-template-columns:minmax(0,1fr);
+  grid-template-rows:minmax(0,1fr);
+}
+.coach-voice-home-live.live-voice-panel{grid-template-columns:minmax(17rem,.88fr) minmax(15rem,1.12fr);grid-template-rows:minmax(0,1fr);padding:clamp(1.5rem,3.4vw,3.25rem)}
+.coach-voice-home-live .coach-voice-home-copy{min-width:0}
+.coach-voice-home-live-actions{display:grid;gap:.55rem;grid-template-columns:minmax(0,1fr) auto;width:min(100%,25rem)}
+.coach-voice-home-live-primary,.coach-voice-home-live-end{align-items:center;border-radius:.9rem;display:flex;font-size:.72rem;font-weight:850;gap:.6rem;justify-content:center;min-height:4rem;padding:.65rem .9rem}
+.coach-voice-home-live-primary{background:#101d1b;border:1px solid rgb(200 255 75 / 35%);color:#dfff8d}.coach-voice-home-live-primary.is-paused{background:linear-gradient(180deg,#d3ff5a,#b9ed3a);border-color:#ddff88;color:#09120d}.coach-voice-home-live-primary:disabled{cursor:wait;opacity:.68}
+.coach-voice-home-live-end{background:rgb(255 91 120 / 8%);border:1px solid rgb(255 91 120 / 23%);color:#ff9caf;min-width:4.5rem}
+.coach-voice-home-live-primary:not(:disabled):hover,.coach-voice-home-live-primary:not(:disabled):focus-visible,.coach-voice-home-live-end:hover,.coach-voice-home-live-end:focus-visible{filter:brightness(1.08);outline:0}
+.coach-voice-home-provider-preview{inset:0;overflow:hidden;position:absolute;z-index:1}
+.coach-voice-home-provider-preview>audio{display:none}
+.coach-voice-home-live-video{object-fit:cover;object-position:center 28%;z-index:2}
+.coach-voice-home-provider-preview .coach-voice-home-avatar{transition:opacity .25s ease}
+.coach-voice-home-provider-preview .coach-voice-home-avatar.is-avatar-ready{opacity:0}
+.coach-voice-home-live-visual.has-member-camera .coach-voice-home-provider-preview{background:#07111b;border:1px solid rgb(255 255 255 / 26%);border-radius:.85rem;bottom:4.4rem;box-shadow:0 .8rem 2.5rem rgb(0 0 0 / 58%);height:clamp(7rem,32%,10rem);inset:auto .75rem 4.4rem auto;width:clamp(5.25rem,23%,7.5rem);z-index:6}
+.coach-voice-home-live-visual.has-member-camera .coach-voice-home-provider-preview .coach-voice-home-avatar{bottom:-10%;height:110%}
+.coach-voice-home-live-visual.has-member-camera .coach-voice-home-listening{left:auto;right:.8rem;transform:none;z-index:7}
+.coach-active .coach-workspace .coach-chat-side.is-live-chat.ui-card{
+  border-color:rgb(91 230 210 / 22%);
+  border-left:0;
+  box-shadow:inset 0 1px rgb(255 255 255 / 5%),inset .2rem 0 rgb(91 230 210 / 8%);
+}
+.coach-chat-side.is-live-chat .chat-header{border-bottom-color:rgb(91 230 210 / 16%)!important}
+.coach-chat-side.is-live-chat .chat-header-copy>small{color:#c8ff4b}
+.live-chat-end{
+  background:rgb(255 255 255 / 5%);
+  border:1px solid rgb(255 255 255 / 12%);
+  border-radius:.6rem;
+  color:#cbd4e1;
+  font-size:.52rem;
+  font-weight:800;
+  min-height:2rem;
+  padding:.4rem .55rem;
+  white-space:nowrap;
+}
+.live-chat-end:hover,.live-chat-end:focus-visible{background:rgb(255 91 120 / 11%);border-color:rgb(255 91 120 / 24%);color:#ffafbd;outline:0}
+.is-live-chat .live-transcript-message .message-body>small{color:#70ddce;display:block;font-size:.46rem;font-weight:800;letter-spacing:.05em;padding:.25rem .35rem;text-transform:uppercase}
+.is-live-chat .live-transcript-message .message-body>p{border-color:rgb(91 230 210 / 28%);box-shadow:0 .6rem 1.6rem rgb(0 0 0 / 14%)}
+.live-chat-listening{align-items:center;color:#aab6c8;display:flex;font-size:.62rem;font-weight:700;gap:.55rem;justify-content:center;margin:auto;min-height:5rem;padding:1rem;text-align:center}
+.live-chat-listening>i{animation:coach-voice-home-online 1.8s ease-in-out infinite;background:#c8ff4b;border-radius:50%;box-shadow:0 0 0 .3rem rgb(200 255 75 / 9%);flex:none;height:.45rem;width:.45rem}
+.coach-chat-side.is-live-chat .chat-composer,
+.coach-chat-side.is-live-chat .voice-experience-status,
+.coach-chat-side.is-live-chat .voice-error{display:none}
+.live-chat-footer{align-items:center;background:rgb(91 230 210 / 5%);border-top:1px solid rgb(91 230 210 / 13%);color:#a8b8c7;display:flex;flex:none;font-size:.56rem;font-weight:700;gap:.7rem;justify-content:center;line-height:1.4;min-height:3.65rem;padding:.65rem 1rem;text-align:center}
+.live-chat-footer .live-voice-wave{color:#c8ff4b;display:flex;gap:.13rem;height:1rem}
+.live-voice-header-actions{align-items:center;display:flex;gap:.45rem}
+.live-voice-header-actions>button{align-items:center;background:rgb(255 255 255 / 5%);border:1px solid rgb(255 255 255 / 10%);border-radius:.65rem;color:#c5cede;display:flex;font-size:.55rem;font-weight:800;gap:.4rem;min-height:2.4rem;padding:.5rem .65rem;white-space:nowrap}
+.live-voice-header-actions>button:hover,.live-voice-header-actions>button:focus-visible{background:rgb(255 255 255 / 9%);color:#fff;outline:0}
+.live-voice-header-actions .live-voice-pause-button{border-color:rgb(200 255 75 / 18%);color:#d8efac}
+.live-voice-header-actions .live-voice-pause-button.is-paused{background:rgb(200 255 75 / 12%);border-color:rgb(200 255 75 / 32%);color:#d9ff78}
+
+@media(max-width:900px){
+  .coach-active .coach-voice-first-workspace.has-live-coach{
+    grid-template-rows:minmax(24rem,48dvh) minmax(28rem,52dvh);
+    height:auto;
+  }
+  .coach-active .coach-voice-first-workspace.has-live-coach>.live-voice-inline.live-voice-panel{
+    border-radius:1.15rem 1.15rem 0 0;
+    grid-column:1;
+    grid-row:1;
+    height:100%;
+    min-height:0;
+  }
+  .coach-active .coach-voice-first-workspace.has-live-coach>.coach-chat-side.is-live-chat.ui-card{
+    border-left:1px solid rgb(91 230 210 / 22%);
+    grid-column:1;
+    grid-row:2;
+    height:100%;
+    min-height:28rem;
+  }
+  .coach-voice-home-live.live-voice-panel{grid-template-columns:minmax(16rem,.9fr) minmax(15rem,1.1fr);padding:1.5rem}
+}
+
+@media(max-width:600px){
+  .coach-active .coach-voice-first-workspace.has-live-coach{grid-template-rows:minmax(22rem,48dvh) minmax(28rem,52dvh)}
+  .coach-voice-home-live.live-voice-panel{display:block;padding:1.35rem}
+  .coach-voice-home-live-actions{bottom:2.5rem;left:1.25rem;position:absolute;width:calc(100% - 2.5rem);z-index:8}
+  .coach-voice-home-live .coach-voice-home-privacy{z-index:8}
+  .coach-voice-home-live-primary,.coach-voice-home-live-end{border-radius:.8rem;min-height:4rem}
+  .coach-voice-home-live-visual{inset:0;position:absolute}
+  .coach-voice-home-live-visual.has-member-camera .coach-voice-home-provider-preview{bottom:6.85rem;height:6.7rem;width:5rem}
+  .coach-voice-home-live-visual.has-member-camera .coach-voice-home-listening{bottom:7.3rem;right:6.8rem}
+  .live-chat-end{font-size:.48rem;padding-inline:.45rem}
+  .live-voice-header-actions{gap:.3rem}
+  .live-voice-header-actions>button{font-size:.48rem;gap:.28rem;min-height:2.25rem;padding:.42rem .5rem}
+  .live-voice-header-actions .live-voice-back-button>span{display:none}
+}
+
+@media(prefers-reduced-motion:reduce){.coach-voice-home-provider-preview .coach-voice-home-avatar{transition:none}}
+
+/* Plan analytics — a scan-first dashboard with details available on demand. */
+.plan-page{max-width:80rem}
+.plan-week-summary{padding:.85rem 0 .65rem}
+.plan-week-summary>p{max-width:31rem}
+.plan-insights-grid{display:grid;gap:.75rem;grid-template-columns:minmax(0,1.65fr) minmax(13rem,.9fr) minmax(10rem,.62fr);margin:.55rem 0 .85rem}
+.plan-insights-grid>article{background:linear-gradient(145deg,rgb(20 27 42 / 98%),rgb(8 13 24 / 98%));border:1px solid rgb(255 255 255 / 9%);border-radius:1rem;box-shadow:0 1rem 2.5rem rgb(0 0 0 / 16%);min-height:12.2rem;overflow:hidden;padding:1rem;position:relative}
+.plan-insights-grid>article::before{background:radial-gradient(circle,rgb(200 255 75 / 13%),transparent 68%);content:"";height:9rem;pointer-events:none;position:absolute;right:-3.5rem;top:-4.5rem;width:9rem}
+.plan-insights-grid article>header{align-items:start;display:flex;gap:1rem;justify-content:space-between;position:relative;z-index:1}
+.plan-insights-grid article>header span{color:#768297;font-size:.48rem;font-weight:850;letter-spacing:.11em;text-transform:uppercase}
+.plan-insights-grid article>header strong{color:#f5f8fc;display:block;font-family:var(--ui-font-display);font-size:1.2rem;letter-spacing:-.04em;margin-top:.25rem;text-transform:none}
+.plan-insights-grid article>header strong small{color:#768297;font-family:var(--ui-font-sans);font-size:.46rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase}
+.plan-load-duration{background:rgb(91 230 210 / 8%);border:1px solid rgb(91 230 210 / 15%);border-radius:99px;color:#7ce8d8!important;letter-spacing:0!important;padding:.35rem .5rem;text-transform:none!important;white-space:nowrap}
+.plan-load-chart{align-items:end;display:flex;gap:clamp(.5rem,2vw,1.1rem);height:6.8rem;justify-content:space-around;margin-top:.65rem;padding:0 .2rem}
+.plan-load-day{align-items:center;display:grid;gap:.25rem;grid-template-rows:.8rem minmax(0,1fr) .75rem;height:100%;justify-items:center;min-width:1.1rem}
+.plan-load-value{color:#657187;font-size:.45rem;font-weight:850;opacity:0;transition:opacity .16s ease}
+.plan-load-day:hover .plan-load-value,.plan-load-day.is-primary .plan-load-value{opacity:1}
+.plan-load-track{align-items:end;background:rgb(255 255 255 / 4%);border-radius:99px;display:flex;height:100%;overflow:hidden;padding:.13rem;width:.72rem}
+.plan-load-track i{background:linear-gradient(180deg,#596577,#343d4d);border-radius:99px;display:block;height:var(--plan-load);width:100%}
+.plan-load-track i.is-completed{background:linear-gradient(180deg,#d8ff76,#91c733)}
+.plan-load-track i.is-in_progress,.plan-load-day.is-primary .plan-load-track i{background:linear-gradient(180deg,#79f5e1,#38af9f);box-shadow:0 0 .8rem rgb(91 230 210 / 38%)}
+.plan-load-day>strong{color:#737f94;font-size:.5rem;text-transform:uppercase}
+.plan-load-day.is-primary>strong{color:#cfff5e}
+.plan-load-card>footer{align-items:center;border-top:1px solid rgb(255 255 255 / 6%);color:#6f7b90;display:flex;font-size:.47rem;gap:.4rem;margin-top:.4rem;padding-top:.55rem}
+.plan-load-card>footer i{background:#5be6d2;border-radius:50%;box-shadow:0 0 .55rem rgb(91 230 210 / 55%);height:.35rem;width:.35rem}
+.plan-focus-card>header{display:grid!important;gap:.1rem!important}
+.plan-focus-bars{display:grid;gap:.65rem;margin-top:1.05rem}
+.plan-focus-bars>div{display:grid;gap:.3rem}
+.plan-focus-bars span{align-items:center;color:#aab3c2;display:flex;font-size:.5rem;justify-content:space-between}.plan-focus-bars span b{font-weight:750}.plan-focus-bars span small{color:#657086;font-size:.45rem}
+.plan-focus-bars>div>i{background:rgb(255 255 255 / 5%);border-radius:99px;display:block;height:.32rem;overflow:hidden}.plan-focus-bars>div>i>b{background:linear-gradient(90deg,#c8ff4b,#89c943);border-radius:inherit;display:block;height:100%;min-width:.3rem}.plan-focus-bars>div>i>b.tone-2{background:linear-gradient(90deg,#5be6d2,#329f9a)}.plan-focus-bars>div>i>b.tone-3{background:linear-gradient(90deg,#9f8cff,#6659b5)}.plan-focus-bars>div>i>b.tone-4{background:linear-gradient(90deg,#ffb65d,#c57b32)}
+.plan-progress-card{align-items:center;display:flex;flex-direction:column;text-align:center}
+.plan-progress-card>header{width:100%}.plan-progress-card>header>b{color:#8f9bae;font-size:.58rem}
+.plan-progress-ring{align-items:center;background:conic-gradient(#c8ff4b var(--plan-progress),rgb(255 255 255 / 7%) 0);border-radius:50%;display:flex;height:6.25rem;justify-content:center;margin:auto;position:relative;width:6.25rem}
+.plan-progress-ring::before{background:#0e1422;border:1px solid rgb(255 255 255 / 6%);border-radius:50%;content:"";inset:.5rem;position:absolute}
+.plan-progress-ring>span{display:grid;gap:.08rem;position:relative}.plan-progress-ring strong{color:#f5f8ff;font-family:var(--ui-font-display);font-size:1.25rem;letter-spacing:-.05em}.plan-progress-ring small{color:#748095;font-size:.4rem;font-weight:850;letter-spacing:.08em;text-transform:uppercase}
+.plan-progress-card>footer{color:#748095;font-size:.47rem;margin-top:.5rem}
+.plan-schedule-dashboard>header{align-items:center}
+.plan-schedule-legend{align-items:center;color:#8e99ac;display:flex;font-size:.47rem;font-weight:800;gap:.35rem}.plan-schedule-legend i{background:#c8ff4b;border-radius:50%;box-shadow:0 0 .55rem rgb(200 255 75 / 45%);height:.38rem;width:.38rem}
+.plan-schedule-details{border-bottom:1px solid rgb(255 255 255 / 7%)}
+.plan-schedule-details>summary{align-items:center;color:#aab4c4;cursor:pointer;display:grid;font-size:.58rem;font-weight:800;gap:.65rem;grid-template-columns:auto minmax(0,1fr) auto;list-style:none;padding:.72rem 1.15rem;transition:background .16s ease}
+.plan-schedule-details>summary::-webkit-details-marker,.plan-exercise-details>summary::-webkit-details-marker{display:none}
+.plan-schedule-details>summary:hover,.plan-schedule-details>summary:focus-visible{background:rgb(255 255 255 / 3%);outline:0}.plan-schedule-details>summary span{align-items:center;display:flex;gap:.45rem}.plan-schedule-details>summary span i{color:#6fe4d3;font-size:.7rem;font-style:normal}.plan-schedule-details>summary small{color:#677287;font-size:.49rem;font-weight:600}.plan-schedule-details>summary>b{color:#7b8799;transition:transform .18s ease}.plan-schedule-details[open]>summary>b{transform:rotate(180deg)}
+.plan-schedule-details[open]>summary{background:rgb(255 255 255 / 2%);border-bottom:1px solid rgb(255 255 255 / 6%)}
+.plan-next-workout{border-top:0;margin:0;padding:1.2rem 1.15rem}
+.plan-next-workout>header{background:linear-gradient(105deg,rgb(200 255 75 / 8%),rgb(91 230 210 / 4%));border:1px solid rgb(200 255 75 / 11%);border-radius:.8rem;padding:.85rem}
+.plan-next-workout h3{font-size:1.3rem}.plan-next-workout .ui-button{box-shadow:0 .55rem 1.4rem rgb(107 152 24 / 18%)}
+.plan-next-exercises{margin-top:.65rem}.plan-next-exercises li{background:rgb(255 255 255 / 2.5%)}
+.plan-exercise-details{border-top:1px solid rgb(255 255 255 / 6%);margin-top:.65rem;padding-top:.6rem}
+.plan-exercise-details>summary{color:#93a0b3;cursor:pointer;font-size:.52rem;font-weight:750;list-style:none;text-align:center}.plan-exercise-details>summary b{display:inline-block;margin-left:.25rem;transition:transform .18s ease}.plan-exercise-details[open]>summary b{transform:rotate(180deg)}
+.plan-coach-conversation:has(.plan-coach-empty){min-height:4.5rem}.plan-coach-empty{min-height:4.5rem}.plan-coach-empty p{max-width:13rem}
+
+@media(max-width:1120px){
+  .plan-insights-grid{grid-template-columns:minmax(0,1.5fr) minmax(13rem,1fr) minmax(10rem,.7fr)}
+}
+@media(max-width:760px){
+  .plan-insights-grid{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+  .plan-load-card{grid-column:1/-1}
+  .plan-insights-grid>article{min-height:11.5rem}
+  .plan-progress-ring{height:5.8rem;width:5.8rem}
+  .plan-week-summary>p{display:none}
+}
+@media(max-width:480px){
+  .plan-insights-grid{grid-template-columns:minmax(0,1fr)}
+  .plan-insights-grid>article{min-height:0}
+  .plan-load-card{grid-column:auto}
+  .plan-load-chart{height:6.4rem}
+  .plan-progress-card{min-height:11.5rem!important}
+  .plan-schedule-details>summary{grid-template-columns:auto 1fr}.plan-schedule-details>summary small{display:none}.plan-schedule-details>summary>b{justify-self:end}
+  .plan-next-workout>header{padding:.75rem}
 }

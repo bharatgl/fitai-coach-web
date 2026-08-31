@@ -16,7 +16,8 @@ test("builds a privacy-limited multimodal camera analysis request", () => {
   const serialized = JSON.stringify(contents);
 
   assert.match(serialized, /physique/);
-  assert.match(serialized, /inlineData/);
+  assert.match(serialized, /live-camera-frame\.jpg/);
+  assert.match(serialized, /image\/jpeg/);
   assert.match(serialized, /jpeg-data/);
   assert.match(liveCameraAnalysisSystemPrompt, /exact body-fat percentage/);
   assert.match(liveCameraAnalysisSystemPrompt, /face or partial torso/);

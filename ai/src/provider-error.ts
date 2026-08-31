@@ -4,8 +4,9 @@ export class AiProviderError extends Error {
   constructor(
     message: string,
     readonly reason: "authentication" | "rate_limit" | "unavailable",
+    options?: ErrorOptions,
   ) {
-    super(message);
+    super(message, options);
     this.name = "AiProviderError";
   }
 }

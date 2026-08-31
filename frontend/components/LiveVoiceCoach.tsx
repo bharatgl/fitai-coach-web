@@ -3,6 +3,8 @@
 import type {
   CoachThreadDetail,
   ElevenLabsCoachSessionResponse,
+  GeneratedCoachPdfResponse,
+  LiveAttachmentReviewResponse,
   LiveCoachAvatarTokenResponse,
   LiveCameraAnalysisFocus,
   LiveCameraAnalysisResponse,
@@ -26,11 +28,22 @@ import {
 
 type LiveState = "idle" | "connecting" | "listening" | "speaking" | "ending" | "error";
 type ConnectionStage = "microphone" | "avatar" | "authorizing" | "elevenlabs" | "socket" | "setup" | "reconnecting";
+export type LiveCoachActivity = {
+  state: LiveState;
+  label: string;
+  isPaused: boolean;
+  userCaption: string;
+  coachCaption: string;
+  error: string;
+};
 
 type LiveVoiceCoachProps = {
   threadId: string;
   activeSessionId: string | null;
   movementSignal?: LiveMovementSignal | null;
+  autoStart?: boolean;
+  visualOnly?: boolean;
+  onActivityChange?: (activity: LiveCoachActivity | null) => void;
   onThreadUpdate: (detail: CoachThreadDetail) => void;
   onClose: () => void;
 };
@@ -130,16 +143,22 @@ export function LiveVoiceCoach({
   threadId,
   activeSessionId,
   movementSignal = null,
+  autoStart = false,
+  visualOnly = false,
+  onActivityChange,
   onThreadUpdate,
   onClose,
 }: LiveVoiceCoachProps) {
   const [state, setState] = useState<LiveState>("idle");
   const [connectionStage, setConnectionStage] = useState<ConnectionStage>("microphone");
   const [error, setError] = useState("");
+  const [persistenceIssue, setPersistenceIssue] = useState("");
   const [avatarIssue, setAvatarIssue] = useState("");
   const [avatarReady, setAvatarReady] = useState(false);
   const [userCaption, setUserCaption] = useState("");
   const [coachCaption, setCoachCaption] = useState("");
+  const [isPaused, setIsPaused] = useState(false);
+  const [cameraActive, setCameraActive] = useState(false);
   const [cameraMovementSignal, setCameraMovementSignal] = useState<LiveMovementSignal | null>(null);
   const socketRef = useRef<WebSocket | null>(null);
   const elevenLabsConversationRef = useRef<ElevenLabsConversation | null>(null);
@@ -171,6 +190,9 @@ export function LiveVoiceCoach({
   const lastMovementSignalIdRef = useRef("");
   const avatarReadyRef = useRef(false);
   const cameraCaptureRef = useRef<CaptureLiveCameraFrame | null>(null);
+  const autoStartAttemptedRef = useRef(false);
+  const pausedRef = useRef(false);
+  const turnSaveQueueRef = useRef<Promise<void>>(Promise.resolve());
 
   const registerCameraCapture = useCallback((capture: CaptureLiveCameraFrame | null) => {
     cameraCaptureRef.current = capture;
@@ -297,6 +319,8 @@ export function LiveVoiceCoach({
       closeResources();
       setUserCaption("");
       setCoachCaption("");
+      pausedRef.current = false;
+      setIsPaused(false);
       setAvatarIssue("");
       setError("");
       setState("idle");
@@ -333,6 +357,7 @@ export function LiveVoiceCoach({
   }, [cameraMovementSignal, movementSignal]);
 
   function playAudio(data: string, mimeType?: string) {
+    if (pausedRef.current) return;
     const avatarClient = avatarClientRef.current;
     if (avatarClient) {
       avatarClient.sendAudioData(pcmForAvatar(data, mimeType));
@@ -359,27 +384,45 @@ export function LiveVoiceCoach({
     setState("speaking");
   }
 
-  async function saveCompletedTurn() {
+  function saveCompletedTurn() {
     const userTranscript = userTurnRef.current.trim();
     const assistantTranscript = coachTurnRef.current.trim();
     userTurnRef.current = "";
     coachTurnRef.current = "";
-    if (!userTranscript || !assistantTranscript) return;
-    try {
-      const detail = await apiRequest<CoachThreadDetail>("/v1/coach/live-turns", {
-        method: "POST",
-        body: JSON.stringify({
-          threadId,
-          sessionId: activeSessionId ?? undefined,
-          userTranscript,
-          assistantTranscript,
-          provider: voiceProviderRef.current,
-        }),
-      });
-      if (mountedRef.current) onThreadUpdate(detail);
-    } catch {
-      // The live session should continue even if transcript persistence briefly fails.
-    }
+    if (!userTranscript || !assistantTranscript) return Promise.resolve();
+    const turn = {
+      clientTurnId: crypto.randomUUID(),
+      threadId,
+      sessionId: activeSessionId ?? undefined,
+      userTranscript,
+      assistantTranscript,
+      provider: voiceProviderRef.current,
+    };
+    const persist = async () => {
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        try {
+          const detail = await apiRequest<CoachThreadDetail>("/v1/coach/live-turns", {
+            method: "POST",
+            body: JSON.stringify(turn),
+          });
+          if (mountedRef.current) {
+            onThreadUpdate(detail);
+            setUserCaption("");
+            setCoachCaption("");
+            setPersistenceIssue("");
+          }
+          return;
+        } catch {
+          if (attempt === 0) continue;
+          if (mountedRef.current) {
+            setPersistenceIssue("The conversation continued, but the latest turn could not be saved. Please retry after reconnecting.");
+          }
+        }
+      }
+    };
+    const queued = turnSaveQueueRef.current.then(persist, persist);
+    turnSaveQueueRef.current = queued;
+    return queued;
   }
 
   async function answerToolCalls(calls: FunctionCall[]) {
@@ -391,6 +434,22 @@ export function LiveVoiceCoach({
           id: call.id,
           name: call.name,
           response: { result: await analyzeCurrentCamera(call.args?.focus) },
+        };
+      }
+      if (call.name === "review_recent_attachment") {
+        return {
+          id: call.id,
+          name: call.name,
+          response: { result: await reviewRecentAttachment(call.args?.question) },
+        };
+      }
+      if (call.name === "create_pdf_document") {
+        return {
+          id: call.id,
+          name: call.name,
+          response: {
+            result: await createPdfDocument(call.args?.title, call.args?.content),
+          },
         };
       }
       const query = activeSessionId ? `?sessionId=${encodeURIComponent(activeSessionId)}` : "";
@@ -407,10 +466,44 @@ export function LiveVoiceCoach({
     }));
   }
 
+  async function reviewRecentAttachment(question: unknown) {
+    return apiRequest<LiveAttachmentReviewResponse>("/v1/coach/live-attachment-review", {
+      method: "POST",
+      body: JSON.stringify({
+        threadId,
+        sessionId: activeSessionId ?? undefined,
+        question: typeof question === "string" && question.trim()
+          ? question.trim()
+          : "Review the most recently uploaded file and explain the important findings.",
+      }),
+    });
+  }
+
+  async function createPdfDocument(titleValue: unknown, contentValue: unknown) {
+    const title = typeof titleValue === "string" && titleValue.trim()
+      ? titleValue.trim()
+      : "ForgeFit Coach Document";
+    const content = typeof contentValue === "string" ? contentValue.trim() : "";
+    if (!content) {
+      throw new Error("Complete document content is required before creating the PDF.");
+    }
+    const response = await apiRequest<GeneratedCoachPdfResponse>("/v1/coach/generated-pdfs", {
+      method: "POST",
+      body: JSON.stringify({ threadId, title, content }),
+    });
+    if (mountedRef.current) onThreadUpdate(response.thread);
+    return {
+      status: "created",
+      name: response.attachment.name,
+      message: "The PDF is ready and its download is visible in the chat.",
+    };
+  }
+
   function handleServerMessage(
     message: LiveServerMessage,
     socket: WebSocket,
     initialHistory: LiveCoachTokenResponse["initialHistory"],
+    sessionOpening: string,
     resumed: boolean,
   ) {
     const resumption = message.sessionResumptionUpdate;
@@ -422,14 +515,22 @@ export function LiveVoiceCoach({
       connectedAtRef.current = Date.now();
       clearSetupTimer();
       setError("");
-      if (!resumed && initialHistory.length) {
+      if (!resumed) {
         socket.send(JSON.stringify({
           clientContent: {
-            turns: initialHistory.map((turn) => ({
-              role: turn.role,
-              parts: [{ text: turn.text }],
-            })),
-            turnComplete: false,
+            turns: [
+              ...initialHistory.map((turn) => ({
+                role: turn.role,
+                parts: [{ text: turn.text }],
+              })),
+              {
+                role: "user",
+                parts: [{
+                  text: `Begin this live session now. Say this exact opening line and nothing else: ${JSON.stringify(sessionOpening)}`,
+                }],
+              },
+            ],
+            turnComplete: true,
           },
         }));
       }
@@ -498,7 +599,12 @@ export function LiveVoiceCoach({
     silent.connect(audioContext.destination);
     capture.port.onmessage = (event: MessageEvent<ArrayBuffer>) => {
       const socket = socketRef.current;
-      if (!setupCompleteRef.current || !socket || socket.readyState !== WebSocket.OPEN) return;
+      if (
+        pausedRef.current ||
+        !setupCompleteRef.current ||
+        !socket ||
+        socket.readyState !== WebSocket.OPEN
+      ) return;
       socket.send(JSON.stringify({
         realtimeInput: {
           audio: { data: bytesToBase64(event.data), mimeType: "audio/pcm;rate=16000" },
@@ -623,10 +729,14 @@ export function LiveVoiceCoach({
         void audioElement.play().catch(() => undefined);
       });
       client.on("speaking", () => {
-        if (mountedRef.current && avatarClientRef.current === client) setState("speaking");
+        if (mountedRef.current && avatarClientRef.current === client && !pausedRef.current) {
+          setState("speaking");
+        }
       });
       client.on("silent", () => {
-        if (mountedRef.current && avatarClientRef.current === client) setState("listening");
+        if (mountedRef.current && avatarClientRef.current === client && !pausedRef.current) {
+          setState("listening");
+        }
       });
       const failAvatar = (message?: string) => {
         if (!mountedRef.current || avatarClientRef.current !== client) return;
@@ -718,9 +828,8 @@ export function LiveVoiceCoach({
     elevenLabsConnectionIdRef.current = connectionId;
     voiceProviderRef.current = "elevenlabs";
     setConnectionStage(reconnecting ? "reconnecting" : "authorizing");
-    const credentials = await apiRequest<ElevenLabsCoachSessionResponse>(
-      "/v1/coach/elevenlabs-session",
-      {
+    const [credentials, { Conversation }] = await Promise.all([
+      apiRequest<ElevenLabsCoachSessionResponse>("/v1/coach/elevenlabs-session", {
         method: "POST",
         signal: AbortSignal.timeout(40_000),
         body: JSON.stringify({
@@ -728,11 +837,11 @@ export function LiveVoiceCoach({
           sessionId: activeSessionId ?? undefined,
           timeZone: browserTimeZone(),
         }),
-      },
-    );
+      }),
+      import("@elevenlabs/client"),
+    ]);
     if (!shouldRunRef.current) return;
     setConnectionStage("elevenlabs");
-    const { Conversation } = await import("@elevenlabs/client");
     const conversation = await Conversation.startSession({
       signedUrl: credentials.signedUrl,
       connectionType: "websocket",
@@ -740,7 +849,10 @@ export function LiveVoiceCoach({
       dynamicVariables: credentials.dynamicVariables,
       onConversationCreated: (createdConversation) => {
         elevenLabsConversationRef.current = createdConversation;
-        createdConversation.setVolume({ volume: avatarReadyRef.current ? 0 : 1 });
+        createdConversation.setMicMuted(pausedRef.current);
+        createdConversation.setVolume({
+          volume: pausedRef.current || avatarReadyRef.current ? 0 : 1,
+        });
       },
       clientTools: {
         get_live_workout_snapshot: async () => {
@@ -751,6 +863,14 @@ export function LiveVoiceCoach({
         },
         analyze_camera_view: async (parameters: { focus?: unknown }) => {
           return JSON.stringify(await analyzeCurrentCamera(parameters?.focus));
+        },
+        review_recent_attachment: async (parameters: { question?: unknown }) => {
+          return JSON.stringify(await reviewRecentAttachment(parameters?.question));
+        },
+        create_pdf_document: async (parameters: { title?: unknown; content?: unknown }) => {
+          return JSON.stringify(
+            await createPdfDocument(parameters?.title, parameters?.content),
+          );
         },
       },
       onConnect: () => {
@@ -773,7 +893,7 @@ export function LiveVoiceCoach({
         armElevenLabsResponseTimer();
       },
       onModeChange: ({ mode }) => {
-        if (mountedRef.current && shouldRunRef.current) {
+        if (mountedRef.current && shouldRunRef.current && !pausedRef.current) {
           setState(mode === "speaking" ? "speaking" : "listening");
         }
       },
@@ -789,12 +909,12 @@ export function LiveVoiceCoach({
         }
         clearElevenLabsResponseTimer();
         coachTurnRef.current = message.trim();
-        setUserCaption("");
         setCoachCaption(coachTurnRef.current);
         void saveCompletedTurn();
       },
       onAudio: (base64Audio) => {
         clearElevenLabsResponseTimer();
+        if (pausedRef.current) return;
         const avatarClient = avatarClientRef.current;
         if (!avatarClient || !avatarReadyRef.current) return;
         avatarClient.sendAudioData(pcmForAvatar(base64Audio, "audio/pcm;rate=16000"));
@@ -836,7 +956,10 @@ export function LiveVoiceCoach({
       return;
     }
     elevenLabsConversationRef.current = conversation;
-    conversation.setVolume({ volume: avatarReadyRef.current ? 0 : 1 });
+    conversation.setMicMuted(pausedRef.current);
+    conversation.setVolume({
+      volume: pausedRef.current || avatarReadyRef.current ? 0 : 1,
+    });
     const pendingMovement = pendingMovementSignalRef.current;
     if (pendingMovement) {
       conversation.sendContextualUpdate(movementSignalText(pendingMovement));
@@ -860,6 +983,12 @@ export function LiveVoiceCoach({
     if (!shouldRunRef.current) {
       stream.getTracks().forEach((track) => track.stop());
       return;
+    }
+    if (pausedRef.current) {
+      stream.getAudioTracks().forEach((track) => {
+        track.enabled = false;
+      });
+      await audioContext.suspend().catch(() => undefined);
     }
     streamRef.current = stream;
     await connectSocket(false);
@@ -930,6 +1059,32 @@ export function LiveVoiceCoach({
                     required: ["focus"],
                   },
                 },
+                {
+                  name: "review_recent_attachment",
+                  description: "Review the actual bytes of the most recently uploaded file in this conversation before answering questions about an attachment, PDF, document, image, scan, or report.",
+                  parameters: {
+                    type: "OBJECT",
+                    properties: {
+                      question: { type: "STRING" },
+                    },
+                    required: ["question"],
+                  },
+                },
+                {
+                  name: "create_pdf_document",
+                  description: "Create and attach a downloadable PDF when the member asks to generate, export, save, or download a PDF.",
+                  parameters: {
+                    type: "OBJECT",
+                    properties: {
+                      title: { type: "STRING" },
+                      content: {
+                        type: "STRING",
+                        description: "The complete polished document content, with simple Markdown headings and lists when useful.",
+                      },
+                    },
+                    required: ["title", "content"],
+                  },
+                },
               ],
             }],
           },
@@ -943,6 +1098,7 @@ export function LiveVoiceCoach({
               message,
               socket,
               credentials.initialHistory ?? [],
+              credentials.sessionOpening,
               Boolean(resumeHandle),
             );
           })
@@ -977,6 +1133,8 @@ export function LiveVoiceCoach({
     setAvatarIssue("");
     setUserCaption("");
     setCoachCaption("");
+    pausedRef.current = false;
+    setIsPaused(false);
     setupCompleteRef.current = false;
     resumptionHandleRef.current = null;
     reconnectAttemptRef.current = 0;
@@ -985,6 +1143,8 @@ export function LiveVoiceCoach({
     setConnectionStage("microphone");
     setState("connecting");
     try {
+      // Video is optional and must never delay the voice channel.
+      void connectAvatar();
       try {
         await connectElevenLabs(false);
       } catch {
@@ -992,7 +1152,6 @@ export function LiveVoiceCoach({
         setAvatarIssue("Your coach is reconnecting. The conversation will continue automatically.");
         await startGeminiFallback();
       }
-      if (shouldRunRef.current) void connectAvatar();
     } catch (cause) {
       closeResources();
       const timedOut = cause instanceof DOMException && cause.name === "TimeoutError";
@@ -1005,72 +1164,239 @@ export function LiveVoiceCoach({
 
   function endSession() {
     setState("ending");
+    void saveCompletedTurn();
     closeResources();
     userTurnRef.current = "";
     coachTurnRef.current = "";
     setUserCaption("");
     setCoachCaption("");
+    pausedRef.current = false;
+    setIsPaused(false);
     setAvatarIssue("");
     setError("");
     setState("idle");
   }
 
+  async function toggleSessionPaused() {
+    if (state !== "listening" && state !== "speaking") return;
+    const nextPaused = !pausedRef.current;
+    pausedRef.current = nextPaused;
+    setIsPaused(nextPaused);
+    elevenLabsConversationRef.current?.setMicMuted(nextPaused);
+    streamRef.current?.getAudioTracks().forEach((track) => {
+      track.enabled = !nextPaused;
+    });
+
+    const audioContext = audioContextRef.current;
+    if (nextPaused) {
+      clearElevenLabsResponseTimer();
+      elevenLabsConversationRef.current?.setVolume({ volume: 0 });
+      avatarClientRef.current?.ClearBuffer();
+      avatarAudioRef.current?.pause();
+      clearPlayback();
+      if (audioContext?.state === "running") await audioContext.suspend().catch(() => undefined);
+      return;
+    }
+
+    if (audioContext?.state === "suspended") await audioContext.resume().catch(() => undefined);
+    elevenLabsConversationRef.current?.setVolume({ volume: avatarReadyRef.current ? 0 : 1 });
+    if (avatarReadyRef.current) void avatarAudioRef.current?.play().catch(() => undefined);
+    setState("listening");
+  }
+
+  useEffect(() => {
+    if (!autoStart || autoStartAttemptedRef.current) return;
+    // Defer until after React's development-only Strict Mode setup/cleanup pass. Starting
+    // synchronously here lets that cleanup cancel the connection while the one-shot guard
+    // remains set, which leaves the UI stuck on "Authorizing…" without trying the fallback.
+    const autoStartTimer = window.setTimeout(() => {
+      if (!mountedRef.current || autoStartAttemptedRef.current) return;
+      autoStartAttemptedRef.current = true;
+      void startSession();
+    }, 0);
+    return () => window.clearTimeout(autoStartTimer);
+    // The initial user click mounts this component once; reconnects are handled separately.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoStart]);
+
+  useEffect(() => {
+    onActivityChange?.({
+      state,
+      label: isPaused ? "Conversation paused — microphone is off" : sessionLabel(state, connectionStage),
+      isPaused,
+      userCaption,
+      coachCaption,
+      error: error || persistenceIssue,
+    });
+  }, [coachCaption, connectionStage, error, isPaused, onActivityChange, persistenceIssue, state, userCaption]);
+
+  useEffect(() => () => onActivityChange?.(null), [onActivityChange]);
+
   const activeCaption = state === "speaking" ? coachCaption : userCaption || coachCaption;
   const captionOwner = state === "speaking" || (!userCaption && coachCaption) ? "YOUR COACH" : "YOU";
   const showCoachContext = state === "idle" && !activeCaption;
 
+  if (visualOnly) {
+    const canTogglePause = isPaused || state === "listening" || state === "speaking";
+    const canRestart = state === "idle" || state === "error";
+    const liveStatus = isPaused
+      ? "PAUSED — MICROPHONE OFF"
+      : state === "speaking"
+        ? "YOUR COACH IS SPEAKING"
+        : state === "listening"
+          ? "LISTENING — SPEAK NATURALLY"
+          : sessionLabel(state, connectionStage).toUpperCase();
+    const primaryLabel = canRestart
+      ? "Start talking"
+      : isPaused
+        ? "Resume talking"
+        : canTogglePause
+          ? "Pause talking"
+          : "Connecting…";
+
+    return (
+      <section
+        className={`coach-voice-home coach-voice-home-live live-voice-panel live-voice-inline is-${state}${cameraActive ? " has-member-camera" : ""}`}
+        aria-labelledby="live-voice-title"
+      >
+        <div className="coach-voice-home-copy">
+          <span className="coach-voice-home-status" aria-live="polite"><i aria-hidden="true" /> {liveStatus}</span>
+          <h1 id="live-voice-title">Your coach is ready to <em>talk.</em></h1>
+          <p>Have a natural, real-time conversation about today’s workout, recovery, form, or plan.</p>
+          <ul className="coach-voice-home-context" aria-label="Live coach capabilities">
+            <li><i aria-hidden="true">✓</i><span><b>Remembers you</b>Your profile, goals, and coaching history.</span></li>
+            <li><i aria-hidden="true">✓</i><span><b>Workout aware</b>Your active session stays in context.</span></li>
+            <li><i aria-hidden="true">✓</i><span><b>Visual feedback</b>Optional on-device movement tracking.</span></li>
+          </ul>
+          <div className="coach-voice-home-live-actions">
+            <button
+              className={`coach-voice-home-live-primary${isPaused ? " is-paused" : ""}`}
+              type="button"
+              disabled={!canTogglePause && !canRestart}
+              aria-pressed={canTogglePause ? isPaused : undefined}
+              onClick={() => void (canRestart ? startSession() : toggleSessionPaused())}
+            >
+              <span className="live-voice-wave" aria-hidden="true"><i /><i /><i /></span>
+              {primaryLabel}
+            </button>
+            <button
+              className="coach-voice-home-live-end"
+              type="button"
+              onClick={() => { endSession(); onClose(); }}
+            >
+              End
+            </button>
+          </div>
+          <small className="coach-voice-home-privacy">
+            {error || persistenceIssue || avatarIssue || (isPaused ? "Paused. Resume whenever you want to continue." : "Your live conversation is saved in the chat beside you.")}
+          </small>
+        </div>
+        <div className={`coach-voice-home-visual coach-voice-home-live-visual${cameraActive ? " has-member-camera" : ""}`}>
+          <span className="coach-voice-home-orbit" aria-hidden="true"><i /><i /></span>
+          <div className="coach-voice-home-provider-preview">
+            <video
+              ref={avatarVideoRef}
+              className={`live-coach-video coach-voice-home-live-video${avatarReady ? " is-ready" : ""}`}
+              autoPlay
+              muted
+              playsInline
+              aria-hidden="true"
+            />
+            {/* The provider audio is transcribed into the existing chat rail. */}
+            {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+            <audio ref={avatarAudioRef} autoPlay />
+            <Image
+              className={`coach-voice-home-avatar${avatarReady ? " is-avatar-ready" : ""}`}
+              src="/coach/forge-coach-avatar.webp"
+              alt=""
+              width={682}
+              height={1024}
+              priority
+              sizes="(max-width: 900px) 55vw, 34vw"
+            />
+          </div>
+          <LiveCoachCamera
+            sessionId={activeSessionId}
+            onMovement={setCameraMovementSignal}
+            onCaptureReady={registerCameraCapture}
+            onActiveChange={setCameraActive}
+          />
+          <span className="coach-voice-home-listening"><i aria-hidden="true" /> {isPaused ? "Paused" : state === "speaking" ? "Coach speaking" : state === "listening" ? "Listening" : "Connecting"}</span>
+        </div>
+      </section>
+    );
+  }
+
   return (
-          <section className={`live-voice-panel live-voice-inline is-${state}`} aria-labelledby="live-voice-title">
+          <section className={`live-voice-panel live-voice-inline is-${state}${visualOnly ? " is-visual-only" : ""}`} aria-labelledby="live-voice-title">
             <header>
               <div>
                 <small>LIVE COACHING SESSION</small>
-                <h2 id="live-voice-title">Your coach is here.</h2>
+                <h2 id="live-voice-title">Ready when you are.</h2>
               </div>
-              <button className="live-voice-back-button" type="button" onClick={() => { endSession(); onClose(); }}>
-                <span aria-hidden="true">←</span>
-                Back to chat
-              </button>
-            </header>
-            <div className="live-coach-stage">
-              <div className={`live-coach-presence is-${state}`}>
-                <div className="live-coach-light" aria-hidden="true"><i /><i /></div>
-                {/* The avatar video is muted; the live transcript is rendered beside it. */}
-                <video
-                  ref={avatarVideoRef}
-                  className={`live-coach-video${avatarReady ? " is-ready" : ""}`}
-                  autoPlay
-                  muted
-                  playsInline
-                  aria-hidden="true"
-                />
-                {/* The provider audio is transcribed into the visible live-caption region. */}
-                {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
-                <audio ref={avatarAudioRef} autoPlay />
-                {!avatarReady && (
-                  <Image
-                    className="live-coach-avatar"
-                    src="/coach/forge-coach-avatar.webp"
-                    alt=""
-                    width={682}
-                    height={1024}
-                    priority
-                    sizes="(max-width: 767px) 70vw, 25rem"
-                  />
+              <div className="live-voice-header-actions">
+                {(isPaused || state === "listening" || state === "speaking") && (
+                  <button
+                    className={`live-voice-pause-button${isPaused ? " is-paused" : ""}`}
+                    type="button"
+                    aria-pressed={isPaused}
+                    onClick={() => void toggleSessionPaused()}
+                  >
+                    <span aria-hidden="true">{isPaused ? "▶" : "Ⅱ"}</span>
+                    {isPaused ? "Resume talking" : "Pause talking"}
+                  </button>
                 )}
+                <button className="live-voice-back-button" type="button" onClick={() => { endSession(); onClose(); }}>
+                  <span aria-hidden="true">←</span>
+                  {visualOnly ? "End live coaching" : "Back to chat"}
+                </button>
+              </div>
+            </header>
+            <div className={`live-coach-stage${cameraActive ? " has-member-camera" : ""}`}>
+              <div className={`live-coach-presence is-${state}${cameraActive ? " has-member-camera" : ""}`}>
+                <div className="live-coach-provider-preview">
+                  <div className="live-coach-light" aria-hidden="true"><i /><i /></div>
+                  {/* The avatar video is muted; the live transcript is rendered beside it. */}
+                  <video
+                    ref={avatarVideoRef}
+                    className={`live-coach-video${avatarReady ? " is-ready" : ""}`}
+                    autoPlay
+                    muted
+                    playsInline
+                    aria-hidden="true"
+                  />
+                  {/* The provider audio is transcribed into the visible live-caption region. */}
+                  {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+                  <audio ref={avatarAudioRef} autoPlay />
+                  {!avatarReady && (
+                    <Image
+                      className="live-coach-avatar"
+                      src="/coach/forge-coach-avatar.webp"
+                      alt=""
+                      width={682}
+                      height={1024}
+                      priority
+                      sizes="(max-width: 767px) 8rem, 25rem"
+                    />
+                  )}
+                  <div className="live-coach-presence-badge" aria-hidden="true">
+                    <i /> {isPaused ? "Paused" : state === "speaking" ? "Coach speaking" : "Coach"}
+                  </div>
+                </div>
                 <LiveCoachCamera
                   sessionId={activeSessionId}
                   onMovement={setCameraMovementSignal}
                   onCaptureReady={registerCameraCapture}
+                  onActiveChange={setCameraActive}
                 />
-                <div className="live-coach-presence-badge" aria-hidden="true">
-                  <i /> {state === "speaking" ? "Speaking" : state === "listening" ? "Listening" : "Ready"}
-                </div>
               </div>
-              <div className="live-coach-session">
+              {!visualOnly && <div className="live-coach-session">
                 <div className="live-coach-session-scroll">
                   <p className="live-voice-state" aria-live="polite">
                     <i aria-hidden="true" />
-                    {sessionLabel(state, connectionStage)}
+                    {isPaused
+                      ? "Conversation paused — microphone is off"
+                      : sessionLabel(state, connectionStage)}
                   </p>
                   <div className="live-coach-utterance" aria-live="polite">
                     <small>{activeCaption ? captionOwner : "PRIVATE, PERSONALIZED COACHING"}</small>
@@ -1100,9 +1426,9 @@ export function LiveVoiceCoach({
                     </button>
                   )}
                 </div>
-              </div>
+              </div>}
             </div>
-            <footer className="live-voice-privacy"><span aria-hidden="true">◆</span> Audio streams only during this session. Camera tracking stays on-device; when you ask for visual feedback, one compressed frame is analyzed securely and is not stored.</footer>
+            {!visualOnly && <footer className="live-voice-privacy"><span aria-hidden="true">◆</span> Audio streams only during this session. Camera tracking stays on-device; when you ask for visual feedback, one compressed frame is analyzed securely and is not stored.</footer>}
           </section>
   );
 }

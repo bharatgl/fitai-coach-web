@@ -15,11 +15,16 @@ import type {
   CoachThreadDetail,
   CoachThreadListResponse,
   CreateCoachThreadResponse,
+  ConfirmPlanAdjustmentResponse,
   ElevenLabsCoachSessionResponse,
+  GeneratedCoachPdfResponse,
+  LiveAttachmentReviewResponse,
   LiveCoachAvatarTokenResponse,
   LiveCameraAnalysisResponse,
   LiveCoachSnapshotResponse,
   LiveCoachTokenResponse,
+  PendingPlanAdjustmentResponse,
+  PlanAdjustmentProposal,
   UploadCoachAttachmentResponse,
 } from "@fitai/contracts";
 import type { FastifyInstance } from "fastify";
@@ -28,12 +33,18 @@ import { Binary, MongoServerError } from "mongodb";
 import { z } from "zod";
 import { authenticate, type AuthenticatedUser } from "../auth.js";
 import { getConfig } from "../config.js";
-import { getDatabase } from "../db.js";
+import { getDatabase, getMongoClient } from "../db.js";
 import {
   buildCoachProfileContext,
   buildCoachTrainingContext,
 } from "../domain/coach-context.js";
+import { shouldReuseRecentCoachAttachments } from "../domain/coach-attachments.js";
 import {
+  generateCoachPdf,
+  shouldGenerateCoachPdf,
+} from "../domain/coach-documents.js";
+import {
+  buildLiveCoachOpening,
   compactDatedLiveHistory,
   defaultCoachTimeZone,
   formatCoachLocalDateTime,
@@ -42,10 +53,26 @@ import {
   summarizeMovementEventsForCoach,
   type MovementEventDocument,
 } from "../domain/movement-events.js";
-import type { PlannedWorkoutDocument, WorkoutPlanDocument } from "../domain/plans.js";
+import {
+  PlanValidationError,
+  serializePlan,
+  serializeWorkout,
+  type PlannedWorkoutDocument,
+  type WorkoutPlanDocument,
+} from "../domain/plans.js";
+import {
+  createPlanAdjustmentProposal,
+  serializePlanAdjustmentProposal,
+  type PlanAdjustmentProposalDocument,
+} from "../domain/plan-adjustments.js";
 import type { ReadinessDocument } from "../domain/readiness.js";
 import type { WorkoutSessionDocument } from "../domain/workouts.js";
 import { createElevenLabsSignedUrl } from "../services/elevenlabs.js";
+import {
+  resolveAISettings,
+  resolveElevenLabsSettings,
+  resolveGeminiSettings,
+} from "../services/provider-settings.js";
 import { syncAuthenticatedUser } from "../users.js";
 
 type CoachThreadDocument = {
@@ -74,6 +101,7 @@ type CoachMessageDocument = {
   model?: string | null;
   createdAt: Date;
   editedAt?: Date | null;
+  clientTurnId?: string;
 };
 
 type CoachAttachmentDocument = CoachAttachment & {
@@ -113,6 +141,7 @@ const uploadAttachmentInput = z.object({
   name: z.string().trim().min(1).max(120),
   mimeType: z.enum(attachmentMimeTypes),
   dataBase64: z.string().min(1).max(7_000_000).regex(/^[A-Za-z0-9+/]+={0,2}$/),
+  threadId: z.string().uuid().optional(),
 });
 const createThreadInput = z.object({
   title: z.string().trim().min(1).max(80).optional(),
@@ -135,6 +164,8 @@ const editMessageInput = z.object({
 const threadParams = z.object({ threadId: z.string().uuid() });
 const messageParams = z.object({ messageId: z.string().uuid() });
 const attachmentParams = z.object({ attachmentId: z.string().uuid() });
+const planAdjustmentParams = z.object({ proposalId: z.string().uuid() });
+const pendingPlanAdjustmentQuery = z.object({ planId: z.string().min(1).max(100) });
 const liveTokenInput = z.object({
   threadId: z.string().uuid(),
   sessionId: z.string().trim().min(1).max(100).optional(),
@@ -158,7 +189,18 @@ const liveCameraAnalysisInput = z.object({
   width: z.number().int().positive().max(1_920),
   height: z.number().int().positive().max(1_920),
 });
+const liveAttachmentReviewInput = z.object({
+  threadId: z.string().uuid(),
+  sessionId: z.string().trim().min(1).max(100).optional(),
+  question: z.string().trim().min(1).max(2_000).default("Review the most recently uploaded file."),
+});
+const generatedPdfInput = z.object({
+  threadId: z.string().uuid(),
+  title: z.string().trim().min(1).max(120),
+  content: z.string().trim().min(1).max(30_000),
+});
 const liveTurnInput = z.object({
+  clientTurnId: z.string().uuid().optional(),
   threadId: z.string().uuid(),
   sessionId: z.string().trim().min(1).max(100).optional(),
   userTranscript: z.string().trim().min(1).max(2_000),
@@ -209,6 +251,10 @@ function badRequest(message: string): never {
   throw Object.assign(new Error(message), { statusCode: 400 });
 }
 
+function conflict(message: string): never {
+  throw Object.assign(new Error(message), { statusCode: 409 });
+}
+
 function safeAttachmentName(name: string) {
   return name
     .replace(/[\r\n]/g, " ")
@@ -216,6 +262,48 @@ function safeAttachmentName(name: string) {
     .replace(/\s+/g, " ")
     .trim()
     .slice(0, 120) || "attachment";
+}
+
+function generatedPdfName(title: string) {
+  const base = safeAttachmentName(title)
+    .replace(/\.pdf$/i, "")
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-")
+    .slice(0, 90);
+  return `${base || "forgefit-coach-document"}.pdf`;
+}
+
+async function buildGeneratedPdfAttachment({
+  userId,
+  threadId,
+  messageId,
+  title,
+  content,
+  createdAt,
+}: {
+  userId: string;
+  threadId: string;
+  messageId: string;
+  title: string;
+  content: string;
+  createdAt: Date;
+}): Promise<CoachAttachmentDocument> {
+  const data = await generateCoachPdf({ title, content, generatedAt: createdAt });
+  if (data.length > maxAttachmentBytes) {
+    throw Object.assign(new Error("The generated PDF is too large to attach."), { statusCode: 503 });
+  }
+  return {
+    id: randomUUID(),
+    userId,
+    messageId,
+    threadId,
+    name: generatedPdfName(title),
+    mimeType: "application/pdf",
+    size: data.length,
+    data: new Binary(data),
+    createdAt,
+    expiresAt: new Date(createdAt.getTime() + attachmentLifetimeMs),
+  };
 }
 
 function attachmentSignatureMatches(mimeType: CoachAttachment["mimeType"], data: Buffer) {
@@ -361,11 +449,11 @@ async function generateReply(
   threadId: string,
   message: string,
   before: Date,
+  sourceMessageId: string,
   attachmentDocuments: CoachAttachmentDocument[] = [],
   sessionId?: string | null,
   planScope?: { planId?: string; weekNumber?: number; workoutId?: string },
 ) {
-  const config = getConfig();
   const now = new Date();
   const [
     profile,
@@ -375,6 +463,7 @@ async function generateReply(
     activeSession,
     recentSessions,
     movementContext,
+    aiSettings,
   ] = await Promise.all([
     database
       .collection("profiles")
@@ -415,6 +504,7 @@ async function generateReply(
       .limit(5)
       .toArray(),
     loadCoachMovementContext(database, user.id, sessionId),
+    resolveAISettings(user.id, database),
   ]);
   const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
   const nextWorkout = activePlan
@@ -441,9 +531,20 @@ async function generateReply(
       .sort({ dayOffset: 1 })
       .toArray()
     : [];
+  const reviewAttachmentDocuments = attachmentDocuments.length > 0
+    ? attachmentDocuments
+    : shouldReuseRecentCoachAttachments(message)
+      ? await database.collection<CoachAttachmentDocument>("coachAttachments")
+        .find(
+          { userId: user.id, threadId, messageId: { $ne: null } },
+          { projection: { _id: 0 } },
+        )
+        .sort({ createdAt: -1 })
+        .limit(maxAttachmentsPerMessage)
+        .toArray()
+      : [];
   const result = await generateCoachResponse({
-    apiKey: config.GEMINI_API_KEY,
-    model: config.GEMINI_MODEL,
+    provider: aiSettings,
     profile: buildCoachProfileContext(profile),
     message,
     trainingContext: buildCoachTrainingContext({
@@ -455,6 +556,7 @@ async function generateReply(
       selectedWeekNumber,
       selectedWeekWorkouts,
       selectedWorkoutId: planScope?.workoutId ?? nextWorkout?.id ?? null,
+      canProposePlanChanges: Boolean(planScope?.planId),
       now,
     }),
     movementContext,
@@ -467,21 +569,63 @@ async function generateReply(
           : "",
       ].filter(Boolean).join("\n"),
     })),
-    attachments: attachmentDocuments.map((attachment) => ({
+    attachments: reviewAttachmentDocuments.map((attachment) => ({
       name: attachment.name,
       mimeType: attachment.mimeType,
       dataBase64: Buffer.from(attachment.data.buffer).toString("base64"),
     })),
   });
+  let planAdjustmentProposal: PlanAdjustmentProposal | null = null;
+  let proposalError = "";
+  if (result.safetyCategory === "none" && result.planAdjustment && scopedPlan && planScope?.planId) {
+    try {
+      const proposalWorkouts = result.planAdjustment.action === "reschedule_plan"
+        ? await database.collection<PlannedWorkoutDocument>("plannedWorkouts")
+          .find({ userId: user.id, planId: scopedPlan.id }, { projection: { _id: 0 } })
+          .sort({ weekNumber: 1, dayOffset: 1 })
+          .toArray()
+        : selectedWeekWorkouts;
+      const proposal = createPlanAdjustmentProposal({
+        draft: result.planAdjustment,
+        plan: scopedPlan,
+        workouts: proposalWorkouts,
+        userId: user.id,
+        threadId,
+        sourceMessageId,
+        now,
+      });
+      await database.collection<PlanAdjustmentProposalDocument>("planAdjustmentProposals").updateMany(
+        { userId: user.id, planId: scopedPlan.id, status: "pending" },
+        { $set: { status: "rejected", rejectedAt: now } },
+      );
+      await database.collection<PlanAdjustmentProposalDocument>("planAdjustmentProposals").insertOne(proposal);
+      planAdjustmentProposal = serializePlanAdjustmentProposal(proposal, now);
+    } catch (error) {
+      if (!(error instanceof PlanValidationError)) throw error;
+      proposalError = error.message;
+    }
+  }
+  const coachResult = {
+    model: result.model,
+    safetyCategory: result.safetyCategory,
+    shouldPauseWorkout: result.shouldPauseWorkout,
+    suggestedAdjustment: result.suggestedAdjustment,
+  };
+  const baseReply = proposalError
+    ? `${result.reply.trim()}\n\nI couldn't prepare a safe saved-plan change: ${proposalError}. Your current schedule is unchanged.`
+    : planAdjustmentProposal
+      ? `${result.reply.trim()}\n\nReview the proposed schedule change below. Your saved plan will not change until you confirm it.`
+      : result.reply;
   return {
-    ...result,
+    ...coachResult,
+    planAdjustmentProposal,
     reply: result.safetyCategory === "none"
       ? ensurePlanChangeConfirmation({
-          reply: result.reply,
+          reply: baseReply,
           message,
           hasPlanContext: Boolean(planScope?.planId && selectedWeekWorkouts.length > 0),
         })
-      : result.reply,
+      : baseReply,
   };
 }
 
@@ -593,8 +737,11 @@ function liveCoachInstruction(
     coachBehaviorContract,
     `The authoritative current local date and time is ${currentLocalDateTime}. The member's IANA timezone is ${timeZone}.`,
     "The ongoing thread turns include their original Sent timestamps. Use those timestamps to distinguish past discussions from current intentions.",
-    "Speak naturally and directly. Use short sentences, contractions, and a warm confident gym-coach tone.",
+    "Speak naturally and directly. Use short sentences, contractions, and a calm human tone appropriate to the current conversation.",
+    "Default to grounded and emotionally neutral, not cheerful or excited. Adapt gently to the member's words, pace, pauses, and audible energy when available. Slow down and soften for stress, fatigue, sadness, or uncertainty; raise energy only when the member genuinely does.",
+    "Do not use hype, motivational slogans, or exclamation marks unless the moment clearly warrants them.",
     "Speak with a natural Indian English cadence and pronunciation without exaggeration or stereotype.",
+    "Open in neutral, natural language. Do not start with bro, bhai, veere, or similar slang unless the member explicitly asks for that style.",
     "If the member speaks Hindi, Punjabi, or Hinglish, mirror that language mix naturally. Otherwise continue in English.",
     "Use metric units and India-relevant food, schedule, and gym context when helpful, while honoring the member's actual dietary preference and supplied facts.",
     "Never presume religion, caste, region, income, family structure, or dietary choices from a name or nationality.",
@@ -603,8 +750,11 @@ function liveCoachInstruction(
     "Use the supplied member data concretely. Never ask for a preference or fact already present in it.",
     "When workout state may have changed, call get_live_workout_snapshot before giving set-by-set guidance.",
     "When the member explicitly asks you to look at, inspect, analyze, or assess their physique, posture, exercise form, or current camera view, call analyze_camera_view before answering. Never say you cannot see until you have tried that tool. If visual analysis is temporarily unavailable, say so clearly instead of claiming the camera is off.",
+    "When the member asks about an uploaded file, document, PDF, image, report, or attachment, call review_recent_attachment before answering. Never ask them to paste file text unless that tool reports a specific unreadable or protected-file limitation.",
+    "When the member asks you to create, generate, export, save, or download a PDF, call create_pdf_document with a concise title and the complete polished document content. Never claim that PDF creation is unavailable or ask them to copy and paste the content elsewhere. After the tool succeeds, tell them the download is visible in the chat.",
     "The camera tool analyzes one current still frame. Explain framing limitations honestly, never estimate exact body-fat percentage, and do not diagnose injuries or health conditions from an image.",
     "The ongoing coach thread is provided as initial conversation history. Continue from it and never claim that you cannot access earlier messages that were supplied.",
+    "The member may be planning, reflecting, eating, recovering, winding down, or simply talking. Never assume they are currently working out merely because ForgeFit is open or a workout exists in saved state.",
     "Messages beginning ON_DEVICE_MOVEMENT_UPDATE contain privacy-preserving pose estimates, not raw camera footage. Give one immediate cue under 12 words only when it is actionable; otherwise stay silent.",
     "If the user interrupts, stop immediately and listen. Treat this as one continuous session.",
     "Do not diagnose or prescribe medical treatment. For pain, dizziness, numbness, breathing difficulty, or urgent symptoms, tell the user to stop training and seek appropriate in-person care.",
@@ -643,6 +793,181 @@ async function loadMessageAttachments(database: Db, userId: string, messageId: s
 }
 
 export async function coachRoutes(app: FastifyInstance) {
+  app.get("/v1/plan-adjustments/pending", async (request): Promise<PendingPlanAdjustmentResponse> => {
+    const user = await authenticate(request);
+    const { planId } = pendingPlanAdjustmentQuery.parse(request.query);
+    const now = new Date();
+    const proposal = await (await getDatabase())
+      .collection<PlanAdjustmentProposalDocument>("planAdjustmentProposals")
+      .findOne(
+        { userId: user.id, planId, status: "pending", expiresAt: { $gt: now } },
+        { projection: { _id: 0 }, sort: { createdAt: -1 } },
+      );
+    return { proposal: proposal ? serializePlanAdjustmentProposal(proposal, now) : null };
+  });
+
+  app.post("/v1/plan-adjustments/:proposalId/reject", async (request): Promise<{ proposal: PlanAdjustmentProposal }> => {
+    const user = await authenticate(request);
+    const { proposalId } = planAdjustmentParams.parse(request.params);
+    const database = await getDatabase();
+    const now = new Date();
+    const proposal = await database.collection<PlanAdjustmentProposalDocument>("planAdjustmentProposals")
+      .findOne({ id: proposalId, userId: user.id }, { projection: { _id: 0 } });
+    if (!proposal) notFound("Plan change not found");
+    if (proposal.status === "applied") conflict("This plan change has already been applied");
+    if (proposal.status === "pending") {
+      await database.collection<PlanAdjustmentProposalDocument>("planAdjustmentProposals").updateOne(
+        { id: proposalId, userId: user.id, status: "pending" },
+        { $set: { status: "rejected", rejectedAt: now } },
+      );
+      proposal.status = "rejected";
+      proposal.rejectedAt = now;
+    }
+    return { proposal: serializePlanAdjustmentProposal(proposal, now) };
+  });
+
+  app.post(
+    "/v1/plan-adjustments/:proposalId/confirm",
+    { config: { rateLimit: { max: 10, timeWindow: "10 minutes" } } },
+    async (request): Promise<ConfirmPlanAdjustmentResponse> => {
+      const user = await authenticate(request);
+      const { proposalId } = planAdjustmentParams.parse(request.params);
+      const database = await getDatabase();
+      const now = new Date();
+      const initialProposal = await database.collection<PlanAdjustmentProposalDocument>("planAdjustmentProposals")
+        .findOne({ id: proposalId, userId: user.id }, { projection: { _id: 0 } });
+      if (!initialProposal) notFound("Plan change not found");
+      if (initialProposal.status === "rejected") conflict("This plan change was declined");
+      if (initialProposal.status === "expired" || initialProposal.expiresAt <= now) {
+        await database.collection<PlanAdjustmentProposalDocument>("planAdjustmentProposals").updateOne(
+          { id: proposalId, userId: user.id, status: "pending" },
+          { $set: { status: "expired" } },
+        );
+        conflict("This plan change expired; ask your coach to prepare it again");
+      }
+
+      let appliedProposal = initialProposal;
+      let appliedPlan: WorkoutPlanDocument | null = null;
+      let appliedWorkouts: PlannedWorkoutDocument[] = [];
+      const client = await getMongoClient();
+      await client.withSession(async (session) => {
+        await session.withTransaction(async () => {
+          const proposals = database.collection<PlanAdjustmentProposalDocument>("planAdjustmentProposals");
+          const proposal = await proposals.findOne(
+            { id: proposalId, userId: user.id },
+            { projection: { _id: 0 }, session },
+          );
+          if (!proposal) notFound("Plan change not found");
+          const plan = await database.collection<WorkoutPlanDocument>("workoutPlans").findOne(
+            { id: proposal.planId, userId: user.id, status: "active" },
+            { projection: { _id: 0 }, session },
+          );
+          if (!plan) conflict("The active plan changed; ask your coach for a new proposal");
+
+          if (proposal.status === "applied") {
+            appliedProposal = proposal;
+            appliedPlan = plan;
+            appliedWorkouts = await database.collection<PlannedWorkoutDocument>("plannedWorkouts")
+              .find({ planId: plan.id, userId: user.id }, { projection: { _id: 0 }, session })
+              .sort({ weekNumber: 1, scheduledFor: 1 })
+              .toArray();
+            return;
+          }
+          if (proposal.status !== "pending") conflict("This plan change is no longer pending");
+          if ((plan.revision ?? 0) !== proposal.basePlanRevision) {
+            conflict("The plan changed after this proposal was created; ask your coach to review it again");
+          }
+          const activeWorkout = await database.collection<WorkoutSessionDocument>("workoutSessions").findOne(
+            { userId: user.id, status: { $in: ["active", "paused"] } },
+            { projection: { _id: 1 }, session },
+          );
+          if (activeWorkout) conflict("Finish or abandon your active workout before changing the schedule");
+
+          const workouts = await database.collection<PlannedWorkoutDocument>("plannedWorkouts")
+            .find({ planId: plan.id, userId: user.id }, { projection: { _id: 0 }, session })
+            .sort({ weekNumber: 1, dayOffset: 1 })
+            .toArray();
+          const workoutById = new Map(workouts.map((workout) => [workout.id, workout]));
+          for (const change of proposal.changes) {
+            const workout = workoutById.get(change.workoutId);
+            if (!workout || workout.status !== "planned") {
+              conflict(`${change.workoutName} can no longer be moved`);
+            }
+            if (workout.scheduledFor.toISOString().slice(0, 10) !== change.before) {
+              conflict("The schedule changed after this proposal was created");
+            }
+          }
+
+          const revisionFilter = proposal.basePlanRevision === 0
+            ? { $or: [{ revision: 0 }, { revision: { $exists: false } }] }
+            : { revision: proposal.basePlanRevision };
+          const planUpdate = await database.collection<WorkoutPlanDocument>("workoutPlans").updateOne(
+            { id: plan.id, userId: user.id, status: "active", ...revisionFilter },
+            {
+              $set: {
+                revision: proposal.basePlanRevision + 1,
+                ...(proposal.newStartDate
+                  ? { startDate: new Date(`${proposal.newStartDate}T00:00:00.000Z`) }
+                  : {}),
+              },
+            },
+            { session },
+          );
+          if (planUpdate.matchedCount !== 1) conflict("The plan changed while applying this proposal");
+          await database.collection<PlannedWorkoutDocument>("plannedWorkouts").bulkWrite(
+            proposal.changes.map((change) => ({
+              updateOne: {
+                filter: {
+                  id: change.workoutId,
+                  planId: plan.id,
+                  userId: user.id,
+                  status: "planned",
+                  scheduledFor: new Date(`${change.before}T00:00:00.000Z`),
+                },
+                update: { $set: { scheduledFor: new Date(`${change.after}T00:00:00.000Z`) } },
+              },
+            })),
+            { session },
+          );
+          const appliedAt = new Date();
+          await proposals.updateOne(
+            { id: proposal.id, userId: user.id, status: "pending" },
+            { $set: { status: "applied", appliedAt } },
+            { session },
+          );
+          await database.collection("planAdjustmentEvents").insertOne({
+            id: randomUUID(),
+            userId: user.id,
+            planId: plan.id,
+            proposalId: proposal.id,
+            type: "plan_adjustment_applied",
+            changes: proposal.changes,
+            occurredAt: appliedAt,
+          }, { session });
+          appliedProposal = { ...proposal, status: "applied", appliedAt };
+          appliedPlan = {
+            ...plan,
+            revision: proposal.basePlanRevision + 1,
+            ...(proposal.newStartDate
+              ? { startDate: new Date(`${proposal.newStartDate}T00:00:00.000Z`) }
+              : {}),
+          };
+          const afterById = new Map(proposal.changes.map((change) => [change.workoutId, change.after]));
+          appliedWorkouts = workouts.map((workout) => {
+            const after = afterById.get(workout.id);
+            return after ? { ...workout, scheduledFor: new Date(`${after}T00:00:00.000Z`) } : workout;
+          });
+        });
+      });
+      if (!appliedPlan) conflict("The plan change could not be applied");
+      return {
+        proposal: serializePlanAdjustmentProposal(appliedProposal, now),
+        plan: serializePlan(appliedPlan),
+        workouts: appliedWorkouts.map(serializeWorkout),
+      };
+    },
+  );
+
   app.post(
     "/v1/coach/live-avatar-token",
     { config: { rateLimit: { max: 6, timeWindow: "1 minute" } } },
@@ -708,22 +1033,26 @@ export async function coachRoutes(app: FastifyInstance) {
       await syncAuthenticatedUser(user);
       const database = await getDatabase();
       await requireThread(database, user.id, input.threadId);
-      const [snapshot, history] = await Promise.all([
-        loadLiveCoachSnapshot(database, user.id, input.sessionId),
-        database.collection<CoachMessageDocument>("coachMessages")
-          .find(
-            { userId: user.id, threadId: input.threadId },
-            { projection: { _id: 0, role: 1, content: 1, createdAt: 1 } },
-          )
-          .sort({ createdAt: -1 })
-          .limit(80)
-          .toArray(),
-      ]);
       try {
-        const { agentId, signedUrl } = await createElevenLabsSignedUrl(getConfig());
+        const providerSession = resolveElevenLabsSettings(user.id, database)
+          .then((providerConfig) => createElevenLabsSignedUrl(providerConfig));
+        const [snapshot, history, providerCredentials] = await Promise.all([
+          loadLiveCoachSnapshot(database, user.id, input.sessionId),
+          database.collection<CoachMessageDocument>("coachMessages")
+            .find(
+              { userId: user.id, threadId: input.threadId },
+              { projection: { _id: 0, role: 1, content: 1, createdAt: 1 } },
+            )
+            .sort({ createdAt: -1 })
+            .limit(80)
+            .toArray(),
+          providerSession,
+        ]);
+        const { agentId, signedUrl } = providerCredentials;
         const userName = user.name.trim() || "there";
         const now = new Date();
         const currentLocalDateTime = formatCoachLocalDateTime(now, input.timeZone);
+        const sessionOpening = buildLiveCoachOpening(userName, now, input.timeZone);
         const chronologicalHistory = compactDatedLiveHistory(history, 24_000, input.timeZone)
           .map((turn) => `${turn.role === "user" ? "Member" : "Coach"}: ${turn.text}`)
           .join("\n");
@@ -733,6 +1062,7 @@ export async function coachRoutes(app: FastifyInstance) {
           userName,
           dynamicVariables: {
             user_name: userName,
+            session_opening: sessionOpening,
             member_context: JSON.stringify(snapshot),
             conversation_history: chronologicalHistory || "No earlier conversation was supplied.",
             current_local_datetime: currentLocalDateTime,
@@ -780,10 +1110,12 @@ export async function coachRoutes(app: FastifyInstance) {
           .toArray(),
       ]);
       const config = getConfig();
+      const geminiSettings = await resolveGeminiSettings(user.id, database);
       const now = new Date();
       const currentLocalDateTime = formatCoachLocalDateTime(now, input.timeZone);
+      const sessionOpening = buildLiveCoachOpening(user.name, now, input.timeZone);
       const token = await createLiveCoachToken({
-        apiKey: config.GEMINI_API_KEY,
+        apiKey: geminiSettings.apiKey,
         model: config.GEMINI_LIVE_MODEL,
         systemInstruction: liveCoachInstruction(
           snapshot,
@@ -794,6 +1126,7 @@ export async function coachRoutes(app: FastifyInstance) {
       return {
         ...token,
         voiceName: config.GEMINI_LIVE_VOICE,
+        sessionOpening,
         initialHistory: compactDatedLiveHistory(history, 24_000, input.timeZone),
       };
     },
@@ -830,10 +1163,9 @@ export async function coachRoutes(app: FastifyInstance) {
         user.id,
         input.sessionId,
       );
-      const config = getConfig();
+      const aiSettings = await resolveAISettings(user.id);
       const analysis = await analyzeCameraFrame({
-        apiKey: config.GEMINI_API_KEY,
-        model: config.GEMINI_MODEL,
+        provider: aiSettings,
         focus: input.focus,
         memberContext: snapshot,
         imageBase64: input.imageBase64,
@@ -848,6 +1180,89 @@ export async function coachRoutes(app: FastifyInstance) {
   );
 
   app.post(
+    "/v1/coach/live-attachment-review",
+    { config: { rateLimit: { max: 12, timeWindow: "1 minute" } } },
+    async (request): Promise<LiveAttachmentReviewResponse> => {
+      const user = await authenticate(request);
+      const input = liveAttachmentReviewInput.parse(request.body);
+      const database = await getDatabase();
+      await requireThread(database, user.id, input.threadId);
+      const attachments = await database.collection<CoachAttachmentDocument>("coachAttachments")
+        .find(
+          { userId: user.id, threadId: input.threadId },
+          { projection: { _id: 0 } },
+        )
+        .sort({ createdAt: -1 })
+        .limit(maxAttachmentsPerMessage)
+        .toArray();
+      if (!attachments.length) notFound("No uploaded file is available in this conversation");
+      const result = await generateReply(
+        database,
+        user,
+        input.threadId,
+        input.question,
+        new Date(),
+        randomUUID(),
+        attachments,
+        input.sessionId,
+      );
+      return {
+        attachments: attachments.map(serializeAttachment),
+        review: result.reply,
+      };
+    },
+  );
+
+  app.post(
+    "/v1/coach/generated-pdfs",
+    { config: { rateLimit: { max: 8, timeWindow: "1 minute" } } },
+    async (request): Promise<GeneratedCoachPdfResponse> => {
+      const user = await authenticate(request);
+      const input = generatedPdfInput.parse(request.body);
+      const database = await getDatabase();
+      await requireThread(database, user.id, input.threadId);
+      const createdAt = new Date();
+      const messageId = randomUUID();
+      const attachment = await buildGeneratedPdfAttachment({
+        userId: user.id,
+        threadId: input.threadId,
+        messageId,
+        title: input.title,
+        content: input.content,
+        createdAt,
+      });
+      await database.collection<CoachAttachmentDocument>("coachAttachments").insertOne(attachment);
+      const message: CoachMessageDocument = {
+        id: messageId,
+        userId: user.id,
+        threadId: input.threadId,
+        sessionId: null,
+        role: "assistant",
+        content: `Your PDF is ready: ${attachment.name}`,
+        attachments: [serializeAttachment(attachment)],
+        safetyCategory: "none",
+        model: "forgefit:pdf-renderer",
+        createdAt,
+      };
+      try {
+        await database.collection<CoachMessageDocument>("coachMessages").insertOne(message);
+        await database.collection<CoachAttachmentDocument>("coachAttachments").updateOne(
+          { id: attachment.id, userId: user.id },
+          { $unset: { expiresAt: "" } },
+        );
+      } catch (cause) {
+        request.log.error({ cause }, "Generated PDF could not be attached to the conversation");
+        throw cause;
+      }
+      await updateThreadStats(database, user.id, input.threadId);
+      return {
+        attachment: serializeAttachment(attachment),
+        thread: await loadThreadDetail(database, user.id, input.threadId),
+      };
+    },
+  );
+
+  app.post(
     "/v1/coach/live-turns",
     { config: { rateLimit: { max: 30, timeWindow: "1 minute" } } },
     async (request): Promise<CoachThreadDetail> => {
@@ -857,31 +1272,44 @@ export async function coachRoutes(app: FastifyInstance) {
       await requireThread(database, user.id, input.threadId);
       const now = new Date();
       const safety = classifySafetyMessage(input.userTranscript);
-      await database.collection<CoachMessageDocument>("coachMessages").insertMany([
-        {
-          id: randomUUID(),
-          userId: user.id,
-          threadId: input.threadId,
-          sessionId: input.sessionId ?? null,
-          role: "user",
-          content: input.userTranscript,
-          safetyCategory: safety?.safetyCategory ?? "none",
-          createdAt: now,
-          editedAt: null,
-        },
-        {
-          id: randomUUID(),
-          userId: user.id,
-          threadId: input.threadId,
-          sessionId: input.sessionId ?? null,
-          role: "assistant",
-          content: input.assistantTranscript,
-          safetyCategory: safety?.safetyCategory ?? "none",
-          model: input.provider === "elevenlabs"
-            ? `elevenlabs:${getConfig().ELEVENLABS_LLM_MODEL}`
-            : getConfig().GEMINI_LIVE_MODEL,
-          createdAt: new Date(now.getTime() + 1),
-        },
+      const recordedModel = input.provider === "elevenlabs"
+        ? `elevenlabs:${(await resolveElevenLabsSettings(user.id, database)).ELEVENLABS_LLM_MODEL}`
+        : getConfig().GEMINI_LIVE_MODEL;
+      const liveMessages = database.collection<CoachMessageDocument>("coachMessages");
+      const clientTurnId = input.clientTurnId ?? randomUUID();
+      await Promise.all([
+        liveMessages.updateOne(
+          { userId: user.id, clientTurnId, role: "user" },
+          { $setOnInsert: {
+            id: randomUUID(),
+            userId: user.id,
+            threadId: input.threadId,
+            sessionId: input.sessionId ?? null,
+            role: "user",
+            content: input.userTranscript,
+            safetyCategory: safety?.safetyCategory ?? "none",
+            createdAt: now,
+            editedAt: null,
+            clientTurnId,
+          } },
+          { upsert: true },
+        ),
+        liveMessages.updateOne(
+          { userId: user.id, clientTurnId, role: "assistant" },
+          { $setOnInsert: {
+            id: randomUUID(),
+            userId: user.id,
+            threadId: input.threadId,
+            sessionId: input.sessionId ?? null,
+            role: "assistant",
+            content: input.assistantTranscript,
+            safetyCategory: safety?.safetyCategory ?? "none",
+            model: recordedModel,
+            createdAt: new Date(now.getTime() + 1),
+            clientTurnId,
+          } },
+          { upsert: true },
+        ),
       ]);
       await updateThreadStats(database, user.id, input.threadId);
       return loadThreadDetail(database, user.id, input.threadId);
@@ -975,11 +1403,13 @@ export async function coachRoutes(app: FastifyInstance) {
 
       await syncAuthenticatedUser(user);
       const now = new Date();
+      const database = await getDatabase();
+      if (input.threadId) await requireThread(database, user.id, input.threadId);
       const attachment: CoachAttachmentDocument = {
         id: randomUUID(),
         userId: user.id,
         messageId: null,
-        threadId: null,
+        threadId: input.threadId ?? null,
         name: safeAttachmentName(input.name),
         mimeType: input.mimeType,
         size: data.length,
@@ -987,7 +1417,7 @@ export async function coachRoutes(app: FastifyInstance) {
         createdAt: now,
         expiresAt: new Date(now.getTime() + attachmentLifetimeMs),
       };
-      await (await getDatabase())
+      await database
         .collection<CoachAttachmentDocument>("coachAttachments")
         .insertOne(attachment);
       reply.code(201);
@@ -1076,6 +1506,7 @@ export async function coachRoutes(app: FastifyInstance) {
         thread.id,
         input.message,
         now,
+        userMessage.id,
         attachmentDocuments,
         input.sessionId,
         {
@@ -1084,20 +1515,43 @@ export async function coachRoutes(app: FastifyInstance) {
           workoutId: input.workoutId,
         },
       );
+      const assistantMessageId = randomUUID();
+      const generatedPdf = shouldGenerateCoachPdf(input.message)
+        ? await buildGeneratedPdfAttachment({
+            userId: user.id,
+            threadId: thread.id,
+            messageId: assistantMessageId,
+            title: `ForgeFit Coach - ${titleFromMessage(input.message)}`,
+            content: result.reply,
+            createdAt: new Date(),
+          })
+        : null;
       const assistantMessage: CoachMessageDocument = {
-        id: randomUUID(),
+        id: assistantMessageId,
         userId: user.id,
         threadId: thread.id,
         sessionId: input.sessionId ?? null,
         role: "assistant",
-        content: result.reply,
+        content: generatedPdf
+          ? `${result.reply}\n\nYour downloadable PDF is attached to this message.`
+          : result.reply,
+        attachments: generatedPdf ? [serializeAttachment(generatedPdf)] : [],
         safetyCategory: result.safetyCategory,
         model: result.model,
         createdAt: new Date(),
       };
+      if (generatedPdf) {
+        await database.collection<CoachAttachmentDocument>("coachAttachments").insertOne(generatedPdf);
+      }
       await database
         .collection<CoachMessageDocument>("coachMessages")
         .insertOne(assistantMessage);
+      if (generatedPdf) {
+        await database.collection<CoachAttachmentDocument>("coachAttachments").updateOne(
+          { id: generatedPdf.id, userId: user.id },
+          { $unset: { expiresAt: "" } },
+        );
+      }
 
       const updatedThread = await updateThreadStats(database, user.id, thread.id);
       return {
@@ -1106,6 +1560,7 @@ export async function coachRoutes(app: FastifyInstance) {
         message: serializeMessage(assistantMessage),
         shouldPauseWorkout: result.shouldPauseWorkout,
         suggestedAdjustment: result.suggestedAdjustment,
+        planAdjustmentProposal: result.planAdjustmentProposal,
       };
     },
   );
@@ -1161,6 +1616,7 @@ export async function coachRoutes(app: FastifyInstance) {
         threadId,
         content,
         existing.createdAt,
+        existing.id,
         attachmentDocuments,
         existing.sessionId,
       );

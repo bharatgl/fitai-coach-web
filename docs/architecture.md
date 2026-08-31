@@ -1,5 +1,8 @@
 # forgefit.space architecture
 
+The current deployed architecture is described below. The proposed scale and
+migration design is tracked in [Architecture revamp plan](architecture-revamp.md).
+
 ## Runtime design
 
 ```mermaid
@@ -14,7 +17,7 @@ flowchart LR
   F -->|private Docker network<br/>5-minute JWT| B
   B -->|profiles, plans, sessions, messages| M
   B -->|in-process package call| A[AI package]
-  A -->|Gemini API| O[Google Gemini]
+  A -->|provider adapter| O[Gemini, OpenAI, Claude,<br/>or compatible endpoint]
 ```
 
 `frontend/` and `backend/` are separately deployable containers. Production
@@ -46,19 +49,34 @@ also avoids cross-origin browser calls and keeps preview deployments simpler.
 
 1. The backend validates and persists the user's message.
 2. The AI package checks urgent and pain language before any model call.
-3. For normal coaching, the backend removes account identifiers and builds a
+3. The backend resolves one encrypted, user-scoped provider configuration and
+   passes it through a provider-neutral AI contract. Gemini, OpenAI Responses,
+   Anthropic Messages, and configurable OpenAI-compatible endpoints are isolated
+   behind adapters; route and domain code do not import provider SDKs.
+4. For normal coaching, the backend removes account identifiers and builds a
    bounded snapshot containing the training profile, active plan, exact next
    workout prescription, active-session progress, five recent completed
    sessions, and the latest dated self-reported readiness check-in.
-4. The model must return the declared structured schema, including 1–5 facts it
+5. The model must return the declared structured schema, including 1–5 facts it
    used from that supplied context. The backend renders those facts as an
    auditable "Personalized from your data" section.
-5. The response contract forbids invented exercises or prescriptions and
+6. The response contract forbids invented exercises or prescriptions and
    requires workout reviews to contain specific priorities, targets, reasons,
    and adjustment triggers. Deterministic checks bypass the model for dangerous
    dehydration, purging, extreme-heat, diuretic, or performance-enhancing drug
    protocols.
-6. The backend persists the validated assistant message and returns it.
+7. The backend persists the validated assistant message and returns it.
+
+When a member asks to generate a PDF, the selected model supplies the complete
+document content through the same coach contract. A deterministic backend
+renderer creates the branded PDF, stores it as a user- and thread-scoped coach
+attachment, and returns the normal authenticated attachment URL. PDF output is
+therefore independent of Gemini, OpenAI, Claude, or any OpenAI-compatible model.
+
+Images and PDFs stay as provider-neutral file parts until the adapter boundary.
+Each adapter translates the same bytes into its provider's native image or
+document input. This same path powers text chat, live attachment review, camera
+analysis, and plan generation.
 
 ### Daily readiness check-in
 
@@ -78,7 +96,7 @@ also avoids cross-origin browser calls and keeps preview deployments simpler.
    frequency, and equipment.
 2. The backend filters a reviewed exercise catalog before sending it to the AI
    package, so unavailable exercises are excluded from the prompt.
-3. The Gemini API returns a schema-constrained four-week plan draft.
+3. The configured AI provider returns a schema-constrained four-week plan draft.
 4. Deterministic code rejects unknown exercises, duplicate days or movements,
    excessive workout duration or volume, and maximal-effort prescriptions.
 5. A MongoDB transaction archives the previous plan and inserts the new version
@@ -97,15 +115,11 @@ also avoids cross-origin browser calls and keeps preview deployments simpler.
    catalog. An exercise becomes eligible for AI plans only after ForgeFit adds
    safety guidance, equipment mapping, experience requirements, and a licensed
    or curated demonstration.
-5. The public and authenticated browser combines the 1,324 reference records
-   with a separate 250-exercise RepDB snapshot. Exact normalized names and the
-   source's duplicate names are consolidated. A third 302-exercise Workout
-   Guide snapshot adds three-frame movement demonstrations and expands the
-   browser to 1,725 unique movements. Approximate matches are intentionally
-   rejected. RepDB's 459 referenced flat
-   WebP assets and Workout Guide's 906 CC BY-SA SVG frames are bundled only for
-   in-app use, visibly attributed, excluded from backend APIs, and lazy-loaded
-   from the authenticated workspace.
+5. `GET /v1/exercise-demos` exposes paginated Workout Guide demonstration
+   metadata and versioned object-storage URLs. React Query caches each result
+   page for 24 hours, and the browser lazy-loads the referenced SVG/GIF media
+   directly from Google Cloud Storage. RepDB records remain excluded from the
+   backend API; their licensed assets stay separately attributed.
 
 ### Workout execution and adaptation
 
@@ -172,7 +186,7 @@ Manager:
 | Service | Source | Required runtime configuration |
 | --- | --- | --- |
 | `fitai-frontend-vm` | `frontend` | `MONGODB_URI`, `MONGODB_DB`, `AUTH_SECRET`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`, `AUTH_URL`, `API_JWT_SECRET`, `BACKEND_API_URL`, `AUTH_TRUST_HOST` |
-| `fitai-backend-vm` | `backend` + `ai` | `MONGODB_URI`, `MONGODB_DB`, `API_JWT_SECRET`, `GEMINI_API_KEY`, `GEMINI_MODEL` |
+| `fitai-backend-vm` | `backend` + `ai` | `MONGODB_URI`, `MONGODB_DB`, `API_JWT_SECRET`, `GEMINI_API_KEY`, `GEMINI_MODEL`, `USER_PROVIDER_CREDENTIALS_KEY` |
 
 `API_JWT_SECRET` must be identical in both services. On the VM,
 `BACKEND_API_URL` uses the backend container's private Docker hostname; browsers
@@ -184,11 +198,10 @@ compute and disk charges while running. The checked-in scripts under
 `infra/gcp/` deploy this topology without placing secret values in commands or
 source files.
 
-The current Gemini free tier is intended for development and testing. Google
-states that free-tier content may be used to improve its products, so do not
-send real health or movement notes until the project moves to paid data
-handling or another approved private provider and the user-facing privacy flow
-is complete.
+Provider data handling and retention terms vary. Do not send real health or
+movement notes until the selected deployment and model have approved privacy,
+retention, and regional-processing terms and the user-facing privacy flow is
+complete.
 
 ## Hosting portability
 

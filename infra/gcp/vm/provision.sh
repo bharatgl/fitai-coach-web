@@ -19,6 +19,7 @@ if [[ -z "${ACTIVE_ACCOUNT}" ]]; then
 fi
 
 gcloud services enable \
+  aiplatform.googleapis.com \
   compute.googleapis.com \
   iap.googleapis.com \
   --project="${PROJECT_ID}"
@@ -90,6 +91,9 @@ gcloud iam service-accounts add-iam-policy-binding "${BACKEND_ACCOUNT}" \
   --member="user:${ACTIVE_ACCOUNT}" \
   --role="roles/iam.serviceAccountUser" \
   --project="${PROJECT_ID}" >/dev/null
+gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
+  --member="serviceAccount:${BACKEND_ACCOUNT}" \
+  --role="roles/aiplatform.user" >/dev/null
 
 VM_SECRETS=(
   fitai-frontend-mongodb-uri

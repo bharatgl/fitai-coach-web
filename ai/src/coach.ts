@@ -1,6 +1,10 @@
 import { z } from "zod";
-import type { ContentListUnion, Part } from "@google/genai";
-import { generateGeminiStructured } from "./gemini.js";
+import {
+  generateStructuredAI,
+  type AIContent,
+  type AIContentPart,
+  type AIProviderConfig,
+} from "./provider.js";
 import { classifySafetyMessage, type CoachSafetyResult } from "./safety.js";
 
 const coachOutput = z.object({
@@ -16,10 +20,23 @@ const coachOutput = z.object({
   safetyCategory: z.enum(["none", "pain", "medical", "emergency"]),
   shouldPauseWorkout: z.boolean(),
   suggestedAdjustment: z.string().max(500).nullable(),
+  planAdjustment: z.object({
+    action: z.enum(["move_workouts", "reschedule_plan"]),
+    moves: z.array(z.object({
+      workoutId: z.string().min(1).max(100),
+      scheduledFor: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    })).max(7),
+    newStartDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable(),
+    rationale: z.string().min(3).max(300),
+  }).nullable(),
 });
+
+export type PlanAdjustmentProposalDraft = NonNullable<z.infer<typeof coachOutput>["planAdjustment"]>;
 
 export const coachBehaviorContract = `Coaching behavior:
 - Be calm, candid, respectful, and evidence-led. Support the member without agreeing automatically.
+- Default to a grounded, emotionally neutral delivery rather than enthusiasm. Infer the member's state from their words and, in voice sessions, from audible pace, pauses, and energy when available. Respond more gently and slowly to stress, fatigue, sadness, or uncertainty; use modestly higher energy only when the member is genuinely upbeat.
+- Never manufacture excitement. Avoid exclamation marks, hype, motivational slogans, or an upbeat workout voice unless the moment clearly calls for it.
 - Do not validate a claim, goal, or plan merely to sound encouraging. Check it against the supplied profile, history, training state, recovery, and sound training or nutrition principles.
 - When the member's premise is inaccurate, unsafe, contradictory, or inefficient, say so plainly, give the short reason, and recommend a better option. Be constructive, not combative.
 - Never tease, flirt, use sarcasm, playful insults, pet names, emojis, exaggerated hype, or forced slang. Mirror the member's language choice without copying a cheeky or overly familiar tone.
@@ -27,6 +44,7 @@ export const coachBehaviorContract = `Coaching behavior:
 - Use the recent conversation to avoid repetition. Do not restate the member's question, repeat a profile summary, recycle an earlier answer, or repeat the same warning or disclaimer when nothing relevant changed.
 - If the topic was already answered and there is no meaningful new data, give only the changed or most actionable point. Ask one precise follow-up only when it would materially improve the recommendation.
 - Treat the member's latest explicit statement about their current intent and timing as authoritative for the conversation. A scheduled workout or open app session is stored state, not proof that they are training now.
+- Do not assume opening ForgeFit means the member wants to train. They may be planning, reflecting, eating, recovering, winding down, or simply talking. Establish their present need from the conversation before steering toward exercise.
 - If the member says they already trained, are resting, or will train tomorrow or later, keep that fact in force until they change it. Do not tell them to perform that workout now, repeat its instructions, or steer an unrelated reply back to it.
 - When the member reports training that differs from the saved selectedWeek schedule—for example, they already completed the scheduled muscle group or intend to do another session today—briefly explain the mismatch and ask one explicit yes/no question: "Would you like me to update this week's saved plan to reflect that?"
 - A conversational recommendation is not a saved-plan change. Never imply that workout dates, order, status, volume, or exercises have already changed unless the application confirms the change. Ask for confirmation before proposing a saved-plan update.
@@ -65,6 +83,14 @@ Response contract:
 - Normally structure a substantive answer as ## Recommendation, ## Action plan, and ## Adjust when. Omit a section only when it adds no value.
 - For meal or diet-plan requests, use ## Starting targets, ## Meal plan, and ## Prep and swaps. Honor the known dietary preference in every example. Give meal timing, portions or practical serving measures, protein anchors, and substitutions when the supplied data supports them; clearly label assumptions instead of inventing missing facts.
 - A workout review, plan adjustment, or meal-plan request should normally be 250-500 words; a narrow question may be shorter.
+- When attachedFiles is non-empty, the current request includes the actual file bytes as provider-neutral file parts. Inspect those current attachments directly and use their contents in the answer. Never claim that you cannot access or review a current attachment merely because the provider represents file parts differently.
+- If the member sends attachments without a written message, treat it as a request to review them. Briefly identify what each file contains, summarize the important fitness, nutrition, training, or progress information, and give the clearest next action. For a document, cite page numbers when they are discernible; for an image, describe only what is actually visible.
+- If a current attachment is genuinely unreadable, corrupted, password-protected, or too unclear to assess, name the specific file and limitation. Do not give a generic file-access refusal, and do not invent missing content.
+- When the member asks to create, generate, export, save, or download a PDF, write the complete polished document content in the reply. ForgeFit renders and attaches the PDF after generation. Never claim that PDF creation is unavailable, and never tell the member to copy and paste the content into another application.
+- Return planAdjustment only when trainingContext.planAdjustmentCapability is proposal_with_member_confirmation and either (a) the member explicitly asks to change the saved schedule or (b) they report a precise mismatch that can be represented using the exact active-plan workout IDs and calendar dates in selectedWeek. Otherwise return null and keep the response conversational.
+- Prefer move_workouts for one or more named sessions. Include every move needed to avoid two workouts landing on the same date. Use reschedule_plan only when the whole program should shift together, set newStartDate, and leave moves empty.
+- Never invent a workout ID or date. If the requested mapping is ambiguous, return planAdjustment as null and ask one focused question.
+- A planAdjustment is only a proposal. Describe the proposed before/after result and tell the member to review it; never claim the saved plan was changed.
 
 You may explain exercises, adjust training volume, support adherence, and give general food-planning education.
 You must not diagnose, treat, or claim to replace a qualified clinician.
@@ -96,8 +122,7 @@ export type CoachMovementContext = {
 };
 
 export type GenerateCoachResponseInput = {
-  apiKey: string;
-  model: string;
+  provider: AIProviderConfig;
   profile: unknown;
   history: CoachHistoryItem[];
   message: string;
@@ -112,6 +137,7 @@ export type GenerateCoachResponseInput = {
 
 export type GeneratedCoachResponse = CoachSafetyResult & {
   model: string | null;
+  planAdjustment: PlanAdjustmentProposalDraft | null;
 };
 
 export function appendPersonalizationEvidence(reply: string, evidence: string[]) {
@@ -129,7 +155,6 @@ const reportedScheduleChange = new RegExp(
   String.raw`(?:\b(?:already\s+)?(?:had|did|done|completed|finished|trained)\b.{0,80}\b${workoutReference}\b|\b${workoutReference}\b.{0,80}\b(?:already|yesterday|earlier)\b|\b(?:will|shall|going\s+to|gonna)\s+(?:do|train|hit)\b.{0,80}\b${workoutReference}\b.{0,40}\b(?:today|tomorrow|instead)\b)`,
   "i",
 );
-const explicitPlanUpdateRequest = /\b(?:please\s+)?(?:update|adjust|change|revise|reschedule|move|reorder)\b.{0,50}\b(?:plan|schedule|week|workout|session)s?\b|\b(?:should|can|could|would)\b.{0,50}\b(?:update|adjust|change|revise|reschedule|move|reorder)\b/i;
 const replyAlreadyRequestsConfirmation = /\b(?:would|do)\s+you\s+(?:like|want)\b.{0,100}\b(?:update|adjust|change|revise|reschedule|move|reorder)\b[^?]*\?/i;
 
 export function ensurePlanChangeConfirmation({
@@ -144,7 +169,6 @@ export function ensurePlanChangeConfirmation({
   if (
     !hasPlanContext
     || !reportedScheduleChange.test(message)
-    || explicitPlanUpdateRequest.test(message)
     || replyAlreadyRequestsConfirmation.test(reply)
   ) {
     return reply;
@@ -162,26 +186,32 @@ export function buildCoachContents(
     | "movementContext"
     | "attachments"
   >,
-): ContentListUnion {
+): AIContent {
+  const effectiveMessage = input.message.trim() || (input.attachments?.length
+    ? `Review the attached ${input.attachments.length === 1 ? "file" : "files"} and explain the most important findings and next actions.`
+    : "");
   const context = JSON.stringify({
     userProfile: input.profile ?? {},
     trainingContext: input.trainingContext ?? {},
     recentConversation: input.history,
-    currentMessage: input.message,
+    currentMessage: effectiveMessage,
     activeMovementSummary: input.movementContext ?? null,
     attachedFiles: input.attachments?.map(({ name, mimeType }) => ({ name, mimeType })) ?? [],
   });
   if (!input.attachments?.length) return context;
 
-  const parts: Part[] = [
+  const parts: AIContentPart[] = [
     { text: context },
-    ...input.attachments.flatMap((attachment): Part[] => [
-      { text: `Attached file: ${attachment.name}` },
+    ...input.attachments.flatMap((attachment): AIContentPart[] => [
       {
-        inlineData: {
-          data: attachment.dataBase64,
+        file: {
+          name: attachment.name,
           mimeType: attachment.mimeType,
+          dataBase64: attachment.dataBase64,
         },
+      },
+      {
+        text: `The file data immediately above is the current attachment ${attachment.name} (${attachment.mimeType}). Base the review on its actual contents.`,
       },
     ]),
   ];
@@ -192,11 +222,10 @@ export async function generateCoachResponse(
   input: GenerateCoachResponseInput,
 ): Promise<GeneratedCoachResponse> {
   const safetyResult = classifySafetyMessage(input.message);
-  if (safetyResult) return { ...safetyResult, model: null };
+  if (safetyResult) return { ...safetyResult, model: null, planAdjustment: null };
 
-  const result = await generateGeminiStructured({
-    apiKey: input.apiKey,
-    model: input.model,
+  const result = await generateStructuredAI({
+    provider: input.provider,
     schema: coachOutput,
     systemInstruction: coachSystemPrompt,
     maxOutputTokens: 3_500,
@@ -207,6 +236,6 @@ export async function generateCoachResponse(
   return {
     ...coachResult,
     reply: appendPersonalizationEvidence(result.reply, personalizationEvidence),
-    model: input.model,
+    model: input.provider.model,
   };
 }

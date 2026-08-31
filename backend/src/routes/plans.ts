@@ -9,7 +9,6 @@ import type { FastifyInstance } from "fastify";
 import { MongoServerError } from "mongodb";
 import { z } from "zod";
 import { authenticate } from "../auth.js";
-import { getConfig } from "../config.js";
 import { getDatabase, getMongoClient } from "../db.js";
 import { availableExercises } from "../domain/exercise-catalog.js";
 import {
@@ -25,6 +24,7 @@ import {
 } from "../domain/plans.js";
 import { serializeProfile } from "../domain/profiles.js";
 import { syncAuthenticatedUser } from "../users.js";
+import { resolveAISettings } from "../services/provider-settings.js";
 
 const generatePlanInput = z.object({
   startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
@@ -84,13 +84,12 @@ export async function planRoutes(app: FastifyInstance) {
       }
 
       try {
-        const config = getConfig();
-        let generationModel = config.GEMINI_MODEL;
+        const aiSettings = await resolveAISettings(user.id, database);
+        let generationModel = `${aiSettings.kind}:${aiSettings.model}`;
         let draft;
         try {
           draft = await generateAdaptivePlan({
-            apiKey: config.GEMINI_API_KEY,
-            model: config.GEMINI_MODEL,
+            provider: aiSettings,
             profile,
             exercises,
           });
@@ -217,6 +216,7 @@ export async function planRoutes(app: FastifyInstance) {
         workouts,
         startDate: resolvePlanStartDate(input.startDate),
       });
+      rescheduled.plan.revision = (plan.revision ?? 0) + 1;
       const client = await getMongoClient();
       await client.withSession(async (session) => {
         await session.withTransaction(async () => {
@@ -224,7 +224,7 @@ export async function planRoutes(app: FastifyInstance) {
             .collection<WorkoutPlanDocument>("workoutPlans")
             .updateOne(
               { id, userId: user.id, status: "active" },
-              { $set: { startDate: rescheduled.plan.startDate } },
+              { $set: { startDate: rescheduled.plan.startDate, revision: rescheduled.plan.revision } },
               { session },
             );
           await database

@@ -7,6 +7,7 @@ export {
   type CoachMovementContext,
   type GeneratedCoachResponse,
   type GenerateCoachResponseInput,
+  type PlanAdjustmentProposalDraft,
 } from "./coach.js";
 export {
   classifySafetyMessage,
@@ -31,9 +32,23 @@ export {
   type CreateLiveCoachTokenInput,
 } from "./live.js";
 export {
+  generateGroundedResearch,
+  groundedResearchFromResponse,
+  researchClientOptions,
   toGeminiJsonSchema,
   translateGeminiError,
+  type GenerateGroundedResearchInput,
+  type GeminiResearchAuth,
+  type GroundedResearchResult,
 } from "./gemini.js";
+export {
+  generateStructuredAI,
+  type AIContent,
+  type AIContentPart,
+  type AIFilePart,
+  type AIProviderConfig,
+  type AIProviderKind,
+} from "./provider.js";
 export {
   analyzeCameraFrame,
   buildCameraAnalysisContents,

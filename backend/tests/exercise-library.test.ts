@@ -7,6 +7,10 @@ import {
   findExerciseLibraryItem,
   searchExerciseLibrary,
 } from "../src/domain/exercise-library.js";
+import {
+  exerciseDemos,
+  searchExerciseDemos,
+} from "../src/domain/exercise-demos.js";
 import { exerciseRoutes } from "../src/routes/exercises.js";
 
 test("imports all 1,324 OpenGym source exercises without restricted media", () => {
@@ -75,5 +79,48 @@ test("serves paginated library and detail API responses", async () => {
     url: "/v1/exercises/opengym-missing",
   });
   assert.equal(missingResponse.statusCode, 404);
+  await app.close();
+});
+
+test("serves paginated visual demos with configurable object-storage URLs", async () => {
+  const previousAssetBaseUrl = process.env.EXERCISE_ASSET_BASE_URL;
+  process.env.EXERCISE_ASSET_BASE_URL = "https://storage.googleapis.com/fitai-assets";
+  try {
+    assert.equal(exerciseDemos.length, 302);
+    const result = searchExerciseDemos({
+      query: "press",
+      bodyPart: "chest",
+      offset: 0,
+      limit: 5,
+    });
+
+    assert.ok(result.items.length > 0);
+    assert.ok(result.items.length <= 5);
+    assert.ok(result.items.every((exercise) => exercise.bodyPart === "chest"));
+    assert.ok(result.items.every((exercise) =>
+      exercise.animation.startsWith("https://storage.googleapis.com/fitai-assets/exercises/"),
+    ));
+    assert.ok(result.items.every((exercise) => exercise.frames.length === 3));
+  } finally {
+    if (previousAssetBaseUrl === undefined) delete process.env.EXERCISE_ASSET_BASE_URL;
+    else process.env.EXERCISE_ASSET_BASE_URL = previousAssetBaseUrl;
+  }
+});
+
+test("adds browser and CDN caching to the visual demo API", async () => {
+  const app = Fastify();
+  await app.register(exerciseRoutes);
+
+  const response = await app.inject({
+    method: "GET",
+    url: "/v1/exercise-demos?limit=2",
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.json().items.length, 2);
+  assert.equal(
+    response.headers["cache-control"],
+    "public, max-age=300, s-maxage=3600, stale-while-revalidate=86400",
+  );
   await app.close();
 });

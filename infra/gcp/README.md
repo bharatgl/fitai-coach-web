@@ -32,20 +32,27 @@ gcloud auth login
 gcloud config set project "$FITAI_GCP_PROJECT_ID"
 
 ./infra/gcp/bootstrap.sh
+npm run gcp:assets
 npm run gcp:init-app-secrets
 node ./infra/gcp/sync-secrets.mjs
 ./infra/gcp/deploy.sh
 ```
 
-`initialize-app-secrets.mjs` generates independent production-only Auth.js and
-API JWT secrets directly into Secret Manager and never prints them. It is
-idempotent and will not replace an enabled version.
+`initialize-app-secrets.mjs` generates independent production-only Auth.js,
+API JWT, and user-provider encryption secrets directly into Secret Manager and
+never prints them. It is idempotent and will not replace an enabled version.
 
 `sync-secrets.mjs` reads only the external-service credentials from the ignored
 `frontend/.env.local` and `backend/.env` files and streams them directly to
 Secret Manager. It never prints secret values. Rotate any MongoDB, Google OAuth,
 or Gemini credential that has appeared in chat, a screenshot, or Git history
 before running it.
+
+`npm run gcp:assets` creates a public, uniform-access asset bucket and uploads
+the licensed exercise SVG, GIF, and WebP files under a versioned prefix with
+one-year immutable browser caching. The API returns these object URLs as
+paginated metadata; application servers do not proxy the media bytes. Increment
+`FITAI_ASSET_VERSION` whenever an existing asset path is replaced.
 
 After deployment, add the printed frontend callback URL to the Google OAuth web
 client:

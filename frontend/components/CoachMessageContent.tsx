@@ -67,7 +67,7 @@ function inlineContent(text: string): ReactNode {
   );
 }
 
-export function CoachMessageContent({ content }: { content: string }) {
+export function ConversationMessageContent({ content }: { content: string }) {
   return (
     <div className="coach-message-content">
       {parseCoachMessage(content).map((block, index) => {
@@ -86,3 +86,6 @@ export function CoachMessageContent({ content }: { content: string }) {
     </div>
   );
 }
+
+// Backward-compatible fitness name while the same renderer is shared by every specialist.
+export const CoachMessageContent = ConversationMessageContent;

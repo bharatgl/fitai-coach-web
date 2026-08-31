@@ -19,9 +19,10 @@ test("shows a public landing page and protects the coaching workspace", async ()
   assert.match(page, /await auth\(\)/);
   assert.match(page, /return <LandingPage \/>/);
   assert.match(landing, /href="\/signin"/);
-  assert.match(landing, /Build strength/);
+  assert.match(landing, /One space/);
   assert.doesNotMatch(landing, /Adapt as you go/);
-  assert.match(landing, /One focused training system/);
+  assert.match(landing, /Focused AI guides for fitness, interviews, resumes/);
+  assert.match(landing, /Forge Studio/);
   assert.match(landing, /BrandLockup/);
   assert.match(landing, /On-device tracking/);
   assert.match(landingStyles, /@media \(max-width: 60rem\)/);
@@ -38,16 +39,17 @@ test("shows a public landing page and protects the coaching workspace", async ()
   assert.doesNotMatch(coach, /New chat/);
   assert.doesNotMatch(coach, /new-chat-button/);
   assert.doesNotMatch(coach, /thread-menu-trigger/);
-  assert.match(coach, /coach-voice-first-workspace\$\{liveVoiceOpen \? " is-live" : ""\}/);
+  assert.match(coach, /coach-voice-first-workspace\$\{liveVoiceOpen \? " has-live-coach" : ""\}/);
   assert.match(coach, /className="coach-voice-home"/);
   assert.match(coach, /Start voice coaching/);
+  assert.doesNotMatch(coach, /Use text chat/);
   assert.match(coach, /YOUR COACH IS ONLINE/);
   assert.doesNotMatch(coach, /AI COACH ONLINE|Message your AI coach/);
-  assert.match(coach, /className="chat coach-chat-side"/);
+  assert.match(coach, /chat coach-chat-side\$\{liveVoiceOpen \? " is-live-chat" : ""\}/);
   assert.doesNotMatch(coach, /className="floating-coach-agent"/);
   assert.match(coach, /\/coach\/forge-coach-avatar\.webp/);
   assert.match(coach, /className="coach-suggestions"/);
-  assert.match(coach, /messages\.length === 0 && !loadingThreads/);
+  assert.match(coach, /messages\.length === 0 && !loadingThreads && !liveVoiceOpen/);
   assert.match(coach, /prompt-toggle-button/);
   assert.match(coach, /aria-expanded=\{showSuggestions\}/);
   assert.match(coach, /className="coach-suggestions active-coach-suggestions"[\s\S]*chat-composer/);
@@ -70,7 +72,25 @@ test("shows a public landing page and protects the coaching workspace", async ()
   assert.match(coach, /<svg width="20" height="20"/);
   assert.match(coach, /attachment-button voice-input-button/);
   assert.match(coach, /LiveVoiceCoach/);
+  assert.match(coach, /loading: \(\) => <LiveVoiceCoachLoadingShell \/>/);
+  assert.match(coach, /live-voice-loading-shell/);
+  assert.match(coach, /autoStart/);
+  assert.match(coach, /visualOnly/);
+  assert.match(coach, /onActivityChange=\{setLiveCoachActivity\}/);
+  assert.match(coach, /LIVE CHAT/);
+  assert.match(coach, /Live transcript/);
+  assert.match(coach, /live-chat-footer/);
   assert.match(liveVoice, /live-voice-panel live-voice-inline/);
+  assert.match(liveVoice, /autoStartAttemptedRef/);
+  assert.match(liveVoice, /const autoStartTimer = window\.setTimeout/);
+  assert.match(liveVoice, /window\.clearTimeout\(autoStartTimer\)/);
+  assert.match(liveVoice, /onActivityChange\?\.\(\{/);
+  assert.match(liveVoice, /coach-voice-home coach-voice-home-live live-voice-panel/);
+  assert.match(liveVoice, /coach-voice-home-live-actions/);
+  assert.match(liveVoice, /setMicMuted\(nextPaused\)/);
+  assert.match(liveVoice, /track\.enabled = !nextPaused/);
+  assert.match(liveVoice, /Pause talking/);
+  assert.match(liveVoice, /Resume talking/);
   assert.match(liveVoice, /Back to chat/);
   assert.doesNotMatch(liveVoice, /aria-modal|role="dialog"|className="live-voice-backdrop"/);
   assert.match(liveCamera, /live-camera-self-label/);
@@ -78,6 +98,8 @@ test("shows a public landing page and protects the coaching workspace", async ()
   assert.match(liveVoice, /audio\/pcm;rate=16000/);
   assert.match(liveVoice, /get_live_workout_snapshot/);
   assert.match(liveVoice, /analyze_camera_view/);
+  assert.match(liveVoice, /create_pdf_document/);
+  assert.match(liveVoice, /\/v1\/coach\/generated-pdfs/);
   assert.match(liveVoice, /\/v1\/coach\/live-camera-analysis/);
   assert.match(liveVoice, /interrupted/);
   assert.match(liveVoice, /\/v1\/coach\/live-turns/);
@@ -102,7 +124,7 @@ test("shows a public landing page and protects the coaching workspace", async ()
   assert.match(liveVoice, /\/coach\/forge-coach-avatar\.webp/);
   assert.match(liveVoice, /credentials\.voiceName/);
   assert.doesNotMatch(liveVoice, /voiceName: "Kore"/);
-  assert.match(liveVoice, /Your coach is here/);
+  assert.match(liveVoice, /Ready when you are/);
   assert.match(liveVoice, /<LiveCoachCamera/);
   assert.match(liveVoice, /live-coach-utterance/);
   assert.match(liveVoice, /live-coach-session-scroll/);
@@ -115,7 +137,10 @@ test("shows a public landing page and protects the coaching workspace", async ()
   assert.match(liveVoiceProtocol, /new TextDecoder\(\)\.decode\(data\)/);
   assert.doesNotMatch(liveVoice, /speechSynthesis|MediaRecorder|audio\/webm/);
   assert.match(liveCamera, /navigator\.mediaDevices\.getUserMedia/);
-  assert.match(liveCamera, /facingMode: "user"/);
+  assert.match(liveCamera, /CameraFacingMode = "user" \| "environment"/);
+  assert.match(liveCamera, /facingMode: \{ ideal: requestedFacingMode \}/);
+  assert.match(liveCamera, /Switch camera/);
+  assert.match(liveCamera, /data-facing=\{facingMode\}/);
   assert.match(liveCamera, /@mediapipe\/tasks-vision/);
   assert.match(liveCamera, /\/v1\/coach\/live-snapshot/);
   assert.match(liveCamera, /\/movement-events/);
@@ -137,7 +162,7 @@ test("shows a public landing page and protects the coaching workspace", async ()
   assert.match(coach, /PlanCoachPanel/);
   assert.match(coach, /planId,/);
   assert.match(coach, /weekNumber,/);
-  assert.match(coach, /scope === "plan"/);
+  assert.match(coach, /mostRecentActiveCoachThread\(response\.threads, "plan"\)/);
   assert.match(coach, /title: "Plan workspace", scope: "plan"/);
   assert.match(coach, /Separate planning chat · your Coach still sees the current plan/);
   assert.match(coach, /plan-profile-warning/);
@@ -200,6 +225,15 @@ test("contains no obsolete Cloudflare application entry points", async () => {
   );
   assert.doesNotMatch(packageJson, /vinext|wrangler|cloudflare/i);
   await assert.rejects(access(new URL("../vite.config.ts", import.meta.url)));
+});
+
+test("keeps the VM proxy upload limit above the base64 attachment envelope", async () => {
+  const nginx = await readFile(
+    new URL("../../infra/gcp/vm/nginx-fitai-backend.conf", import.meta.url),
+    "utf8",
+  );
+  assert.equal((nginx.match(/client_max_body_size 8m;/g) ?? []).length, 2);
+  assert.doesNotMatch(nginx, /client_max_body_size 1m;/);
 });
 
 test("uses the shared responsive design system", async () => {

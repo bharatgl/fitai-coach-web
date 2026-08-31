@@ -14,7 +14,7 @@ test("presents forgefit.space consistently across public product surfaces", asyn
 
   assert.match(brand, /forgefit/);
   assert.match(brand, /\.space/);
-  assert.match(layout, /forgefit\.space — Adaptive training intelligence/);
+  assert.match(layout, /forgefit\.space — Personal AI specialists/);
   assert.match(landing, /BrandLockup/);
   assert.doesNotMatch(landing, /FitAI Coach/);
   assert.match(signIn, /BrandLockup/);

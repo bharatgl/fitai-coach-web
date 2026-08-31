@@ -24,6 +24,30 @@ export function formatCoachLocalDateTime(
   return `${formatted} (${timeZone})`;
 }
 
+export function buildLiveCoachOpening(
+  userName: string,
+  date: Date,
+  timeZone = defaultCoachTimeZone,
+) {
+  const firstName = userName.trim().split(/\s+/)[0] || "there";
+  const hourPart = new Intl.DateTimeFormat("en-GB", {
+    timeZone,
+    hour: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(date).find((part) => part.type === "hour")?.value;
+  const hour = Number(hourPart);
+  if (hour >= 5 && hour < 12) {
+    return `Good morning, ${firstName}. How are you feeling, and what would be useful today?`;
+  }
+  if (hour >= 12 && hour < 17) {
+    return `Good afternoon, ${firstName}. What would be useful right now?`;
+  }
+  if (hour >= 17 && hour < 22) {
+    return `Good evening, ${firstName}. How has your day been, and what do you need from me?`;
+  }
+  return `Hey ${firstName}. How is your night going, and what do you need right now?`;
+}
+
 export function compactLiveHistory(
   newestFirst: LiveHistorySource[],
   characterBudget = 24_000,

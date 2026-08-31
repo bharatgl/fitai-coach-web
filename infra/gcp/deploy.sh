@@ -6,6 +6,12 @@ REGION="${FITAI_GCP_REGION:-asia-south1}"
 REPOSITORY="${FITAI_GCP_REPOSITORY:-fitai}"
 MONGODB_DB="${FITAI_MONGODB_DB:-fitai}"
 GEMINI_MODEL="${FITAI_GEMINI_MODEL:-gemini-3.1-flash-lite}"
+VERTEX_AI_LOCATION="${FITAI_VERTEX_AI_LOCATION:-global}"
+VERTEX_AI_RESEARCH_MODEL="${FITAI_VERTEX_AI_RESEARCH_MODEL:-gemini-2.5-flash}"
+RESEARCH_DAILY_LIMIT="${FITAI_RESEARCH_DAILY_LIMIT:-20}"
+ASSET_BUCKET="${FITAI_ASSET_BUCKET:-${PROJECT_ID}-fitai-assets}"
+ASSET_VERSION="${FITAI_ASSET_VERSION:-v1}"
+EXERCISE_ASSET_BASE_URL="https://storage.googleapis.com/${ASSET_BUCKET}/${ASSET_VERSION}"
 IMAGE_TAG="${FITAI_IMAGE_TAG:-$(git rev-parse --short HEAD)}"
 FRONTEND_ACCOUNT="fitai-frontend@${PROJECT_ID}.iam.gserviceaccount.com"
 BACKEND_ACCOUNT="fitai-backend@${PROJECT_ID}.iam.gserviceaccount.com"
@@ -23,8 +29,8 @@ gcloud run deploy fitai-backend \
   --image="${BACKEND_IMAGE}" \
   --region="${REGION}" \
   --service-account="${BACKEND_ACCOUNT}" \
-  --set-env-vars="NODE_ENV=production,MONGODB_DB=${MONGODB_DB},GEMINI_MODEL=${GEMINI_MODEL}" \
-  --set-secrets="MONGODB_URI=fitai-backend-mongodb-uri:latest,API_JWT_SECRET=fitai-api-jwt-secret:latest,GEMINI_API_KEY=fitai-gemini-api-key:latest" \
+  --set-env-vars="NODE_ENV=production,MONGODB_DB=${MONGODB_DB},GEMINI_MODEL=${GEMINI_MODEL},VERTEX_AI_PROJECT=${PROJECT_ID},VERTEX_AI_LOCATION=${VERTEX_AI_LOCATION},VERTEX_AI_RESEARCH_MODEL=${VERTEX_AI_RESEARCH_MODEL},RESEARCH_DAILY_LIMIT=${RESEARCH_DAILY_LIMIT},EXERCISE_ASSET_BASE_URL=${EXERCISE_ASSET_BASE_URL}" \
+  --set-secrets="MONGODB_URI=fitai-backend-mongodb-uri:latest,API_JWT_SECRET=fitai-api-jwt-secret:latest,GEMINI_API_KEY=fitai-gemini-api-key:latest,ELEVENLABS_API_KEY=fitai-elevenlabs-api-key:latest,USER_PROVIDER_CREDENTIALS_KEY=fitai-provider-credentials-key:latest" \
   --cpu=1 \
   --memory=512Mi \
   --concurrency=40 \

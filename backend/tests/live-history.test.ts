@@ -1,10 +1,23 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  buildLiveCoachOpening,
   compactDatedLiveHistory,
   compactLiveHistory,
   formatCoachLocalDateTime,
 } from "../src/domain/live-history.js";
+
+test("opens live coaching for the member's local moment without assuming a workout", () => {
+  const instant = new Date("2026-08-29T20:36:00.000Z");
+  assert.equal(
+    buildLiveCoachOpening("Bharat Goyal", instant, "Asia/Kolkata"),
+    "Hey Bharat. How is your night going, and what do you need right now?",
+  );
+  assert.equal(
+    buildLiveCoachOpening("Bharat Goyal", instant, "America/New_York"),
+    "Good afternoon, Bharat. What would be useful right now?",
+  );
+});
 
 test("converts persisted coach messages into chronological Gemini history", () => {
   const history = compactLiveHistory([

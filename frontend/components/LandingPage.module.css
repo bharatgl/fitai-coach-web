@@ -236,7 +236,7 @@
 .trackingToast strong, .planToast strong { color: #f4f6ff; font-size: .57rem; }
 .trackingToast small, .planToast small { color: #8993a9; font-size: .46rem; margin-top: .15rem; }
 
-.how, .features { content-visibility:auto; contain-intrinsic-size:auto 38rem; margin: auto; max-width: 84rem; padding: clamp(4rem, 7vw, 6rem) clamp(1.25rem, 4vw, 2rem); }
+.how, .features, .solutions { content-visibility:auto; contain-intrinsic-size:auto 38rem; margin: auto; max-width: 84rem; padding: clamp(4rem, 7vw, 6rem) clamp(1.25rem, 4vw, 2rem); }
 .sectionIntro, .featuresHeader { align-items: end; display: flex; gap: 4rem; justify-content: space-between; }
 .sectionIntro h2, .features h2, .privacy h2, .finalCta h2 { font-size: clamp(2rem, 3.4vw, 3.4rem); line-height: .98; }
 .sectionIntro>p, .featuresHeader>p { color: #9ba5ba; font-size: .8rem; line-height: 1.7; margin: 0 0 .35rem; max-width: 28rem; }
@@ -244,6 +244,8 @@
 .steps article { align-items:center; display:flex; gap:.8rem; min-width: 0; padding-top: 1.15rem; }
 .steps article>span { align-items: center; border: 1px solid rgb(200 255 75 / 25%); border-radius: 50%; color: var(--landing-lime); display: flex; font-size: .56rem; font-weight: 900; height: 2rem; justify-content: center; width: 2rem; }
 .steps h3 { color: #f7f8ff; font-size: .9rem; margin:0; }
+
+.solutions{max-width:88rem;padding-top:1rem}.solutions .featuresHeader{padding:0 1rem}.solutionGrid{display:grid;gap:.85rem;grid-template-columns:repeat(4,minmax(0,1fr));margin-top:2rem}.solutionGrid article{background:linear-gradient(145deg,rgb(26 29 53 / 78%),rgb(11 14 29 / 70%));border:1px solid var(--landing-line);border-radius:1.1rem;display:flex;flex-direction:column;min-height:18rem;padding:1.2rem}.solutionGrid article>div{align-items:center;display:flex;justify-content:space-between}.solutionGrid article>div i{align-items:center;background:rgb(91 230 210 / 9%);border:1px solid rgb(91 230 210 / 17%);border-radius:.7rem;color:var(--landing-mint);display:flex;font-style:normal;height:2.5rem;justify-content:center;width:2.5rem}.solutionGrid article>div span{color:#7d879d;font-size:.5rem;font-weight:900;letter-spacing:.1em;text-transform:uppercase}.solutionGrid h3{font-size:1.15rem;margin:2rem 0 .6rem}.solutionGrid p{color:#939db2;font-size:.67rem;line-height:1.6;margin:0 0 1.4rem}.solutionGrid article>a{align-items:center;color:var(--landing-lime);display:flex;font-size:.63rem;font-weight:850;gap:.6rem;margin-top:auto}.solutionGrid .studioCard{background:linear-gradient(145deg,rgb(200 255 75 / 14%),rgb(91 230 210 / 7%));border-color:rgb(200 255 75 / 22%)}
 
 .features { max-width: 88rem; padding-top: 1rem; }
 .featuresHeader { padding: 0 1rem; }
@@ -306,6 +308,7 @@
   .hero { grid-template-columns: minmax(0, .8fr) minmax(31rem, 1.2fr); }
   .stageSculpture { right:-4rem; transform:scale(.86); transform-origin:right top; }
   .featureGrid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .solutionGrid { grid-template-columns:repeat(2,minmax(0,1fr)); }
   .dashboardGrid { grid-template-columns: 7.5rem minmax(0, 1fr); }
   .previewNav { padding-inline: .55rem; }
   .planToast { right: 0; }
@@ -327,6 +330,7 @@
   .steps { gap: 0; grid-template-columns: minmax(0, 1fr); margin-top: 2.75rem; }
   .steps article { border-bottom: 1px solid var(--landing-line); padding: 1.2rem 0; }
   .featureGrid { grid-template-columns: minmax(0, 1fr); }
+  .solutionGrid { grid-template-columns: minmax(0, 1fr); }
   .featureCard { min-height: 17rem; }
   .privacy { grid-template-columns:auto minmax(0,1fr); }
   .privacyMark { height: 5.5rem; width: 5.5rem; }
@@ -365,7 +369,7 @@
   .workoutIndex { display: none; }
   .trackingToast { bottom: -.1rem; left: -.25rem; transform: scale(.88) rotate(-2deg); transform-origin: left bottom; }
   .planToast { right: -.25rem; top: -.5rem; transform: scale(.86) rotate(2deg); transform-origin: right top; }
-  .how, .features { padding: 4rem 1rem; }
+  .how, .features, .solutions { padding: 4rem 1rem; }
   .features { padding-top: 1rem; }
   .featuresHeader { padding-inline: 0; }
   .featureCard { min-height: 16rem; padding: 1rem; }

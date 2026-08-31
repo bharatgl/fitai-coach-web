@@ -25,11 +25,51 @@ test("builds multimodal coach content when attachments are present", () => {
   if (!first || typeof first !== "object" || !("parts" in first) || !Array.isArray(first.parts)) {
     assert.fail("Expected structured multimodal content");
   }
-  assert.equal(first.parts[1]?.text, "Attached file: squat.jpg");
-  assert.deepEqual(first.parts[2]?.inlineData, {
-    data: "ZmFrZS1pbWFnZQ==",
+  const imagePart = first.parts[1];
+  assert.ok(imagePart && "file" in imagePart);
+  assert.deepEqual(imagePart.file, {
+    name: "squat.jpg",
+    dataBase64: "ZmFrZS1pbWFnZQ==",
     mimeType: "image/jpeg",
   });
+  const imageLabel = first.parts[2];
+  assert.ok(imageLabel && "text" in imageLabel);
+  assert.match(imageLabel.text, /file data immediately above/);
+});
+
+test("turns an attachment-only message into an explicit file review", () => {
+  const contents = buildCoachContents({
+    profile: {},
+    history: [],
+    message: "",
+    attachments: [{
+      name: "progress-report.pdf",
+      mimeType: "application/pdf",
+      dataBase64: "JVBERi0xLjQ=",
+    }],
+  });
+
+  assert.ok(Array.isArray(contents));
+  const first = contents[0];
+  if (!first || typeof first !== "object" || !("parts" in first) || !Array.isArray(first.parts)) {
+    assert.fail("Expected structured multimodal content");
+  }
+  const contextPart = first.parts[0];
+  assert.ok(contextPart && "text" in contextPart);
+  assert.match(contextPart.text, /"currentMessage":"Review the attached file and explain the most important findings and next actions\."/);
+  const documentPart = first.parts[1];
+  assert.ok(documentPart && "file" in documentPart);
+  assert.deepEqual(documentPart.file, {
+    name: "progress-report.pdf",
+    dataBase64: "JVBERi0xLjQ=",
+    mimeType: "application/pdf",
+  });
+  const documentLabel = first.parts[2];
+  assert.ok(documentLabel && "text" in documentLabel);
+  assert.match(documentLabel.text, /progress-report\.pdf/);
+  assert.match(coachSystemPrompt, /provider-neutral file parts/);
+  assert.match(coachSystemPrompt, /Never claim that you cannot access or review a current attachment/);
+  assert.match(coachSystemPrompt, /password-protected/);
 });
 
 test("keeps text-only coach requests simple", () => {
@@ -91,6 +131,9 @@ test("includes exact training context and enforces personalized response detail"
   assert.match(coachBehaviorContract, /will train tomorrow or later/);
   assert.match(coachBehaviorContract, /differs from the saved selectedWeek schedule/);
   assert.match(coachBehaviorContract, /ask one explicit yes\/no question/);
+  assert.match(coachSystemPrompt, /Return planAdjustment only when/);
+  assert.match(coachSystemPrompt, /exact active-plan workout IDs/);
+  assert.match(coachSystemPrompt, /never claim the saved plan was changed/);
 });
 
 test("asks before changing a saved week when reported training differs from the plan", () => {
@@ -101,6 +144,13 @@ test("asks before changing a saved week when reported training differs from the 
   });
 
   assert.match(reply, /Would you like me to update this week's saved plan to reflect that\?$/);
+
+  const explicitRequest = ensurePlanChangeConfirmation({
+    reply: "I can move Push to Thursday and Pull to Friday.",
+    message: "Update my schedule: I completed chest Thursday and back Friday.",
+    hasPlanContext: true,
+  });
+  assert.match(explicitRequest, /Would you like me to update this week's saved plan to reflect that\?$/);
 });
 
 test("does not duplicate or force plan confirmation outside a schedule mismatch", () => {
