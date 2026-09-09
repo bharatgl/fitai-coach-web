@@ -31,6 +31,7 @@ import {
 } from "../domain/bots.js";
 import { getConfig } from "../config.js";
 import { getDatabase } from "../db.js";
+import { aiCallContext } from "../observability/ai-telemetry.js";
 import { generateCoachPdf, shouldGenerateCoachPdf } from "../domain/coach-documents.js";
 import {
   createStudioAgentSignedUrl,
@@ -564,6 +565,7 @@ export async function botRoutes(app: FastifyInstance) {
         temperature: 0.3,
         timeoutMs: 30_000,
         feature: "bot",
+        context: aiCallContext(request, user),
       });
       return {
         attachments: attachments.map(serializeAttachment),
@@ -838,6 +840,7 @@ export async function botRoutes(app: FastifyInstance) {
         temperature: 0.3,
         timeoutMs: 30_000,
         feature: "bot",
+        context: aiCallContext(request, user),
       });
       const now = new Date();
       const userMessage: BotChatMessageDocument = {

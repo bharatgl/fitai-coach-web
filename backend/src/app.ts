@@ -58,7 +58,7 @@ export async function buildApp() {
     }
 
     if (error instanceof AiProviderError) {
-      return reply.code(error.statusCode).send({ error: error.message });
+      return reply.code(error.statusCode).send({ error: error.message, retryable: error.retryable });
     }
 
     const statusCode =

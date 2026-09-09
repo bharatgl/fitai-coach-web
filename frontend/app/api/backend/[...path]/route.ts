@@ -20,33 +20,33 @@ function requestIdFor(request: NextRequest) {
 async function proxy(request: NextRequest, context: RouteContext) {
   const requestId = requestIdFor(request);
   const startedAt = performance.now();
-
-  const { path } = await context.params;
-  const isPublicExerciseRequest = request.method === "GET" &&
-    (path[0] === "exercises" || path[0] === "exercise-demos");
-  const session = isPublicExerciseRequest ? null : await auth();
-  if (!isPublicExerciseRequest && (!session?.user?.id || !session.user.email)) {
-    return Response.json(
-      { error: "Authentication required" },
-      { status: 401, headers: { "x-request-id": requestId } },
-    );
-  }
-
-  const backendUrl = process.env.BACKEND_API_URL;
-  if (!backendUrl) {
-    logger.error("proxy.misconfigured", {
-      requestId,
-      reason: "BACKEND_API_URL is not set",
-    });
-    return Response.json(
-      { error: "Backend API is not configured" },
-      { status: 503, headers: { "x-request-id": requestId } },
-    );
-  }
-
-  const route = `/v1/${path.join("/")}`;
+  let route = "unknown";
 
   try {
+    const { path } = await context.params;
+    route = `/v1/${path.join("/")}`;
+    const isPublicExerciseRequest = request.method === "GET" &&
+      (path[0] === "exercises" || path[0] === "exercise-demos");
+    const session = isPublicExerciseRequest ? null : await auth();
+    if (!isPublicExerciseRequest && (!session?.user?.id || !session.user.email)) {
+      return Response.json(
+        { error: "Authentication required" },
+        { status: 401, headers: { "x-request-id": requestId } },
+      );
+    }
+
+    const backendUrl = process.env.BACKEND_API_URL;
+    if (!backendUrl) {
+      logger.error("proxy.misconfigured", {
+        requestId,
+        reason: "BACKEND_API_URL is not set",
+      });
+      return Response.json(
+        { error: "Backend API is not configured" },
+        { status: 503, headers: { "x-request-id": requestId } },
+      );
+    }
+
     const requestUrl = new URL(request.url);
     const target = new URL(route, backendUrl);
     target.search = requestUrl.search;

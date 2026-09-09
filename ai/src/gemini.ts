@@ -41,14 +41,29 @@ function removeUnsupportedSchemaKeywords(value: unknown): unknown {
 /**
  * One client per API key. Constructing a client per call discarded connection
  * reuse for no benefit.
+ *
+ * Bounded and least-recently-used because API keys are no longer only the
+ * handful of platform keys: per-user BYOK keys (see provider-settings) mean
+ * the key set grows with active users and must not retain a client forever.
  */
+const maxCachedClients = 500;
 const clients = new Map<string, GoogleGenAI>();
 
 function clientFor(apiKey: string): GoogleGenAI {
-  let client = clients.get(apiKey);
-  if (!client) {
-    client = new GoogleGenAI({ apiKey });
-    clients.set(apiKey, client);
+  const cached = clients.get(apiKey);
+  if (cached) {
+    // Re-insert to mark it most recently used; Map iteration order is
+    // insertion order, so the eviction below drops the least recently used key.
+    clients.delete(apiKey);
+    clients.set(apiKey, cached);
+    return cached;
+  }
+
+  const client = new GoogleGenAI({ apiKey });
+  clients.set(apiKey, client);
+  if (clients.size > maxCachedClients) {
+    const oldestKey = clients.keys().next().value;
+    if (oldestKey !== undefined) clients.delete(oldestKey);
   }
   return client;
 }
