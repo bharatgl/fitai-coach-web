@@ -68,8 +68,7 @@ gcloud compute ssh "${VM_NAME}" \
       --security-opt no-new-privileges \\
       --memory 768m \\
       --cpus 1.5 \\
-      --log-opt max-size=10m \\
-      --log-opt max-file=3 \\
+      --log-driver journald \\
       ${BACKEND_IMAGE}
     sudo docker run -d \\
       --name fitai-frontend \\
@@ -80,8 +79,7 @@ gcloud compute ssh "${VM_NAME}" \
       --security-opt no-new-privileges \\
       --memory 768m \\
       --cpus 1 \\
-      --log-opt max-size=10m \\
-      --log-opt max-file=3 \\
+      --log-driver journald \\
       ${FRONTEND_IMAGE}
     sudo nginx -t
     sudo systemctl reload nginx
