@@ -3,8 +3,10 @@ import { access, readFile } from "node:fs/promises";
 import test from "node:test";
 
 test("shows a public landing page and protects the coaching workspace", async () => {
-  const [page, landing, landingStyles, tokenFactory, apiClient, coach, movementTracker, liveVoice, liveCamera, liveVoiceProtocol] = await Promise.all([
+  const [page, fitnessPage, careerPage, landing, landingStyles, tokenFactory, apiClient, coach, movementTracker, liveVoice, liveCamera, liveVoiceProtocol] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/fitness/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/career/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../components/LandingPage.tsx", import.meta.url), "utf8"),
     readFile(new URL("../components/LandingPage.module.css", import.meta.url), "utf8"),
     readFile(new URL("../lib/backend-token.ts", import.meta.url), "utf8"),
@@ -16,16 +18,22 @@ test("shows a public landing page and protects the coaching workspace", async ()
     readFile(new URL("../lib/live-voice.ts", import.meta.url), "utf8"),
   ]);
 
-  assert.match(page, /await auth\(\)/);
-  assert.match(page, /return <LandingPage \/>/);
-  assert.match(landing, /href="\/signin"/);
-  assert.match(landing, /One space/);
-  assert.doesNotMatch(landing, /Adapt as you go/);
-  assert.match(landing, /Focused AI guides for fitness, interviews, resumes/);
-  assert.match(landing, /Forge Studio/);
-  assert.match(landing, /BrandLockup/);
-  assert.match(landing, /On-device tracking/);
-  assert.match(landingStyles, /@media \(max-width: 60rem\)/);
+  assert.match(page, /return <LandingPage showCareer=\{flags\.showCareer\} showFitness=\{flags\.showFitness\} \/>/);
+  assert.doesNotMatch(page, /await auth\(\)/);
+  assert.match(fitnessPage, /await auth\(\)/);
+  assert.match(fitnessPage, /<FitAIEntry \/>/);
+  assert.match(careerPage, /await auth\(\)/);
+  assert.match(careerPage, /<CareerProductEntry \/>/);
+  assert.match(landing, /const studioUrl = "\/signin\?callbackUrl=\/studio"/);
+  assert.match(landing, /Build the agent/);
+  assert.match(landing, /Describe the outcome/);
+  assert.match(landing, /Quality review/);
+  assert.match(landing, /Cloud Runtime/);
+  assert.match(landing, /Edge Runtime/);
+  assert.match(landing, /showFitness \|\| showCareer/);
+  assert.match(landing, /UnifiedBrandLockup/);
+  assert.match(landing, /Provider-neutral by design/);
+  assert.match(landingStyles, /@media \(max-width: 62rem\)/);
   assert.match(landingStyles, /@media \(max-width: 48rem\)/);
   assert.match(landingStyles, /@media \(max-width: 36rem\)/);
   assert.match(landingStyles, /@media \(max-width: 24rem\)/);

@@ -3,24 +3,38 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 test("provides branded route, not-found, and sign-out states", async () => {
-  const [loading, notFound, signOut, signIn, coach] = await Promise.all([
+  const [loading, notFound, signOut, signIn, coach, landing] = await Promise.all([
     readFile(new URL("../app/loading.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/not-found.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/signout/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/signin/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../components/FitAICoach.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/LandingPage.tsx", import.meta.url), "utf8"),
   ]);
 
   assert.match(loading, /RouteSkeleton/);
   assert.match(notFound, /Page not found — forgefit\.space/);
   assert.match(notFound, /robots: \{ index: false, follow: false \}/);
-  assert.match(notFound, /Your training[\s\S]*safe and unchanged/);
+  assert.match(notFound, /training[\s\S]*data is safe and unchanged/);
   assert.match(signOut, /await auth\(\)/);
   assert.match(signOut, /await signOut\(\{ redirectTo: "\/signout" \}\)/);
   assert.match(signOut, /AsyncSubmitButton/);
   assert.match(signIn, /pendingLabel="Opening secure sign in…"/);
+  assert.match(signIn, /signInErrorMessage/);
+  assert.match(signIn, /The sign-in connection was interrupted/);
+  assert.match(signIn, /"\/studio"/);
+  assert.match(landing, /\/signin\?callbackUrl=\/studio/);
   assert.match(coach, /href="\/signout"/);
   assert.doesNotMatch(coach, /href="\/api\/auth\/signout"/);
+});
+
+test("keeps authentication failures inside the branded sign-in flow", async () => {
+  const authConfig = await readFile(new URL("../auth.ts", import.meta.url), "utf8");
+
+  assert.match(authConfig, /error: "\/signin"/);
+  assert.match(authConfig, /raw `\/api\/auth\/error` configuration page/);
+  assert.match(authConfig, /trustHost:/);
+  assert.match(authConfig, /AUTH_TRUST_HOST/);
 });
 
 test("uses an in-memory server-state cache and lazy-loads camera tracking", async () => {
@@ -37,7 +51,8 @@ test("uses an in-memory server-state cache and lazy-loads camera tracking", asyn
   assert.match(coach, /queryKey: \["dashboard", user\.id\]/);
   assert.match(providers, /staleTime: 30_000/);
   assert.match(coach, /dynamic\([\s\S]*@\/components\/MovementTracker/);
-  assert.doesNotMatch(providers, /localStorage|sessionStorage|persist\(/);
+  assert.doesNotMatch(providers, /QueryClientPersist|persistQueryClient/);
+  assert.doesNotMatch(providers, /forgefit-theme|data-theme/);
 });
 
 test("shows scoped progress for workout mutations", async () => {

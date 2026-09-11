@@ -119,7 +119,7 @@ test("builds a private, focused Studio agent from a bot definition", () => {
   });
   const serialized = JSON.stringify(config);
 
-  assert.equal(config.name, "Forge Studio · Interview Coach · bot-12");
+  assert.equal(config.name, "Agent Studio · Interview Coach · bot-12");
   assert.equal(config.conversation_config.agent.first_message, "What role are you preparing for?");
   assert.equal(config.conversation_config.turn.turn_eagerness, "patient");
   assert.equal(config.conversation_config.tts.voice_id, "workspace-voice");
@@ -128,8 +128,10 @@ test("builds a private, focused Studio agent from a bot definition", () => {
   assert.match(config.conversation_config.agent.prompt.prompt, /Five years of TypeScript/);
   assert.match(config.conversation_config.agent.prompt.prompt, /system reliability/);
   assert.match(config.conversation_config.agent.prompt.prompt, /untrusted content/);
-  assert.match(config.conversation_config.agent.prompt.prompt, /# ForgeFit product knowledge/);
-  assert.match(config.conversation_config.agent.prompt.prompt, /Never ask the user to explain ForgeFit back to you/);
+  assert.match(config.conversation_config.agent.prompt.prompt, /# Host product knowledge — dormant unless explicitly requested/);
+  assert.match(config.conversation_config.agent.prompt.prompt, /voice never grants publish permission/);
+  assert.match(config.conversation_config.agent.prompt.prompt, /Enabled repository access and ordinary resume work are not reasons/);
+  assert.match(config.conversation_config.agent.prompt.prompt, /Never transfer repository facts into a different employer/);
   assert.match(config.conversation_config.agent.prompt.prompt, /Roman-script Hinglish/);
   assert.match(config.conversation_config.agent.prompt.prompt, /executive-grade personal copilot/);
   assert.match(config.conversation_config.agent.prompt.prompt, /ready-to-say wording/);
@@ -138,5 +140,11 @@ test("builds a private, focused Studio agent from a bot definition", () => {
   assert.equal(config.platform_settings.guardrails.focus.is_enabled, true);
   assert.equal(config.platform_settings.guardrails.prompt_injection.is_enabled, true);
   assert.match(serialized, /research_current_market/);
+  assert.match(config.conversation_config.agent.prompt.prompt, /current job openings/);
+  assert.match(config.conversation_config.agent.prompt.prompt, /give me the links/);
+  assert.match(serialized, /direct application links/);
+  assert.match(config.conversation_config.agent.prompt.prompt, /LinkedIn profile review/);
+  assert.match(config.conversation_config.agent.prompt.prompt, /never claim a LinkedIn URL was inspected/);
+  assert.match(serialized, /review_local_repository/);
   assert.doesNotMatch(serialized, /server-only-key/);
 });

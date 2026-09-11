@@ -45,6 +45,7 @@ import {
   useSyncExternalStore,
 } from "react";
 import { ApiRequestError, apiRequest } from "@/lib/api";
+import { BrandLockup } from "@/components/BrandLockup";
 import { mostRecentActiveCoachThread } from "@/lib/coach-threads";
 import type { LiveMovementSignal } from "@/lib/live-voice";
 import type { LiveCoachActivity } from "@/components/LiveVoiceCoach";
@@ -55,7 +56,6 @@ import {
   type BrowserSpeechRecognition,
   type SpeechRecognitionConstructor,
 } from "@/lib/voice";
-import { BrandLockup } from "@/components/BrandLockup";
 import { CoachMessageContent } from "@/components/CoachMessageContent";
 import coachVoiceStyles from "@/components/CoachVoiceFirst.module.css";
 import { ExerciseVideoButton } from "@/components/ExerciseVideo";
@@ -340,10 +340,10 @@ function FitAIWorkspace({ user }: { user: CurrentUser }) {
   return (
     <main className="app-shell">
       <aside className="sidebar">
-        <button className="brand" onClick={() => setView("today")} aria-label="Go to forgefit.space Today">
-          <BrandLockup />
+        <button className="brand fitness-wordmark" onClick={() => setView("today")} aria-label="Go to FitAI Coach Today">
+          <b>FITAI</b><span>COACH</span>
         </button>
-        <p className="label">YOUR WORKSPACE</p>
+        <p className="label">PERFORMANCE DESK</p>
         <nav>
           {nav.map(([id, icon, name]) => (
             <button
@@ -357,7 +357,7 @@ function FitAIWorkspace({ user }: { user: CurrentUser }) {
             </button>
           ))}
         </nav>
-        <Link className="studio-link" href="/studio">✦ Forge Studio <span>Build bots</span></Link>
+        <Link className="career-link" href="/career">Career Readiness <span>Open practice ↗</span></Link>
         <div className="sidebar-foot">
           <p>✦ Fitness guidance, not medical care.</p>
           <button className="profile" onClick={() => setView("profile")}>
@@ -374,9 +374,10 @@ function FitAIWorkspace({ user }: { user: CurrentUser }) {
       </aside>
       <section className={view === "coach" ? "main coach-active" : "main"}>
         <header className="mobile-header hidden">
-          <button className="brand" onClick={() => setView("today")} aria-label="Go to Today">
-            <BrandLockup />
+          <button className="brand fitness-wordmark" onClick={() => setView("today")} aria-label="Go to FitAI Coach Today">
+            <b>FITAI</b><span>COACH</span>
           </button>
+          <Link className="mobile-product-switch" href="/career">Career</Link>
           <button
             className="mobile-avatar"
             onClick={() => setView("profile")}
@@ -387,9 +388,9 @@ function FitAIWorkspace({ user }: { user: CurrentUser }) {
         </header>
         <header className="topbar">
           <span>
-            <i /> TRAINING SYSTEM ONLINE
+            <i /> TRAINING LOG / READY
           </span>
-          <div>{new Intl.DateTimeFormat("en", { dateStyle: "full" }).format(new Date())}</div>
+          <div>PERFORMANCE CYCLE · {new Intl.DateTimeFormat("en", { dateStyle: "full" }).format(new Date())}</div>
         </header>
         {view === "today" && (
           <Today
@@ -500,8 +501,21 @@ function StatusScreen({
 }
 
 function Onboarding({ user, onSaved }: { user: CurrentUser; onSaved: () => Promise<void> }) {
+  const [step, setStep] = useState(0);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const formRef = useRef<HTMLFormElement>(null);
+  const steps = [
+    { label: "Baseline", title: "Meet your starting point", copy: "Experience and optional body context help set a useful starting load." },
+    { label: "Plan", title: "Shape the week", copy: "Choose the outcome, training phase, and time you can repeat consistently." },
+    { label: "Guardrails", title: "Make it fit real life", copy: "Equipment, movement considerations, and preferences keep the plan practical." },
+  ] as const;
+
+  function continueSetup() {
+    if (!formRef.current?.reportValidity()) return;
+    setError("");
+    setStep((current) => Math.min(current + 1, steps.length - 1));
+  }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -541,16 +555,47 @@ function Onboarding({ user, onSaved }: { user: CurrentUser; onSaved: () => Promi
 
   return (
     <main className="onboarding-shell">
-      <form className="onboarding-card" onSubmit={submit}>
-        <Eyebrow>WELCOME, {user.name}</Eyebrow>
-        <h1>Set up your real training profile.</h1>
-        <p>This information is saved to your account and used by your coach.</p>
-        <ProfileFields />
-        {error && <p className="form-error" role="alert">{error}</p>}
-        <Button type="submit" busy={saving} fullWidth>
-          {saving ? "Saving…" : "Save profile"}
-        </Button>
-      </form>
+      <section className="onboarding-stage">
+        <aside className="onboarding-brief">
+          <Link className="onboarding-wordmark" href="/fitness" aria-label="FitAI Coach home">
+            <b>FITAI</b><span>COACH</span>
+          </Link>
+          <div>
+            <Eyebrow>Private adaptive training</Eyebrow>
+            <h1>Build a plan you can actually train.</h1>
+            <p>Three short steps give your coach enough context to create the first training block. You can refine everything later.</p>
+          </div>
+          <ol aria-label="Training setup progress">
+            {steps.map((item, index) => (
+              <li className={index === step ? "is-current" : index < step ? "is-complete" : ""} key={item.label}>
+                <span>{index < step ? "✓" : String(index + 1).padStart(2, "0")}</span>
+                <div><b>{item.label}</b><small>{item.copy}</small></div>
+              </li>
+            ))}
+          </ol>
+          <small className="onboarding-privacy">Your training profile is account-owned and never public.</small>
+        </aside>
+        <form ref={formRef} className="onboarding-card onboarding-form" onSubmit={submit}>
+          <header>
+            <span>STEP {step + 1} OF {steps.length}</span>
+            <Eyebrow>WELCOME, {user.name}</Eyebrow>
+            <h2>{steps[step].title}</h2>
+            <p>{steps[step].copy}</p>
+          </header>
+          <ProfileFields onboardingStep={step} />
+          {error && <p className="form-error" role="alert">{error}</p>}
+          <footer className="onboarding-actions">
+            {step > 0 ? <Button variant="ghost" onClick={() => setStep((current) => current - 1)}>Back</Button> : <span />}
+            {step < steps.length - 1 ? (
+              <Button onClick={continueSetup}>Continue</Button>
+            ) : (
+              <Button type="submit" busy={saving}>
+                {saving ? "Building your profile…" : "Build my first plan"}
+              </Button>
+            )}
+          </footer>
+        </form>
+      </section>
     </main>
   );
 }
@@ -560,7 +605,7 @@ function optionalNumber(value: FormDataEntryValue | null) {
   return normalized ? Number(normalized) : null;
 }
 
-function ProfileFields({ profile }: { profile?: UserProfile }) {
+function ProfileFields({ profile, onboardingStep }: { profile?: UserProfile; onboardingStep?: number }) {
   const initialLevel = profile?.experienceLevel ?? "beginner";
   const recommendedDuration = (level: UserProfile["experienceLevel"]): 4 | 8 | 12 => {
     if (level === "advanced") return 12;
@@ -573,6 +618,8 @@ function ProfileFields({ profile }: { profile?: UserProfile }) {
   );
   return (
     <>
+      <section className="profile-field-step" hidden={onboardingStep !== undefined && onboardingStep !== 0}>
+        <div className="profile-step-heading"><b>Your training baseline</b><small>Only experience is needed. Body details are optional.</small></div>
       <div className="form-row">
         <Field label="Experience level">
           <select
@@ -612,6 +659,52 @@ function ProfileFields({ profile }: { profile?: UserProfile }) {
           <input name="weightKg" type="number" min="30" max="350" step="0.1" defaultValue={profile?.weightKg ?? ""} />
         </Field>
       </div>
+      </section>
+      <section className="profile-field-step" hidden={onboardingStep !== undefined && onboardingStep !== 1}>
+        <div className="profile-step-heading"><b>Your repeatable week</b><small>Start realistic. Consistency beats an ambitious schedule you cannot sustain.</small></div>
+      <Field label="Primary goal">
+        <input
+          name="primaryGoal"
+          required={onboardingStep === undefined || onboardingStep === 1}
+          defaultValue={profile?.primaryGoal ?? ""}
+          placeholder="Build strength"
+        />
+      </Field>
+      <div className="form-row">
+        <Field
+          label="Training phase"
+          hint="Changes exercise selection, volume, progression, and recovery."
+        >
+          <select name="trainingPhase" defaultValue={profile?.trainingPhase ?? "general"}>
+            <option value="bulk">Lean bulk / build muscle</option>
+            <option value="cut">Cut / fat loss</option>
+            <option value="recomposition">Body recomposition</option>
+            <option value="general">General performance</option>
+          </select>
+        </Field>
+        <Field label="Program length" hint="You can regenerate the plan when your needs change.">
+          <select
+            name="programDurationWeeks"
+            value={programDurationWeeks}
+            onChange={(event) => setProgramDurationWeeks(Number(event.target.value) as 4 | 8 | 12)}
+          >
+            <option value={4}>4 weeks · foundation</option>
+            <option value={8}>8 weeks · progressive</option>
+            <option value={12}>12 weeks · periodized</option>
+          </select>
+        </Field>
+      </div>
+      <div className="form-row">
+        <Field label="Days per week">
+          <input name="trainingDaysPerWeek" type="number" min="1" max="7" defaultValue={profile?.trainingDaysPerWeek ?? 3} />
+        </Field>
+        <Field label="Minutes per session">
+          <input name="preferredSessionMinutes" type="number" min="10" max="180" defaultValue={profile?.preferredSessionMinutes ?? 35} />
+        </Field>
+      </div>
+      </section>
+      <section className="profile-field-step" hidden={onboardingStep !== undefined && onboardingStep !== 2}>
+        <div className="profile-step-heading"><b>Equipment and guardrails</b><small>This is where the generic plan becomes yours.</small></div>
       <Field
         label="Food preference"
         hint="Used only to personalize nutrition suggestions. You can change this anytime."
@@ -624,41 +717,6 @@ function ProfileFields({ profile }: { profile?: UserProfile }) {
           <option value="vegan">Vegan</option>
         </select>
       </Field>
-      <Field label="Primary goal">
-        <input
-          name="primaryGoal"
-          required
-          defaultValue={profile?.primaryGoal ?? ""}
-          placeholder="Build strength"
-        />
-      </Field>
-      <div className="form-row">
-        <Field
-          label="Training phase"
-          hint="This changes exercise selection, volume, progression, and recovery—not just the plan title."
-        >
-          <select name="trainingPhase" defaultValue={profile?.trainingPhase ?? "general"}>
-            <option value="bulk">Lean bulk / build muscle</option>
-            <option value="cut">Cut / fat loss</option>
-            <option value="recomposition">Body recomposition</option>
-            <option value="general">General performance</option>
-          </select>
-        </Field>
-        <Field
-          label="Program length"
-          hint="Advanced athletes typically need multiple mesocycles instead of one short block."
-        >
-          <select
-            name="programDurationWeeks"
-            value={programDurationWeeks}
-            onChange={(event) => setProgramDurationWeeks(Number(event.target.value) as 4 | 8 | 12)}
-          >
-            <option value={4}>4 weeks · foundation</option>
-            <option value={8}>8 weeks · progressive</option>
-            <option value={12}>12 weeks · periodized</option>
-          </select>
-        </Field>
-      </div>
       <Field label="Available equipment" hint="Separate multiple items with commas. Use “commercial gym” when you have full gym access.">
         <input
           name="equipment"
@@ -666,29 +724,6 @@ function ProfileFields({ profile }: { profile?: UserProfile }) {
           placeholder="Commercial gym, or dumbbells, bench, cable"
         />
       </Field>
-      <div className="form-row">
-        <Field label="Days per week">
-          <input
-            name="trainingDaysPerWeek"
-            type="number"
-            min="1"
-            max="7"
-            defaultValue={profile?.trainingDaysPerWeek ?? 3}
-          />
-        </Field>
-        <Field
-          label="Minutes per session"
-          hint="Advanced bodybuilding plans work best with 60–120 minutes when your recovery and schedule allow it."
-        >
-          <input
-            name="preferredSessionMinutes"
-            type="number"
-            min="10"
-            max="180"
-            defaultValue={profile?.preferredSessionMinutes ?? 35}
-          />
-        </Field>
-      </div>
       <Field
         label="Body considerations"
         hint="Optional. Add proportions, pregnancy/postpartum context, cycle preferences, or areas needing extra support."
@@ -711,6 +746,7 @@ function ProfileFields({ profile }: { profile?: UserProfile }) {
           placeholder="Anything your coach should account for"
         />
       </Field>
+      </section>
     </>
   );
 }

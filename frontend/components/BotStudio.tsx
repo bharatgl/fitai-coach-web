@@ -7,6 +7,7 @@ import type {
   BotGeneratedPdfResponse,
   BotLiveTokenResponse,
   BotListResponse,
+  BotLocalRepositoryReviewResponse,
   BotResponse,
   BotResearchResponse,
   BotTemplate,
@@ -19,6 +20,7 @@ import type {
 import type { Conversation as ElevenLabsConversation } from "@elevenlabs/client";
 import { Button, Field, StatusBadge } from "@fitai/ui";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiRequestError, apiRequest } from "@/lib/api";
 import { BrandLockup } from "@/components/BrandLockup";
@@ -279,8 +281,39 @@ export function BotVoicePanel({
       answer: response.answer,
       asOf: response.evidence.asOf,
       sources: response.evidence.sources,
-      instruction: "Use the numbered evidence in the answer. State uncertainty and do not invent additional current facts.",
+      instruction: response.evidence.kind === "jobs"
+        ? "Read out the strongest matches and tell the user that clickable application links are now visible in the chat. Never invent another vacancy or claim an application was submitted."
+        : "Use the numbered evidence in the answer. State uncertainty and do not invent additional current facts.",
     };
+  }
+
+  async function reviewLocalRepository(questionValue: unknown) {
+    const question = typeof questionValue === "string" && questionValue.trim()
+      ? questionValue.trim()
+      : "Inspect the local repository and identify concrete engineering work that belongs on my resume.";
+    const response = await apiRequest<BotLocalRepositoryReviewResponse>(`/v1/bots/${bot.id}/local-repository-review`, {
+      method: "POST",
+      body: JSON.stringify({ question }),
+    });
+    return {
+      repository: response.repository.name,
+      review: response.review,
+      inspectedFiles: response.inspectedFiles,
+      instruction: "Use only this verified repository evidence. Ask the user for any impact metrics the code cannot prove.",
+    };
+  }
+
+  async function reviewLocalRepositoryForVoice(questionValue: unknown) {
+    try {
+      return await reviewLocalRepository(questionValue);
+    } catch (cause) {
+      const message = providerError(cause);
+      setError(message);
+      return {
+        error: message,
+        instruction: "Explain this repository-access status accurately and tell the user to use the Repository control below the chat if access is disabled.",
+      };
+    }
   }
 
   function saveCompletedVoiceTurn(voiceProvider: "gemini" | "elevenlabs") {
@@ -343,6 +376,13 @@ export function BotVoicePanel({
           id: call.id,
           name: call.name,
           response: { result: await researchCurrentMarket(call.args?.question) },
+        };
+      }
+      if (call.name === "review_local_repository") {
+        return {
+          id: call.id,
+          name: call.name,
+          response: { result: await reviewLocalRepositoryForVoice(call.args?.question) },
         };
       }
       return { id: call.id, name: call.name, response: { result: "Unsupported tool" } };
@@ -458,13 +498,22 @@ export function BotVoicePanel({
                   required: ["title", "content"],
                 },
               },
+              {
+                name: "review_local_repository",
+                description: "Use only when the user explicitly asks to inspect this repository, its source code, implementation, architecture, or the project represented by it. Do not use for ordinary resume work or for a different project.",
+                parameters: {
+                  type: "OBJECT",
+                  properties: { question: { type: "STRING" } },
+                  required: ["question"],
+                },
+              },
               ...(bot.capabilities.webResearch ? [{
                 name: "research_current_market",
-                description: "Search the current web for verifiable market values, salary ranges, hiring trends, company expectations, recent technology changes, or other time-sensitive facts before answering.",
+                description: "Search the current web for verified job openings and direct application links, or for market values, salary ranges, hiring trends, company expectations, recent technology changes, and other time-sensitive facts.",
                 parameters: {
                   type: "OBJECT",
                   properties: {
-                    question: { type: "STRING", description: "A specific research question including role, location, seniority, company, and time range when known." },
+                    question: { type: "STRING", description: "A specific request including role, location or remote preference, seniority, skills, company, and time range when known. For jobs, request active listings and direct employer or canonical ATS links." },
                   },
                   required: ["question"],
                 },
@@ -495,23 +544,21 @@ export function BotVoicePanel({
               : "Gemini Live is the primary voice provider.");
             setError("");
             if (!resumeHandle) {
+              const continuingConversation = credentials.initialHistory.length > 0;
               socket.send(JSON.stringify({
                 clientContent: {
-                  turns: [
-                    ...credentials.initialHistory.map((turn) => ({
+                  turns: continuingConversation
+                    ? credentials.initialHistory.map((turn) => ({
                       role: turn.role,
                       parts: [{ text: turn.text }],
-                    })),
-                    {
+                    }))
+                    : [{
                       role: "user",
                       parts: [{
-                        text: credentials.initialHistory.length
-                          ? credentials.sessionOpening
-                          : `Begin this private practice session now. Say this exact opening line and nothing else: ${JSON.stringify(credentials.sessionOpening)}`,
+                        text: `Begin this private practice session now. Say this exact opening line and nothing else: ${JSON.stringify(credentials.sessionOpening)}`,
                       }],
-                    },
-                  ],
-                  turnComplete: true,
+                    }],
+                  turnComplete: !continuingConversation,
                 },
               }));
             }
@@ -630,6 +677,9 @@ export function BotVoicePanel({
           },
           research_current_market: async (parameters: { question?: unknown }) => {
             return JSON.stringify(await researchCurrentMarket(parameters?.question));
+          },
+          review_local_repository: async (parameters: { question?: unknown }) => {
+            return JSON.stringify(await reviewLocalRepositoryForVoice(parameters?.question));
           },
         },
         onConnect: () => { if (!pausedRef.current) setState("listening"); },
@@ -778,14 +828,14 @@ export function BotVoicePanel({
         {state === "speaking" ? `${bot.name} is speaking` : state === "listening" ? `Listening · ${provider}` : state === "paused" ? "Paused" : bot.status}
       </StatusBadge>
       <h3>{variant === "workspace" ? "Live voice" : "Talk to your bot"}</h3>
-      <p>{variant === "workspace" ? stateLabel : bot.instructions.firstMessage}</p>
+      <p title={variant === "workspace" ? providerNote || stateLabel : undefined}>{variant === "workspace" ? providerNote || stateLabel : bot.instructions.firstMessage}</p>
       {showTranscript && (userCaption || botCaption) && (
         <div className={styles.transcript} aria-live="polite">
           {userCaption && <p><b>You</b>{userCaption}</p>}
           {botCaption && <p><b>{bot.name}</b>{botCaption}</p>}
         </div>
       )}
-      {providerNote && <p className={styles.providerNote}>{providerNote}</p>}
+      {providerNote && variant !== "workspace" && <p className={styles.providerNote}>{providerNote}</p>}
       {persistenceIssue && <p className={styles.error} role="status">{persistenceIssue}</p>}
       {error && <p className={styles.error} role="alert">{error}</p>}
       {live && variant === "workspace" ? (
@@ -805,7 +855,28 @@ export function BotVoicePanel({
   );
 }
 
-export function BotStudio({ user }: { user: CurrentUser }) {
+function isVisibleProductBot(bot: BotDefinition, showFitness: boolean, showCareer: boolean) {
+  if (bot.vertical === "fitness") return showFitness;
+  if (bot.vertical === "interview" || bot.vertical === "resume") return showCareer;
+  return true;
+}
+
+function isVisibleTemplate(template: BotTemplate, showFitness: boolean, showCareer: boolean) {
+  if (template.id === "fitness_coach") return showFitness;
+  if (template.id === "interview_coach" || template.id === "resume_reviewer") return showCareer;
+  return true;
+}
+
+export function BotStudio({
+  user,
+  showCareer = false,
+  showFitness = false,
+}: {
+  user: CurrentUser;
+  showCareer?: boolean;
+  showFitness?: boolean;
+}) {
+  const router = useRouter();
   const [bots, setBots] = useState<BotDefinition[]>([]);
   const [templates, setTemplates] = useState<BotTemplate[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -832,13 +903,17 @@ export function BotStudio({ user }: { user: CurrentUser }) {
       apiRequest<BotListResponse>("/v1/bots"),
       apiRequest<BotTemplateListResponse>("/v1/bots/templates"),
     ]).then(([botResult, templateResult]) => {
-      setBots(botResult.bots);
-      setTemplates(templateResult.templates);
-      setSelectedId(botResult.bots[0]?.id ?? null);
-      setDraft(botResult.bots[0] ? draftFromBot(botResult.bots[0]) : null);
-      setShowTemplates(botResult.bots.length === 0);
+      // Legacy Fitness/Career records remain stored; only their Studio entry
+      // points are parked while the general configurator is the main product.
+      const visibleBots = botResult.bots.filter((bot) => isVisibleProductBot(bot, showFitness, showCareer));
+      const visibleTemplates = templateResult.templates.filter((template) => isVisibleTemplate(template, showFitness, showCareer));
+      setBots(visibleBots);
+      setTemplates(visibleTemplates);
+      setSelectedId(visibleBots[0]?.id ?? null);
+      setDraft(visibleBots[0] ? draftFromBot(visibleBots[0]) : null);
+      setShowTemplates(visibleBots.length === 0);
     }).catch((cause) => setError(providerError(cause))).finally(() => setLoading(false));
-  }, [user.id]);
+  }, [showCareer, showFitness, user.id]);
 
   function selectBot(bot: BotDefinition) {
     setSelectedId(bot.id);
@@ -897,6 +972,7 @@ export function BotStudio({ user }: { user: CurrentUser }) {
       });
       setBots((current) => current.map((bot) => bot.id === response.bot.id ? response.bot : bot));
       setDraft(draftFromBot(response.bot));
+      router.push(`/studio/bots/${response.bot.id}`);
     } catch (cause) {
       setError(providerError(cause));
     } finally {
@@ -913,14 +989,14 @@ export function BotStudio({ user }: { user: CurrentUser }) {
   return (
     <main className={styles.page}>
       <header className={styles.header}>
-        <Link href="/" aria-label="forgefit.space home"><BrandLockup /></Link>
-        <span className={styles.productName}>Forge Studio <i>beta</i></span>
-        <nav><Link href="/studio/operations">Operations</Link><Link href="/">Fitness workspace</Link><Link href="/signout">Sign out</Link><b>{initials}</b></nav>
+        <Link href="/" aria-label="Unified Agents home"><BrandLockup /></Link>
+        <span className={styles.productName}>Agent Studio <i>general configurator</i></span>
+        <nav>{showFitness && <Link href="/fitness">FitAI Coach</Link>}{showCareer && <Link href="/career">Career Readiness</Link>}<Link href="/studio/operations">Operations</Link><Link href="/signout">Sign out</Link><b>{initials}</b></nav>
       </header>
       <div className={styles.shell}>
         <aside className={styles.sidebar}>
-          <div><span>Your specialists</span><button type="button" onClick={() => setShowTemplates(true)}>＋</button></div>
-          <button className={styles.newBot} type="button" onClick={() => setShowTemplates(true)}>Create a specialist</button>
+          <div><span>Your agents</span><button type="button" onClick={() => setShowTemplates(true)}>＋</button></div>
+          <button className={styles.newBot} type="button" onClick={() => setShowTemplates(true)}>Create an agent</button>
           <div className={styles.botList}>
             {bots.map((bot) => (
               <button className={bot.id === selectedId && !showTemplates ? styles.activeBot : ""} key={bot.id} type="button" onClick={() => selectBot(bot)}>
@@ -929,17 +1005,17 @@ export function BotStudio({ user }: { user: CurrentUser }) {
               </button>
             ))}
           </div>
-          <p>Original personal-specialist tooling for ForgeFit products. No contact-center or customer-support workflows.</p>
+          <p>Create focused agents for customer, internal, voice, research, and guided web workflows.</p>
         </aside>
 
         <section className={styles.workspace}>
           {loading ? (
-            <div className={styles.loading}>Loading Forge Studio…</div>
+            <div className={styles.loading}>Loading Agent Studio…</div>
           ) : showTemplates || !selected || !draft ? (
             <section className={styles.templates}>
               <span className={styles.eyebrow}>Choose a starting point</span>
-              <h1>Build one bot for <em>one clear job.</em></h1>
-              <p>Each template starts with its own behavior, boundaries, voice rhythm, and conversation starters. You can change every part.</p>
+              <h1>Build one agent for <em>one clear job.</em></h1>
+              <p>Start with a safe general agent, then configure its purpose, knowledge, tools, boundaries, channels, and test cases.</p>
               {error && <p className={styles.error} role="alert">{error}</p>}
               <div className={styles.templateGrid}>
                 {templates.map((template) => (
@@ -947,7 +1023,7 @@ export function BotStudio({ user }: { user: CurrentUser }) {
                     <i>{template.icon}</i><span>{template.vertical}</span>
                     <h2>{template.name}</h2>
                     <p>{template.description}</p>
-                    <Button busy={saving} variant={template.id === "interview_coach" ? "primary" : "secondary"} onClick={() => void createBot(template)}>
+                    <Button busy={saving} variant={template.id === "blank" ? "primary" : "secondary"} onClick={() => void createBot(template)}>
                       Use this template
                     </Button>
                   </article>
@@ -957,8 +1033,8 @@ export function BotStudio({ user }: { user: CurrentUser }) {
           ) : (
             <>
               <header className={styles.editorHeader}>
-                <div><span className={styles.eyebrow}>{selected.vertical} specialist</span><h1>{draft.name}</h1><p>Configure the bot’s job, behavior, safety boundaries, and natural voice.</p></div>
-                <div>{selected.status === "active" && !draftIsDirty && <Link className={styles.openWorkspace} href={`/studio/bots/${selected.id}`}>Open workspace ↗</Link>}<Button variant="secondary" busy={saving} onClick={() => void save()}>Save draft</Button><Button busy={activating} onClick={() => void activate()}>{activating ? "Activating…" : selected.status === "active" ? "Sync & activate" : "Activate bot"}</Button></div>
+                <div><span className={styles.eyebrow}>Configurable agent</span><h1>{draft.name}</h1><p>Configure the agent’s job, behavior, safety boundaries, tools, and conversation channels.</p></div>
+                <div>{selected.status === "active" && <Link className={styles.openWorkspace} href={`/studio/bots/${selected.id}`} title={`Open the live chat with ${selected.name}`}>Open bot →</Link>}<Button variant="secondary" busy={saving} onClick={() => void save()}>Save draft</Button><Button busy={activating} onClick={() => void activate()}>{activating ? "Opening bot…" : selected.status === "active" ? "Sync & open bot" : "Activate & open bot"}</Button></div>
               </header>
               {error && <p className={styles.errorBanner} role="alert">{error}</p>}
               <nav className={styles.creatorNav} aria-label="Bot creation steps">
@@ -981,25 +1057,25 @@ export function BotStudio({ user }: { user: CurrentUser }) {
               <div className={styles.editorGrid}>
                 <form className={styles.form} onSubmit={(event) => { event.preventDefault(); void save(); }}>
                   {creatorStep === "identity" && <section>
-                    <div className={styles.sectionTitle}><span>01</span><div><h2>Identity</h2><p>Give this specialist a clear promise.</p></div></div>
-                    <div className={styles.creatorTip}><i>✦</i><p><b>Start simple.</b> A clear name and one narrow promise make a better bot than a long list of unrelated abilities.</p></div>
+                    <div className={styles.sectionTitle}><span>01</span><div><h2>Identity</h2><p>Give this agent a clear promise.</p></div></div>
+                    <div className={styles.creatorTip}><i>✦</i><p><b>Start simple.</b> A clear name and one bounded outcome make a better agent than a long list of unrelated abilities.</p></div>
                     <div className={styles.twoFields}>
-                      <Field label="Bot name"><input value={draft.name ?? ""} onChange={(event) => change("name", event.target.value)} /></Field>
-                      <Field label="Specialty"><input value={selected.vertical} disabled /></Field>
+                      <Field label="Agent name"><input value={draft.name ?? ""} onChange={(event) => change("name", event.target.value)} /></Field>
+                      <Field label="Configuration"><input value="General agent" disabled /></Field>
                     </div>
-                    <Field label="What does this bot help with?" hint="One sentence users can understand before starting."><textarea rows={2} value={draft.description ?? ""} onChange={(event) => change("description", event.target.value)} /></Field>
+                    <Field label="What does this agent help with?" hint="One sentence users can understand before starting."><textarea rows={2} value={draft.description ?? ""} onChange={(event) => change("description", event.target.value)} /></Field>
                     <Field label="First message" hint="The opening should make the next step obvious."><textarea rows={3} value={draft.instructions?.firstMessage ?? ""} onChange={(event) => change("instructions", { ...draft.instructions!, firstMessage: event.target.value })} /></Field>
                     <div className={styles.stepActions}><Button onClick={() => setCreatorStep("context")}>Next: personalise</Button></div>
                   </section>}
                   {creatorStep === "context" && <section>
-                    <div className={styles.sectionTitle}><span>02</span><div><h2>Personalise</h2><p>Give this bot the context it needs—nothing more.</p></div></div>
-                    <div className={styles.creatorTip}><i>◎</i><p><b>For interview preparation:</b> add your target role, strongest real projects, and the job description. The bot will use them to ask relevant questions without inventing experience.</p></div>
-                    <Field label="Who is this bot helping?" hint="Example: Me, preparing for senior frontend engineering interviews."><input value={draft.context?.audience ?? ""} onChange={(event) => change("context", { ...draft.context!, audience: event.target.value })} /></Field>
-                    <Field label="What should it know about you?" hint="Paste a concise career summary, real projects, skills, and areas you want to improve."><textarea rows={7} placeholder="I have 5 years of frontend experience…" value={draft.context?.personalContext ?? ""} onChange={(event) => change("context", { ...draft.context!, personalContext: event.target.value })} /></Field>
-                    <Field label="Job description or reference notes" hint="Paste the target JD, interview format, company notes, or resume bullets. This stays scoped to your bot."><textarea rows={9} placeholder="Target role: Senior Frontend Engineer…" value={draft.context?.referenceMaterial ?? ""} onChange={(event) => change("context", { ...draft.context!, referenceMaterial: event.target.value })} /></Field>
+                    <div className={styles.sectionTitle}><span>02</span><div><h2>Context</h2><p>Give this agent the context it needs—nothing more.</p></div></div>
+                    <div className={styles.creatorTip}><i>◎</i><p><b>Use only useful context.</b> Add the audience, trusted reference material, operating rules, and facts this agent needs to complete its job.</p></div>
+                    <Field label="Who is this agent helping?" hint="Example: Customers comparing products on our approved storefronts."><input value={draft.context?.audience ?? ""} onChange={(event) => change("context", { ...draft.context!, audience: event.target.value })} /></Field>
+                    <Field label="What context does it need?" hint="Add product, organization, audience, or workflow context relevant to this agent only."><textarea rows={7} placeholder="This agent helps customers compare approved products…" value={draft.context?.personalContext ?? ""} onChange={(event) => change("context", { ...draft.context!, personalContext: event.target.value })} /></Field>
+                    <Field label="Reference material or operating notes" hint="Add policies, source material, handoff rules, and other trusted guidance. This stays scoped to the agent."><textarea rows={9} placeholder="Prefer official product sources and ask for approval before any consequential action…" value={draft.context?.referenceMaterial ?? ""} onChange={(event) => change("context", { ...draft.context!, referenceMaterial: event.target.value })} /></Field>
                     <div className={styles.toolAccess}>
                       <div><b>Specialist tools</b><small>Choose which evidence sources this bot may use.</small></div>
-                      <label aria-label="Live web research" className={styles.voiceToggle} htmlFor="studio-web-research"><input id="studio-web-research" type="checkbox" checked={draft.capabilities?.webResearch ?? false} onChange={(event) => change("capabilities", { ...draft.capabilities!, webResearch: event.target.checked })} /><span><b>Live web research</b><small>Search current market values, salaries, hiring trends, company expectations, and recent technologies with visible sources. Production research uses capped Vertex AI access from the ForgeFit server.</small></span></label>
+                      <label aria-label="Live web research" className={styles.voiceToggle} htmlFor="studio-web-research"><input id="studio-web-research" type="checkbox" checked={draft.capabilities?.webResearch ?? false} onChange={(event) => change("capabilities", { ...draft.capabilities!, webResearch: event.target.checked })} /><span><b>Live web research</b><small>Research current information from approved public sources and return dated, visible evidence. Production access remains policy-bound and usage-capped.</small></span></label>
                       <label aria-label="Document review" className={styles.voiceToggle} htmlFor="studio-document-review"><input id="studio-document-review" type="checkbox" checked={draft.capabilities?.documentReview ?? false} onChange={(event) => change("capabilities", { ...draft.capabilities!, documentReview: event.target.checked })} /><span><b>Document review</b><small>Inspect PDFs and images attached inside this bot’s private conversation.</small></span></label>
                     </div>
                     <div className={styles.stepActions}><Button variant="secondary" onClick={() => setCreatorStep("identity")}>Back</Button><Button onClick={() => setCreatorStep("behavior")}>Next: behaviour</Button></div>

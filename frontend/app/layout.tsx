@@ -11,11 +11,11 @@ export async function generateMetadata(): Promise<Metadata> {
   const protocol = requestHeaders.get("x-forwarded-proto") ?? "https";
   const image = `${protocol}://${host}/og.png`;
   return {
-    title: "forgefit.space — Personal AI specialists",
-    description: "Focused AI specialists for fitness, interview practice, resume improvement, and the goals you build next.",
-    icons: { icon: "/favicon.svg", shortcut: "/favicon.svg" },
-    openGraph: { title: "forgefit.space", description: "One space. Focused AI specialists for real goals.", images: [{ url: image, width: 1672, height: 941, alt: "forgefit.space personal AI specialists" }] },
-    twitter: { card: "summary_large_image", title: "forgefit.space", description: "One space. Focused AI specialists for real goals.", images: [image] },
+    title: "Unified Agents — Build, test, and deploy AI agents",
+    description: "Configure, test, deploy, and improve governed AI agents across Cloud and Edge runtimes.",
+    icons: { icon: "/unified-favicon.svg", shortcut: "/unified-favicon.svg" },
+    openGraph: { title: "Unified Agents", description: "One control plane for configurable AI agents.", images: [{ url: image, width: 1672, height: 941, alt: "Unified agent platform" }] },
+    twitter: { card: "summary_large_image", title: "Unified Agents", description: "One control plane for configurable AI agents.", images: [image] },
   };
 }
 

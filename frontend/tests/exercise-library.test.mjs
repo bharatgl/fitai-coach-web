@@ -32,8 +32,7 @@ test("vendors and uploads the complete attributed RepDB free tier", async () => 
   await access(new URL("../public/exercises/repdb/LICENSE-DATA.md", import.meta.url));
   assert.match(uploadScript, /frontend\/public\/exercises/);
   assert.match(uploadScript, /max-age=31536000,immutable/);
-  assert.match(landing, /Exercise data by/);
-  assert.match(landing, /href="\/exercises"/);
+  assert.match(landing, /showFitness && <Link href="\/exercises"/);
 });
 
 test("fetches paginated visual demos without bundling the source catalogs", async () => {

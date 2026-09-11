@@ -31,6 +31,7 @@ const configSchema = z.object({
   SIMLI_API_KEY: optionalSetting,
   SIMLI_FACE_ID: optionalSetting,
   USER_PROVIDER_CREDENTIALS_KEY: optionalSetting,
+  LOCAL_REPOSITORY_ROOT: optionalSetting,
   EXERCISE_ASSET_BASE_URL: optionalSetting.pipe(z.url().optional()),
   PORT: z.coerce.number().int().positive().default(4000),
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),

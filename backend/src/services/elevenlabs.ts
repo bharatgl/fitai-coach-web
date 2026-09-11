@@ -270,7 +270,7 @@ export function buildElevenLabsStudioAgentConfig(
 ) {
   const voiceId = bot.voice.voiceId ?? config.ELEVENLABS_VOICE_ID ?? defaultVoice.id;
   return {
-    name: `Forge Studio · ${bot.name} · ${bot.id.slice(0, 6)}`,
+    name: `Agent Studio · ${bot.name} · ${bot.id.slice(0, 6)}`,
     tags: ["forgefit", "forge-studio", bot.vertical],
     conversation_config: {
       agent: {
@@ -282,10 +282,13 @@ export function buildElevenLabsStudioAgentConfig(
             buildStudioBotSystemPrompt(bot),
             "",
             "# Live tools",
-            "When the user asks about an uploaded file, resume, PDF, document, image, scan, or report, call review_recent_attachment before answering. Never claim you cannot access uploads before calling it.",
+            "Call review_recent_attachment when the current request requires evidence from an uploaded resume, PDF, document, image, scan, or report. Pass the exact current question and preserve all scope corrections.",
+            "For a LinkedIn profile review, call review_recent_attachment when the user has uploaded a LinkedIn PDF or screenshots. If no profile content is available, ask them to upload an export/screenshots or paste the relevant sections; never claim a LinkedIn URL was inspected unless a tool returned its actual content.",
+            "Call review_local_repository only when the user explicitly asks to inspect the repository, source code, implementation, architecture, or the specific project represented by it. Enabled repository access and ordinary resume work are not reasons to introduce that project.",
+            "Never transfer repository facts into a different employer, course, client, or project entry. Never invent implementation details or impact metrics.",
             "When the user asks to create, generate, export, save, or download a PDF, call create_pdf_document with the complete polished content. After it succeeds, tell them the download is visible in the chat.",
             bot.capabilities.webResearch
-              ? "When the user asks about current market values, salary, hiring, company expectations, recent trends, technologies, or news, call research_current_market before answering. Cite its numbered sources and clearly label estimates."
+              ? "When the user asks about current job openings, matching roles, application links, market values, salary, hiring, company expectations, recent trends, technologies, or news, call research_current_market before answering. Follow-ups such as 'give me the links', 'where do I apply?', or 'find those for me' also require the tool when the conversation is about jobs. Cite its numbered sources and never invent a vacancy or URL."
               : "Live web research is disabled. Never guess current market facts.",
           ].join("\n"),
           llm: config.ELEVENLABS_LLM_MODEL,
@@ -307,6 +310,19 @@ export function buildElevenLabsStudioAgentConfig(
             },
             {
               type: "client",
+              name: "review_local_repository",
+              description: "Use only when the user explicitly asks to inspect this repository, its source code, implementation, architecture, or the project represented by it. Do not use for ordinary resume work or a different project.",
+              expects_response: true,
+              parameters: {
+                type: "object",
+                properties: {
+                  question: { type: "string", description: "The user's exact question about their local repository." },
+                },
+                required: ["question"],
+              },
+            },
+            {
+              type: "client",
               name: "create_pdf_document",
               description: "Create a polished downloadable PDF and attach it to this bot conversation.",
               expects_response: true,
@@ -322,12 +338,12 @@ export function buildElevenLabsStudioAgentConfig(
             ...(bot.capabilities.webResearch ? [{
               type: "client",
               name: "research_current_market",
-              description: "Search the current web for verifiable market values, salary ranges, hiring trends, company expectations, recent technologies, or other time-sensitive facts before answering.",
+              description: "Search the current web for verified job openings and direct application links, or for market values, salary ranges, hiring trends, company expectations, recent technologies, and other time-sensitive facts.",
               expects_response: true,
               parameters: {
                 type: "object",
                 properties: {
-                  question: { type: "string", description: "A specific research question including role, seniority, location, company, and time range when known." },
+                  question: { type: "string", description: "A specific request including target role, seniority, skills, location or remote preference, company, and time range when known. For jobs, request currently active roles and direct employer or canonical ATS links." },
                 },
                 required: ["question"],
               },

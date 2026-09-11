@@ -13,6 +13,7 @@
   },
   "scripts": {
     "dev": "turbo run dev",
+    "dev:restart": "node ./scripts/restart-dev.mjs",
     "build": "turbo run build",
     "test": "turbo run test",
     "lint": "turbo run lint",

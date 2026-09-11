@@ -7,6 +7,7 @@ import { getConfig } from "./config.js";
 import { ensureIndexes, getDatabase } from "./db.js";
 import { coachRoutes } from "./routes/coach.js";
 import { botRoutes } from "./routes/bots.js";
+import { careerRoutes } from "./routes/career.js";
 import { dashboardRoutes } from "./routes/dashboard.js";
 import { exerciseRoutes } from "./routes/exercises.js";
 import { profileRoutes } from "./routes/profile.js";
@@ -37,6 +38,7 @@ export async function buildApp() {
   });
 
   await app.register(profileRoutes);
+  await app.register(careerRoutes);
   await app.register(botRoutes);
   await app.register(providerSettingsRoutes);
   await app.register(exerciseRoutes);

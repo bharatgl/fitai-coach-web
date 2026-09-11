@@ -158,7 +158,7 @@ export function OperationsDashboard({ user }: { user: { name: string; email: str
       <header className={styles.header}>
         <Link href="/" aria-label="forgefit.space home"><BrandLockup /></Link>
         <span className={styles.productName}>Forge Operations <i>live</i></span>
-        <nav><Link href="/studio">Forge Studio</Link><Link href="/signout">Sign out</Link><b>{initials}</b></nav>
+        <nav><Link href="/studio">Agent Studio</Link><Link href="/signout">Sign out</Link><b>{initials}</b></nav>
       </header>
 
       <div className={styles.shell}>
@@ -172,7 +172,7 @@ export function OperationsDashboard({ user }: { user: { name: string; email: str
             <a href="#logs"><Icon name="terminal"/>Backend logs</a>
           </nav>
           <div className={styles.sideStatus} data-status={data?.runtime.status ?? "loading"}><i/><div><b>{data?.runtime.status === "healthy" ? "All core systems normal" : data ? "Attention recommended" : "Connecting…"}</b><span>{data ? `Checked ${relativeTime(data.generatedAt)}` : "Reading telemetry"}</span></div></div>
-          <Link className={styles.backLink} href="/studio">← Back to Forge Studio</Link>
+          <Link className={styles.backLink} href="/studio">← Back to Agent Studio</Link>
         </aside>
 
         <section className={styles.content}>

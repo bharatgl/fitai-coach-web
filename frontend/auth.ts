@@ -8,7 +8,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     databaseName: process.env.MONGODB_DB,
   }),
   providers: [Google],
-  pages: { signIn: "/signin" },
+  // Auth.js does not trust a local host header by default in every runtime.
+  // Production remains explicitly opt-in through AUTH_TRUST_HOST.
+  trustHost:
+    process.env.AUTH_TRUST_HOST === "true" || process.env.NODE_ENV === "development",
+  // Keep OAuth callback failures inside the product experience. Without this,
+  // Auth.js sends users to its raw `/api/auth/error` configuration page.
+  pages: { signIn: "/signin", error: "/signin" },
   session: { strategy: "database" },
   callbacks: {
     session({ session, user }) {

@@ -94,9 +94,11 @@ export type BotResearchSource = {
 };
 
 export type BotResearchEvidence = {
+  kind?: "market" | "jobs";
   asOf: string;
   queries: string[];
   sources: BotResearchSource[];
+  applicationSources?: BotResearchSource[];
   searchSuggestionsHtml: string | null;
 };
 
@@ -191,6 +193,22 @@ export type BotResearchResponse = {
   answer: string;
   evidence: BotResearchEvidence;
   message: BotChatMessage;
+};
+
+export type BotLocalRepositoryConnection = {
+  name: string;
+  enabledAt: string;
+};
+
+export type BotLocalRepositoryConnectionResponse = {
+  available: boolean;
+  repository: BotLocalRepositoryConnection | null;
+};
+
+export type BotLocalRepositoryReviewResponse = {
+  repository: BotLocalRepositoryConnection;
+  review: string;
+  inspectedFiles: string[];
 };
 
 export type CoachAttachment = {
@@ -775,4 +793,128 @@ export type OperationsDashboardResponse = {
     creditDefinition: string;
     retention: string;
   };
+};
+
+export type CareerWorkMode = "remote" | "hybrid" | "onsite" | "flexible";
+export type CareerSeniority = "internship" | "junior" | "mid" | "senior" | "lead" | "staff" | "executive" | "unspecified";
+export type CareerTargetStatus = "active" | "archived";
+export type CareerApplicationStatus = "saved" | "preparing" | "applied" | "interviewing" | "offer" | "accepted" | "rejected" | "withdrawn";
+export type CareerInterviewFormat = "general" | "behavioral" | "technical" | "system_design";
+
+export type CareerProfile = {
+  headline: string;
+  location: string;
+  workMode: CareerWorkMode;
+  yearsExperience: number | null;
+  skills: string[];
+  strengths: string;
+  constraints: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type CareerTargetRole = {
+  id: string;
+  title: string;
+  seniority: CareerSeniority;
+  location: string;
+  workMode: CareerWorkMode;
+  mustHaveSkills: string[];
+  notes: string;
+  status: CareerTargetStatus;
+  isPrimary: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type CareerApplication = {
+  id: string;
+  targetRoleId: string | null;
+  company: string;
+  roleTitle: string;
+  sourceUrl: string | null;
+  status: CareerApplicationStatus;
+  nextAction: string;
+  nextActionDue: string | null;
+  notes: string;
+  statusChangedAt: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type CareerInterviewRubricItem = {
+  competency: string;
+  score: number;
+  evidenceExcerpt: string | null;
+  feedback: string;
+};
+
+export type CareerInterviewFeedback = {
+  overallScore: number;
+  summary: string;
+  rubric: CareerInterviewRubricItem[];
+  nextActions: string[];
+  groundedEvidenceCount: number;
+};
+
+export type CareerInterviewTurn = {
+  role: "user" | "coach";
+  content: string;
+};
+
+export type CareerInterviewSession = {
+  id: string;
+  targetRoleId: string | null;
+  botId: string | null;
+  format: CareerInterviewFormat;
+  competencies: string[];
+  plannedMinutes: number;
+  status: "active" | "completed" | "abandoned";
+  turns: CareerInterviewTurn[];
+  feedback: CareerInterviewFeedback | null;
+  model: string | null;
+  startedAt: string;
+  completedAt: string | null;
+  updatedAt: string;
+};
+
+export type CareerProgress = {
+  applicationCounts: Record<CareerApplicationStatus, number>;
+  completedInterviews: number;
+  averageInterviewScore: number | null;
+};
+
+export type CareerOverviewResponse = {
+  profile: CareerProfile | null;
+  targetRoles: CareerTargetRole[];
+  recentApplications: CareerApplication[];
+  recentInterviews: CareerInterviewSession[];
+  activeInterview: CareerInterviewSession | null;
+  progress: CareerProgress;
+  nextAction: "complete_profile" | "choose_target" | "find_roles" | "prepare_application" | "practice_interview";
+};
+
+export type SaveCareerProfileRequest = Pick<CareerProfile,
+  "headline" | "location" | "workMode" | "yearsExperience" | "skills" | "strengths" | "constraints"
+>;
+export type CreateCareerTargetRequest = Pick<CareerTargetRole,
+  "title" | "seniority" | "location" | "workMode" | "mustHaveSkills" | "notes"
+> & { isPrimary?: boolean };
+export type CreateCareerApplicationRequest = Pick<CareerApplication,
+  "company" | "roleTitle" | "sourceUrl" | "targetRoleId" | "status" | "nextAction" | "nextActionDue" | "notes"
+>;
+export type UpdateCareerApplicationRequest = Partial<Pick<CareerApplication,
+  "sourceUrl" | "status" | "nextAction" | "nextActionDue" | "notes"
+>>;
+export type StartCareerInterviewRequest = Pick<CareerInterviewSession,
+  "targetRoleId" | "botId" | "format" | "competencies" | "plannedMinutes"
+>;
+export type CompleteCareerInterviewRequest = { turns: CareerInterviewTurn[] };
+export type CareerProfileResponse = { profile: CareerProfile };
+export type CareerTargetResponse = { targetRole: CareerTargetRole };
+export type CareerApplicationResponse = { application: CareerApplication };
+export type CareerInterviewResponse = { session: CareerInterviewSession };
+export type CareerApplicationListResponse = {
+  items: CareerApplication[];
+  nextCursor: string | null;
 };

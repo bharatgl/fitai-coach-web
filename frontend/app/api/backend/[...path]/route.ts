@@ -1,5 +1,6 @@
 import type { NextRequest } from "next/server";
 import { auth } from "@/auth";
+import { fetchBackendWithStartupRetry, isBackendTransportError } from "@/lib/backend-proxy";
 import { createBackendToken } from "@/lib/backend-token";
 
 type RouteContext = { params: Promise<{ path: string[] }> };
@@ -31,8 +32,10 @@ async function proxy(request: NextRequest, context: RouteContext) {
     const canHaveBody = request.method !== "GET" && request.method !== "HEAD";
     const requestBody = canHaveBody ? await request.arrayBuffer() : undefined;
     const hasBody = Boolean(requestBody?.byteLength);
+    const backendSignal = AbortSignal.any([request.signal, AbortSignal.timeout(60_000)]);
 
-    const response = await fetch(target, {
+    const retryStartupConnection = request.method === "GET" || request.method === "HEAD";
+    const response = await fetchBackendWithStartupRetry(target, {
       method: request.method,
       headers: {
         ...(token ? { authorization: `Bearer ${token}` } : {}),
@@ -43,7 +46,11 @@ async function proxy(request: NextRequest, context: RouteContext) {
       },
       body: hasBody ? requestBody : undefined,
       cache: "no-store",
-      signal: AbortSignal.timeout(60_000),
+      signal: backendSignal,
+    }, {
+      attempts: retryStartupConnection ? 6 : 1,
+      initialDelayMs: 125,
+      signal: backendSignal,
     });
 
     const responseHeaders = new Headers({
@@ -65,6 +72,12 @@ async function proxy(request: NextRequest, context: RouteContext) {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Backend request failed";
+    if (isBackendTransportError(error)) {
+      return Response.json(
+        { error: "The backend is still starting. Please retry in a moment." },
+        { status: 503, headers: { "retry-after": "1" } },
+      );
+    }
     return Response.json({ error: message }, { status: 502 });
   }
 }
