@@ -5,6 +5,7 @@
       "dependsOn": ["^build"],
       "outputs": [".next/**", "!.next/cache/**", "dist/**"],
       "env": [
+        "AI_LOG_FAILURE_EXCERPT",
         "API_JWT_SECRET",
         "AUTH_GOOGLE_ID",
         "AUTH_GOOGLE_SECRET",
@@ -14,6 +15,8 @@
         "BACKEND_API_URL",
         "GEMINI_API_KEY",
         "GEMINI_MODEL",
+        "LOG_LEVEL",
+        "LOG_SALT",
         "MONGODB_DB",
         "MONGODB_URI",
         "EXERCISE_ASSET_BASE_URL",

@@ -214,6 +214,172 @@ locally. Moving to another container platform therefore changes the deployment
 adapter and secret mappings rather than frontend, backend, database, or AI
 business logic.
 
+## Observability
+
+Structured JSON lines from both containers, shipped to Cloud Logging by the Ops
+Agent and queryable locally with the report script. Ingestion sits inside Google
+Cloud's free monthly allowance at hobby volumes.
+
+### One identifier across the tiers
+
+The browser, the Next.js proxy, the Fastify backend, and each model call share a
+single `x-request-id`.
+
+1. The proxy adopts an inbound `x-request-id` or mints one, forwards it to the
+   backend, and echoes it on the response.
+2. The backend adopts the same header via `genReqId`, so pino stamps `reqId` on
+   every line for that request, and echoes it back through an `onSend` hook.
+3. Each model call records it on the run record described below.
+4. `ApiRequestError.requestId` carries it into the browser, so a failure a member
+   reports can be traced without guessing from timestamps.
+
+Both tiers validate a supplied id against `^[A-Za-z0-9_-]{8,64}$` before adopting
+it. An unconstrained header would let a caller inject newlines or unbounded text
+into the log stream.
+
+### AI run records
+
+Every model call emits exactly one `ai.run` line, whether it succeeded or failed,
+carrying token counts, wall-clock duration, USD cost, and the failure class. The
+shape is `AiRunTelemetry` in `ai/src/telemetry.ts`, versioned by its `schema`
+field so old lines stay parseable.
+
+Run records carry no member content. Generated text already lives in
+`coachMessages` and `workoutPlans`; duplicating it into logs would create a
+second copy to delete on account removal. On a schema violation the record names
+the *field* that broke the contract and its Zod issue code, never the value.
+
+Summarize them with:
+
+```bash
+docker logs fitai-backend 2>&1 | npm run ai:report
+npm run ai:report -- backend.log --since 2026-08-01
+```
+
+The report groups by feature and model and reports call volume, failure rate by
+class, p50/p95 latency, token split, total cost, and cost per *successful*
+response. That last column is the one that matters when comparing models: a model
+that is cheap per call but fails validation often is not cheap.
+
+### Cost attribution
+
+`npm run ai:report` groups run records along any combination of `feature`,
+`model`, `user`, `day`, `month`, and `outcome`:
+
+```bash
+docker logs fitai-backend 2>&1 | npm run ai:report                 # feature x model
+npm run ai:report -- backend.log --by user --top 20                # heaviest members
+npm run ai:report -- backend.log --by day,feature --since 2026-08-01
+npm run ai:report -- backend.log --csv > spend.csv                 # opens in Excel
+gcloud logging read 'jsonPayload.message="ai.run"' --format=json \
+  | jq -c '.[]' | npm run ai:report -- --by user
+```
+
+`user` groups by `userRef`, the salted pseudonym on each run, so per-member spend
+is attributable without the log store holding an account id or an email. Mapping
+a `userRef` back to a person requires `LOG_SALT` and the account id together,
+which is deliberate.
+
+Two reporting decisions worth knowing when reading the numbers:
+
+- **`cost/ok` is the column that matters** when comparing models. A model that is
+  cheap per call but fails validation often is not cheap, because every failure
+  still pays for tokens and then pays again on the retry or fallback.
+- **An unpriced model reports `n/a`, never `$0`**, and is excluded from the total
+  rather than silently counted as free. In CSV the cell is blank for the same
+  reason: a spreadsheet `SUM` should not quietly treat unknown as zero.
+
+Where this data lives, for now: nowhere but the logs. Cloud Logging is the
+store and its retention is the retention; `--csv` is the export when a
+spreadsheet is the right tool for a one-off question. That is deliberate for a
+project with no users yet — a database table for run records would be a second
+copy to keep, back up, and delete on account removal. The telemetry sink is
+injected (`AiCallContext.onRun`), so adding a durable sink later is a change at
+the call site, not in `ai/`.
+
+### Failure classes
+
+`AiProviderError.reason` distinguishes problems that have different owners:
+`authentication`, `rate_limit`, `timeout`, and `unavailable` are the provider's;
+`empty_response`, `malformed_json` (the model did not emit JSON), and
+`schema_violation` (valid JSON that broke our contract) are ours. `retryable`
+is derived from the class. User-facing messages are unchanged.
+
+### What must never be logged
+
+Coach message content, readiness notes, `movementNotes`, `bodyConsiderations`,
+attachments, camera frames, and email addresses are health data. Logs record
+shape — counts, lengths, durations, categories — and never content. `redactPaths`
+in `backend/src/observability/logging.ts` enforces this for credentials and
+payloads, and `backend/tests/logging-redaction.test.ts` asserts at runtime that
+nothing leaks. Members appear as `userRef`, an HMAC of the account id keyed on a
+server-only secret, so runs can be joined during debugging without the log store
+becoming a personal-data store.
+
+### Log levels
+
+Both containers log through one instance — `backend/src/observability/logger.ts`
+and `frontend/lib/logger.ts` — so every line in either has the same shape:
+
+```json
+{"severity":"INFO","level":"info","time":"2026-08-28T09:12:33.481Z","message":"ai.run","reqId":"...","ai":{...}}
+```
+
+`severity`, `time`, and `message` are the three fields Cloud Logging promotes out
+of the payload. Everything else stays a structured `jsonPayload` field, so a
+query can filter on `jsonPayload.ai.feature` or `jsonPayload.reqId` rather than
+matching substrings in a blob.
+
+`LOG_LEVEL` sets the floor, quietest to loudest: `fatal`, `error`, `warn`,
+`info` (default), `debug`, `trace`. A line below the floor is never written, so
+`debug` costs nothing until the level is lowered to admit it. On the VM, set
+`FITAI_LOG_LEVEL=debug` and re-run the secret refresh to turn it on, then put it
+back — debug lines are the bulk of any ingestion bill.
+
+### Shipping logs to Cloud Logging
+
+Both containers log with Docker's `journald` driver and a `tag`, so the systemd
+journal holds every line with `CONTAINER_NAME` attached. The Ops Agent reads the
+journal, parses our JSON out of the journal's `MESSAGE` field, and lifts
+`severity` into the `LogEntry`. `docker logs fitai-backend` still works, so the
+local `ai:report` workflow is unaffected.
+
+`infra/gcp/vm/ops-agent-config.yaml` is installed by `deploy-backend.sh`, which
+validates it before restarting the agent and warns rather than failing the deploy
+if it is rejected. To validate a change by hand on the VM:
+
+```bash
+sudo /opt/google-cloud-ops-agent/libexec/google_cloud_ops_agent_engine \
+  -in /etc/google-cloud-ops-agent/config.yaml -validate
+```
+
+Journald retention is capped in `startup.sh` at 512 MB and two weeks, so the
+local buffer survives an agent outage without threatening the 20 GB disk.
+
+Useful queries once logs are arriving:
+
+```
+jsonPayload.message="ai.run"                       # every model call
+jsonPayload.ai.outcome="failed"                    # failures only
+jsonPayload.ai.errorReason="schema_violation"      # our bugs, not the provider's
+jsonPayload.reqId="<id from an error message>"     # one request, end to end
+severity>=ERROR                                    # everything worth an alert
+```
+
+### Settings
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `LOG_LEVEL` | `info` | pino level |
+| `LOG_SALT` | `API_JWT_SECRET` | keys the `userRef` hash |
+| `AI_LOG_FAILURE_EXCERPT` | `false` | records a bounded excerpt of output that failed to parse; raw output can echo member context, so enable it only while diagnosing |
+
+The frontend container reads `LOG_LEVEL` only; it holds no secrets to redact.
+
+Per-feature timeouts live beside each prompt in `ai/src/{coach,plan,vision}.ts`:
+30s for coach, 120s for plan generation, 20s for a camera frame. There is no
+retry yet — the failure classes above are what will make retry decidable.
+
 ## Recommended additions
 
 Connect these only when their milestone needs them:

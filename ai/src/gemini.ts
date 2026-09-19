@@ -1,7 +1,16 @@
+import { randomUUID } from "node:crypto";
 import { ApiError, GoogleGenAI, type ContentListUnion, type GenerateContentResponse } from "@google/genai";
 import type { BotResearchEvidence, BotResearchSource } from "@fitai/contracts";
 import { z } from "zod";
-import { AiProviderError } from "./provider-error.js";
+import { AiProviderError, type AiFailureReason } from "./provider-error.js";
+import { estimateCostMicroUsd, pricingFor, type AiUsage } from "./pricing.js";
+import {
+  emitRun,
+  failureExcerptLimit,
+  type AiCallContext,
+  type AiFeature,
+  type AiRunTelemetry,
+} from "./telemetry.js";
 
 const unsupportedSchemaKeys = new Set([
   "$schema",
@@ -29,6 +38,69 @@ function removeUnsupportedSchemaKeywords(value: unknown): unknown {
   );
 }
 
+/**
+ * One client per API key. Constructing a client per call discarded connection
+ * reuse for no benefit.
+ *
+ * Bounded and least-recently-used because API keys are no longer only the
+ * handful of platform keys: per-user BYOK keys (see provider-settings) mean
+ * the key set grows with active users and must not retain a client forever.
+ */
+const maxCachedClients = 500;
+const clients = new Map<string, GoogleGenAI>();
+
+function clientFor(apiKey: string): GoogleGenAI {
+  const cached = clients.get(apiKey);
+  if (cached) {
+    // Re-insert to mark it most recently used; Map iteration order is
+    // insertion order, so the eviction below drops the least recently used key.
+    clients.delete(apiKey);
+    clients.set(apiKey, cached);
+    return cached;
+  }
+
+  const client = new GoogleGenAI({ apiKey });
+  clients.set(apiKey, client);
+  if (clients.size > maxCachedClients) {
+    const oldestKey = clients.keys().next().value;
+    if (oldestKey !== undefined) clients.delete(oldestKey);
+  }
+  return client;
+}
+
+function readUsage(usageMetadata: {
+  promptTokenCount?: number;
+  candidatesTokenCount?: number;
+  thoughtsTokenCount?: number;
+  cachedContentTokenCount?: number;
+  totalTokenCount?: number;
+} | undefined): AiUsage | null {
+  if (!usageMetadata) return null;
+  return {
+    promptTokens: usageMetadata.promptTokenCount ?? 0,
+    cachedPromptTokens: usageMetadata.cachedContentTokenCount ?? 0,
+    outputTokens: usageMetadata.candidatesTokenCount ?? 0,
+    thoughtTokens: usageMetadata.thoughtsTokenCount ?? 0,
+    totalTokens: usageMetadata.totalTokenCount ?? 0,
+  };
+}
+
+/**
+ * The slice of the provider client this module uses. Declaring it structurally
+ * lets a test — or an offline eval run — supply a stand-in without a network
+ * call and without reaching for module mocking.
+ */
+export type GeminiClient = {
+  models: {
+    generateContent: (
+      request: Parameters<GoogleGenAI["models"]["generateContent"]>[0],
+    ) => Promise<{
+      text?: string;
+      usageMetadata?: Parameters<typeof readUsage>[0];
+    }>;
+  };
+};
+
 type GenerateGeminiStructuredInput<T> = {
   apiKey: string;
   model: string;
@@ -36,6 +108,12 @@ type GenerateGeminiStructuredInput<T> = {
   systemInstruction: string;
   contents: ContentListUnion;
   maxOutputTokens: number;
+  feature: AiFeature;
+  temperature: number;
+  timeoutMs: number;
+  context?: AiCallContext;
+  /** Overrides the provider client. Defaults to the shared client for this key. */
+  client?: GeminiClient;
 };
 
 export type GenerateGroundedResearchInput = {
@@ -174,59 +252,137 @@ export async function generateGroundedResearch(
 export async function generateGeminiStructured<T>(
   input: GenerateGeminiStructuredInput<T>,
 ): Promise<T> {
-  const client = new GoogleGenAI({ apiKey: input.apiKey });
+  const startedAt = new Date();
+  const startedTicks = performance.now();
+
+  let usage: AiUsage | null = null;
+  let failure: AiProviderError | null = null;
+  let validationIssues: AiRunTelemetry["validationIssues"] = null;
+  let rawFailureExcerpt: string | null = null;
 
   try {
+    const client = input.client ?? clientFor(input.apiKey);
     const response = await client.models.generateContent({
       model: input.model,
       contents: input.contents,
       config: {
         systemInstruction: input.systemInstruction,
-        temperature: 0.3,
+        temperature: input.temperature,
         maxOutputTokens: input.maxOutputTokens,
         responseMimeType: "application/json",
         responseJsonSchema: toGeminiJsonSchema(input.schema),
+        abortSignal: AbortSignal.timeout(input.timeoutMs),
       },
     });
+
+    // Read usage before anything can throw, so a schema violation still reports
+    // the tokens it cost.
+    usage = readUsage(response.usageMetadata);
 
     if (!response.text) {
       throw new AiProviderError(
         "The AI provider returned an empty response. Please try again.",
-        "unavailable",
+        "empty_response",
       );
     }
 
-    return input.schema.parse(JSON.parse(response.text));
-  } catch (error) {
-    if (error instanceof AiProviderError) throw error;
-    if (error instanceof SyntaxError || error instanceof z.ZodError) {
+    let parsedJson: unknown;
+    try {
+      parsedJson = JSON.parse(response.text);
+    } catch {
+      if (input.context?.captureFailureExcerpt) {
+        rawFailureExcerpt = response.text.slice(0, failureExcerptLimit);
+      }
       throw new AiProviderError(
         "The AI provider returned an invalid structured response. Please try again.",
-        "unavailable",
+        "malformed_json",
       );
     }
-    translateGeminiError(error);
+
+    const result = input.schema.safeParse(parsedJson);
+    if (!result.success) {
+      // Paths and codes only. This says which field broke the contract without
+      // recording the value that broke it.
+      validationIssues = result.error.issues.slice(0, 10).map((issue) => ({
+        path: issue.path.join("."),
+        code: issue.code,
+      }));
+      throw new AiProviderError(
+        "The AI provider returned an invalid structured response. Please try again.",
+        "schema_violation",
+      );
+    }
+
+    return result.data;
+  } catch (error) {
+    failure = asAiProviderError(error);
+    throw failure;
+  } finally {
+    const costMicroUsd = usage ? estimateCostMicroUsd(input.model, usage) : null;
+    emitRun(input.context, {
+      schema: "ai.run/1",
+      runId: randomUUID(),
+      requestId: input.context?.requestId ?? null,
+      userRef: input.context?.userRef ?? null,
+      feature: input.feature,
+      provider: "google",
+      model: input.model,
+      startedAt: startedAt.toISOString(),
+      durationMs: Math.round(performance.now() - startedTicks),
+      outcome: failure ? "failed" : "ok",
+      errorReason: failure?.reason ?? null,
+      usage,
+      costMicroUsd,
+      pricingKnown: pricingFor(input.model) !== null,
+      request: {
+        temperature: input.temperature,
+        maxOutputTokens: input.maxOutputTokens,
+        timeoutMs: input.timeoutMs,
+      },
+      validationIssues,
+      rawFailureExcerpt,
+    });
+  }
+}
+
+function asAiProviderError(error: unknown): AiProviderError {
+  if (error instanceof AiProviderError) return error;
+  const reason = reasonFor(error);
+  return new AiProviderError(messageForReason(reason), reason);
+}
+
+/**
+ * `AbortSignal.timeout` rejects with a `TimeoutError`; an upstream cancellation
+ * surfaces as `AbortError`. Both mean we stopped waiting, not that the provider
+ * refused us.
+ */
+function isAbort(error: unknown): boolean {
+  return error instanceof Error
+    && (error.name === "TimeoutError" || error.name === "AbortError");
+}
+
+function reasonFor(error: unknown): AiFailureReason {
+  if (isAbort(error)) return "timeout";
+  if (error instanceof ApiError) {
+    if (error.status === 401 || error.status === 403) return "authentication";
+    if (error.status === 429) return "rate_limit";
+  }
+  return "unavailable";
+}
+
+function messageForReason(reason: AiFailureReason): string {
+  switch (reason) {
+    case "authentication":
+      return "The AI provider credentials are invalid or do not have access to this model.";
+    case "rate_limit":
+      return "The AI provider free-tier quota or rate limit was reached. Please try again later.";
+    case "timeout":
+      return "The AI provider did not respond in time. Please try again.";
+    default:
+      return "The AI provider is temporarily unavailable. Please try again.";
   }
 }
 
 export function translateGeminiError(error: unknown): never {
-  if (error instanceof ApiError) {
-    if (error.status === 401 || error.status === 403) {
-      throw new AiProviderError(
-        "The AI provider credentials are invalid or do not have access to this model.",
-        "authentication",
-      );
-    }
-    if (error.status === 429) {
-      throw new AiProviderError(
-        "The AI provider free-tier quota or rate limit was reached. Please try again later.",
-        "rate_limit",
-      );
-    }
-  }
-
-  throw new AiProviderError(
-    "The AI provider is temporarily unavailable. Please try again.",
-    "unavailable",
-  );
+  throw asAiProviderError(error);
 }

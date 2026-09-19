@@ -11,6 +11,9 @@ VERTEX_AI_RESEARCH_MODEL="${FITAI_VERTEX_AI_RESEARCH_MODEL:-gemini-2.5-flash}"
 RESEARCH_DAILY_LIMIT="${FITAI_RESEARCH_DAILY_LIMIT:-20}"
 ASSET_BUCKET="${FITAI_ASSET_BUCKET:-${PROJECT_ID}-fitai-assets}"
 ASSET_VERSION="${FITAI_ASSET_VERSION:-v1}"
+# Lower to debug to admit per-request detail into Cloud Logging. Raise back
+# afterwards: debug lines are the bulk of any ingestion bill.
+LOG_LEVEL="${FITAI_LOG_LEVEL:-info}"
 ENV_FILE="$(mktemp /etc/fitai/backend.env.XXXXXX)"
 trap 'rm -f "${ENV_FILE}"' EXIT
 umask 077
@@ -34,6 +37,7 @@ secret() {
   printf 'VERTEX_AI_RESEARCH_MODEL=%s\n' "${VERTEX_AI_RESEARCH_MODEL}"
   printf 'RESEARCH_DAILY_LIMIT=%s\n' "${RESEARCH_DAILY_LIMIT}"
   printf 'EXERCISE_ASSET_BASE_URL=https://storage.googleapis.com/%s/%s\n' "${ASSET_BUCKET}" "${ASSET_VERSION}"
+  printf 'LOG_LEVEL=%s\n' "${LOG_LEVEL}"
   printf 'PORT=8080\n'
   printf 'NODE_ENV=production\n'
 } > "${ENV_FILE}"

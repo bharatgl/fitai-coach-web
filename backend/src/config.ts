@@ -35,6 +35,23 @@ const configSchema = z.object({
   PORT: z.coerce.number().int().positive().default(4000),
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   RELEASE_VERSION: z.string().min(1).default("0.1.0"),
+  LOG_LEVEL: z
+    .enum(["fatal", "error", "warn", "info", "debug", "trace"])
+    .default("info"),
+  /**
+   * Keys the pseudonymous user hash in logs. Optional: it falls back to the
+   * JWT secret, which every deployment already has, so no environment needs
+   * updating for logging to be safe.
+   */
+  LOG_SALT: optionalSetting,
+  /**
+   * Records a bounded excerpt of model output that failed to parse as JSON.
+   * Off by default because raw output can echo member context; turn it on
+   * temporarily when diagnosing a parsing failure.
+   */
+  AI_LOG_FAILURE_EXCERPT: z
+    .preprocess((value) => value === "true" || value === "1", z.boolean())
+    .default(false),
 });
 
 export type AppConfig = z.infer<typeof configSchema>;

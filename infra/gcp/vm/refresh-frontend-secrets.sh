@@ -7,6 +7,7 @@ PROJECT_ID="$(curl --fail --silent --show-error \
 MONGODB_DB="${FITAI_MONGODB_DB:-fitai}"
 INTERNAL_BACKEND_URL="${FITAI_INTERNAL_BACKEND_URL:-http://fitai-backend:8080}"
 AUTH_URL="${FITAI_AUTH_URL:-https://forgefit.space}"
+LOG_LEVEL="${FITAI_LOG_LEVEL:-info}"
 ENV_FILE="$(mktemp /etc/fitai/frontend.env.XXXXXX)"
 trap 'rm -f "${ENV_FILE}"' EXIT
 umask 077
@@ -27,6 +28,7 @@ secret() {
   printf 'BACKEND_API_URL=%s\n' "${INTERNAL_BACKEND_URL}"
   printf 'AUTH_URL=%s\n' "${AUTH_URL}"
   printf 'AUTH_TRUST_HOST=true\n'
+  printf 'LOG_LEVEL=%s\n' "${LOG_LEVEL}"
   printf 'PORT=8080\n'
   printf 'NODE_ENV=production\n'
 } > "${ENV_FILE}"

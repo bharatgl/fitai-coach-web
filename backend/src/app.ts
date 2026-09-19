@@ -3,8 +3,8 @@ import rateLimit from "@fastify/rate-limit";
 import { AiProviderError } from "@fitai/ai";
 import Fastify from "fastify";
 import { ZodError } from "zod";
-import { getConfig } from "./config.js";
 import { ensureIndexes, getDatabase } from "./db.js";
+import { serverOptions } from "./observability/logger.js";
 import { coachRoutes } from "./routes/coach.js";
 import { botRoutes } from "./routes/bots.js";
 import { dashboardRoutes } from "./routes/dashboard.js";
@@ -18,16 +18,15 @@ import { operationsRoutes } from "./routes/operations.js";
 import { registerRequestTelemetry } from "./services/request-telemetry.js";
 
 export async function buildApp() {
-  const config = getConfig();
-  const app = Fastify({
-    logger: config.NODE_ENV !== "test",
-    trustProxy: true,
-    bodyLimit: 64 * 1024,
-  });
+  const app = Fastify(serverOptions());
 
   await app.register(helmet);
   await app.register(rateLimit, { max: 120, timeWindow: "1 minute" });
   registerRequestTelemetry(app);
+
+  app.addHook("onSend", async (request, reply) => {
+    reply.header("x-request-id", request.id);
+  });
 
   app.get("/health/live", async () => ({ status: "ok" }));
   app.get("/health/ready", async (_request, reply) => {
@@ -59,7 +58,7 @@ export async function buildApp() {
     }
 
     if (error instanceof AiProviderError) {
-      return reply.code(error.statusCode).send({ error: error.message });
+      return reply.code(error.statusCode).send({ error: error.message, retryable: error.retryable });
     }
 
     const statusCode =

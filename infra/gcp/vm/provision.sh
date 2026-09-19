@@ -81,6 +81,14 @@ gcloud artifacts repositories add-iam-policy-binding "${REPOSITORY}" \
   --role="roles/artifactregistry.reader" \
   --project="${PROJECT_ID}" >/dev/null
 
+# The Ops Agent writes as the VM's own identity. Without these two roles it
+# installs and runs but silently ships nothing.
+for role in roles/logging.logWriter roles/monitoring.metricWriter; do
+  gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
+    --member="serviceAccount:${BACKEND_ACCOUNT}" \
+    --role="${role}" >/dev/null
+done
+
 gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
   --member="user:${ACTIVE_ACCOUNT}" \
   --role="roles/iap.tunnelResourceAccessor" >/dev/null

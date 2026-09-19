@@ -4,6 +4,17 @@ import {
   type AIContent,
   type AIProviderConfig,
 } from "./provider.js";
+import type { AiCallContext } from "./telemetry.js";
+
+/**
+ * One still frame, one short spoken-friendly answer. Kept on a tight timeout
+ * because the caller is mid-conversation and a late answer is a wrong answer.
+ */
+const visionProfile = {
+  temperature: 0.3,
+  maxOutputTokens: 900,
+  timeoutMs: 20_000,
+} as const;
 
 const liveCameraAnalysisSchema = z.object({
   status: z.enum(["analyzed", "needs_better_view"]),
@@ -33,10 +44,11 @@ export type AnalyzeCameraFrameInput = {
   imageBase64: string;
   mimeType: "image/jpeg";
   dimensions: { width: number; height: number };
+  context?: AiCallContext;
 };
 
 export function buildCameraAnalysisContents(
-  input: Omit<AnalyzeCameraFrameInput, "provider">,
+  input: Omit<AnalyzeCameraFrameInput, "provider" | "context">,
 ): AIContent {
   return [{
     role: "user",
@@ -68,6 +80,8 @@ export async function analyzeCameraFrame(
     schema: liveCameraAnalysisSchema,
     systemInstruction: liveCameraAnalysisSystemPrompt,
     contents: buildCameraAnalysisContents(input),
-    maxOutputTokens: 900,
+    feature: "vision",
+    context: input.context,
+    ...visionProfile,
   });
 }

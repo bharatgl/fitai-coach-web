@@ -29,7 +29,8 @@
     "gcp:vm:provision": "./infra/gcp/vm/provision.sh",
     "gcp:vm:deploy": "./infra/gcp/vm/deploy-backend.sh",
     "gcp:vm:https": "./infra/gcp/vm/configure-domain.sh",
-    "gcp:frontend:deploy": "./infra/gcp/deploy-frontend.sh"
+    "gcp:frontend:deploy": "./infra/gcp/deploy-frontend.sh",
+    "ai:report": "node ./scripts/ai-runs-report.mjs"
   },
   "devDependencies": {
     "turbo": "2.10.11"

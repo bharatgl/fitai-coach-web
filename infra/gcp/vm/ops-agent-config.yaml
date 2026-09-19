@@ -1,0 +1,66 @@
+# Google Cloud Ops Agent configuration for the ForgeFit VM.
+#
+# Installed to /etc/google-cloud-ops-agent/config.yaml by deploy-backend.sh.
+#
+# Both containers log to the systemd journal (see the --log-driver=journald flags
+# in deploy-backend.sh) and both emit one JSON object per line already shaped for
+# Cloud Logging:
+#
+#   {"severity":"INFO","level":"info","time":"...","message":"ai.run","ai":{...}}
+#
+# The agent's job here is small on purpose: read the journal, parse that JSON out
+# of the journal's MESSAGE field, and promote severity and timestamp. Everything
+# else stays a structured jsonPayload field, so a query can filter on
+# jsonPayload.ai.feature or jsonPayload.reqId instead of grepping a string blob.
+#
+# Validate a change before deploying it:
+#   sudo /opt/google-cloud-ops-agent/libexec/google_cloud_ops_agent_engine \
+#     -in /etc/google-cloud-ops-agent/config.yaml -validate
+#
+# If parse_json ever fails to match, the agent keeps the record as an unparsed
+# string rather than dropping it. Logs still arrive; they just arrive as blobs.
+
+logging:
+  receivers:
+    # Docker's journald driver writes each container's stdout/stderr here, tagged
+    # with CONTAINER_NAME so fitai-backend and fitai-frontend stay separable.
+    # `docker logs` continues to work, so the local ai:report workflow is intact.
+    journal:
+      type: systemd_journald
+
+  processors:
+    # Lift our JSON line out of the journal's MESSAGE field into structured
+    # fields. Without this every entry is one long string.
+    payload:
+      type: parse_json
+      field: MESSAGE
+      time_key: time
+      time_format: "%Y-%m-%dT%H:%M:%S.%L%z"
+
+    # Cloud Logging reads LogEntry.severity, not a jsonPayload field of the same
+    # name. Move ours up so filtering by severity and the red/yellow gutter in the
+    # Logs Explorer both work.
+    severity:
+      type: modify_fields
+      fields:
+        severity:
+          move_from: jsonPayload.severity
+          # Anything without our severity field (agent self-logs, kernel messages)
+          # keeps the level the agent inferred.
+          default_value: INFO
+
+  service:
+    pipelines:
+      default_pipeline:
+        receivers: [journal]
+        processors: [payload, severity]
+
+metrics:
+  receivers:
+    host:
+      type: hostmetrics
+      collection_interval: 60s
+  service:
+    pipelines:
+      default_pipeline:
+        receivers: [host]

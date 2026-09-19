@@ -2,6 +2,7 @@ import type { ContentListUnion, Part } from "@google/genai";
 import { z } from "zod";
 import { generateGeminiStructured, toGeminiJsonSchema } from "./gemini.js";
 import { AiProviderError } from "./provider-error.js";
+import type { AiCallContext, AiFeature } from "./telemetry.js";
 
 export type AIProviderKind = "gemini" | "openai" | "anthropic" | "openai_compatible";
 
@@ -32,6 +33,10 @@ type StructuredGenerationInput<T> = {
   systemInstruction: string;
   contents: AIContent;
   maxOutputTokens: number;
+  temperature: number;
+  timeoutMs: number;
+  feature: AiFeature;
+  context?: AiCallContext;
 };
 
 function genericSchemaInstruction(schema: z.ZodType) {
@@ -98,10 +103,10 @@ function anthropicMessages(contents: AIContent) {
   }));
 }
 
-async function providerFetch(url: string, init: RequestInit) {
+async function providerFetch(url: string, init: RequestInit, timeoutMs: number) {
   let response: Response;
   try {
-    response = await fetch(url, { ...init, signal: init.signal ?? AbortSignal.timeout(60_000) });
+    response = await fetch(url, { ...init, signal: init.signal ?? AbortSignal.timeout(timeoutMs) });
   } catch (cause) {
     throw new AiProviderError("The AI provider could not be reached. Please try again.", "unavailable", { cause });
   }
@@ -142,6 +147,7 @@ async function generateOpenAIStructured<T>(input: StructuredGenerationInput<T>) 
       instructions: input.systemInstruction,
       input: openAIInput(input.contents),
       max_output_tokens: input.maxOutputTokens,
+      temperature: input.temperature,
       text: {
         format: {
           type: "json_schema",
@@ -151,7 +157,7 @@ async function generateOpenAIStructured<T>(input: StructuredGenerationInput<T>) 
         },
       },
     }),
-  });
+  }, input.timeoutMs);
   const payload = await response.json() as {
     output_text?: string;
     output?: Array<{ content?: Array<{ type?: string; text?: string }> }>;
@@ -177,9 +183,9 @@ async function generateAnthropicStructured<T>(input: StructuredGenerationInput<T
       system: `${input.systemInstruction}\n\n${genericSchemaInstruction(input.schema)}`,
       messages: anthropicMessages(input.contents),
       max_tokens: input.maxOutputTokens,
-      temperature: 0.3,
+      temperature: input.temperature,
     }),
-  });
+  }, input.timeoutMs);
   const payload = await response.json() as { content?: Array<{ type?: string; text?: string }> };
   const text = payload.content?.find((item) => item.type === "text")?.text;
   if (!text) throw new AiProviderError("The AI provider returned an empty response. Please try again.", "unavailable");
@@ -205,6 +211,10 @@ export async function generateStructuredAI<T>(input: StructuredGenerationInput<T
       systemInstruction: input.systemInstruction,
       contents: geminiContents(input.contents),
       maxOutputTokens: input.maxOutputTokens,
+      temperature: input.temperature,
+      timeoutMs: input.timeoutMs,
+      feature: input.feature,
+      context: input.context,
     });
   }
   if (input.provider.kind === "anthropic") return generateAnthropicStructured(input);

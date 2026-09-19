@@ -20,6 +20,7 @@ gcloud compute ssh "${VM_NAME}" \
 
 gcloud compute scp \
   infra/gcp/vm/nginx-fitai-backend.conf \
+  infra/gcp/vm/ops-agent-config.yaml \
   infra/gcp/vm/refresh-backend-secrets.sh \
   infra/gcp/vm/refresh-frontend-secrets.sh \
   "${VM_NAME}:~/" \
@@ -35,6 +36,14 @@ gcloud compute ssh "${VM_NAME}" \
     sudo install -m 0755 ~/refresh-backend-secrets.sh /usr/local/sbin/fitai-refresh-backend-secrets
     sudo install -m 0755 ~/refresh-frontend-secrets.sh /usr/local/sbin/fitai-refresh-frontend-secrets
     sudo install -m 0644 ~/nginx-fitai-backend.conf /etc/nginx/conf.d/fitai-backend.conf
+    sudo install -d -m 0755 /etc/google-cloud-ops-agent
+    sudo install -m 0644 ~/ops-agent-config.yaml /etc/google-cloud-ops-agent/config.yaml
+    # Reject a malformed agent config here rather than discovering it as missing
+    # logs later. Logging is not worth failing a deploy over, so this warns.
+    sudo /opt/google-cloud-ops-agent/libexec/google_cloud_ops_agent_engine \
+      -in /etc/google-cloud-ops-agent/config.yaml -validate \
+      && sudo systemctl restart google-cloud-ops-agent \
+      || echo "WARNING: Ops Agent config rejected; logs are not being shipped"
     sudo rm -f /etc/nginx/sites-enabled/default
     if sudo test -f '/etc/letsencrypt/live/${FRONTEND_DOMAIN}/fullchain.pem'; then
       sudo certbot install --cert-name '${FRONTEND_DOMAIN}' --nginx --non-interactive
@@ -59,8 +68,7 @@ gcloud compute ssh "${VM_NAME}" \
       --security-opt no-new-privileges \\
       --memory 768m \\
       --cpus 1.5 \\
-      --log-opt max-size=10m \\
-      --log-opt max-file=3 \\
+      --log-driver journald \\
       ${BACKEND_IMAGE}
     sudo docker run -d \\
       --name fitai-frontend \\
@@ -71,8 +79,7 @@ gcloud compute ssh "${VM_NAME}" \
       --security-opt no-new-privileges \\
       --memory 768m \\
       --cpus 1 \\
-      --log-opt max-size=10m \\
-      --log-opt max-file=3 \\
+      --log-driver journald \\
       ${FRONTEND_IMAGE}
     sudo nginx -t
     sudo systemctl reload nginx
